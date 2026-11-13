@@ -46,7 +46,7 @@ def test_g1_strict_determinism() -> None:
     assert v1.status == "PASS"
     assert v1.verdict_id == v2.verdict_id
     assert v1.to_dict() == v2.to_dict()
-    assert v1.verify_receipt() is True
+    assert v1.verify_receipt(ledger=ledger) is True
 
 
 def test_g2_quote_and_source_grounding_bounces_to_agent() -> None:
@@ -404,11 +404,11 @@ def test_g7_merkle_receipt_tamper_detection() -> None:
         ],
         ledger,
     )
-    assert verify_receipt(v) is True
+    assert verify_receipt(v, ledger=ledger) is True
 
     tampered = v.to_dict()
     tampered["assertions"][0]["value"] = "999 days"
-    assert verify_receipt(tampered) is False
+    assert verify_receipt(tampered, ledger=ledger) is False
 
 
 def test_sqlite_persistence_mcp_and_cli(tmp_path: Path) -> None:

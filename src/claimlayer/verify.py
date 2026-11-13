@@ -42,6 +42,7 @@ def verify(
     as_of: str | None = None,
     agent_id: str = "agent",
     signing_key: str | bytes | None = None,
+    check_retry_history: bool = True,
 ) -> Verdict:
     """Deterministically verify an agent's proposed assertions against a Ledger and Policy.
 
@@ -62,14 +63,39 @@ def verify(
     all_conflicts: list[ConflictDiff] = []
     assertion_scores: dict[str, float] = {}
 
-    # 1. Coverage & completeness gate (including stateful retry anti-pruning, PRUNE)
+    # 1. Coverage & completeness gate (including stateful retry anti-pruning)
     all_issues.extend(verify_coverage(typed_assertions, pol))
-    all_issues.extend(ledger.check_dropped_retry_assertions(typed_assertions, agent_id))
+    if check_retry_history:
+        all_issues.extend(ledger.check_dropped_retry_assertions(typed_assertions, agent_id))
 
     # 2. Per-assertion deterministic checks
     for idx, assertion in enumerate(typed_assertions):
         score_key = assertion.id if assertion.id not in assertion_scores else f"{assertion.id}#{idx+1}"
         source = ledger.get_source(assertion.source_id)
+
+        # 2.0 Optional closed-vocabulary validation (v4 Vocabulary integration)
+        if pol.vocabulary is not None:
+            try:
+                pol.vocabulary.proposition({
+                    "entity": assertion.subject, "predicate": assertion.predicate,
+                    "value": assertion.value, "unit": assertion.unit,
+                    "assertion_kind": "fact",
+                    **({"conditions": [assertion.condition]} if assertion.condition else {}),
+                })
+            except Exception as exc:
+                all_issues.append(
+                    Issue(
+                        code="UNREPRESENTABLE_IN_VOCABULARY",
+                        disposition="RETRY",
+                        assertion_id=assertion.id,
+                        subject=assertion.subject,
+                        predicate=assertion.predicate,
+                        message=f"Assertion '{assertion.id}' violates closed vocabulary: {exc}",
+                        remediation="Use an application-declared entity and predicate from the active Vocabulary.",
+                    )
+                )
+                assertion_scores[score_key] = 0.0
+                continue
 
         # 2a. Quote & quantity/unit/date grounding
         grounding_issues = verify_quote_and_quantities(assertion, source, pol)

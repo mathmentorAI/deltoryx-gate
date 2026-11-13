@@ -24,7 +24,11 @@ from claimlayer.models import (
     normalize_predicate_key,
 )
 from claimlayer.verifiers.diff import _split_into_sections
-from claimlayer.verifiers.precedence import _extract_clause_topic_tokens, is_source_active
+from claimlayer.verifiers.precedence import (
+    _extract_clause_topic_tokens,
+    _is_generic_subject_key,
+    is_source_active,
+)
 
 _SECTION_PREDICATE_PREFIXES = (
     "section_",
@@ -107,6 +111,7 @@ class Ledger:
         self._db_path = Path(db_path) if db_path is not None else None
         self.signing_key = signing_key
         self._sources: dict[str, Source] = {}
+        self._indexed_sources: set[str] = set()
         self._source_sections: dict[str, dict[str, str]] = {}
         self._source_clauses: dict[str, list[str]] = {}
         self._topic_to_sources: dict[str, set[str]] = {}
@@ -148,7 +153,7 @@ class Ledger:
         return (st.st_mtime_ns, st.st_size)
 
     def _sync_from_sqlite_if_changed(self) -> None:
-        """Reload state if another Ledger instance or process modified the SQLite file (L1)."""
+        """Reload state if another Ledger instance or process modified the SQLite file."""
         if self._db_path is None:
             return
         sig = self._current_db_sig()
@@ -161,17 +166,23 @@ class Ledger:
         self._last_db_sig = self._current_db_sig()
 
     def _index_source_in_memory(self, src: Source) -> None:
-        # Remove any prior topic entries if overwriting an existing source
-        for tok_set in self._topic_to_sources.values():
-            tok_set.discard(src.id)
+        if src.id in self._indexed_sources:
+            self._indexed_sources.discard(src.id)
+            for tok_set in self._topic_to_sources.values():
+                tok_set.discard(src.id)
+            self._source_sections.pop(src.id, None)
+            self._source_clauses.pop(src.id, None)
         self._sources[src.id] = src
-        if len(src.text) > 50_000:
-            self._source_sections[src.id] = {}
-            self._source_clauses[src.id] = []
+
+    def _ensure_source_indexed(self, src: Source) -> None:
+        if src.id in self._indexed_sources:
             return
+        self._indexed_sources.add(src.id)
         secs = _split_into_sections(src.text)
         self._source_sections[src.id] = {k: v.body for k, v in secs.items()}
-        clauses = [s.strip() for s in re.split(r"(?<=[.;\n])\s+", src.text) if s.strip()]
+        clauses = list(
+            dict.fromkeys(s.strip() for s in re.split(r"(?<=[.;\n])\s+", src.text) if s.strip())
+        )
         self._source_clauses[src.id] = clauses
         for cl in clauses:
             for tok in _extract_clause_topic_tokens(cl):
@@ -192,6 +203,7 @@ class Ledger:
 
     def _load_sqlite(self) -> None:
         self._sources.clear()
+        self._indexed_sources.clear()
         self._source_sections.clear()
         self._source_clauses.clear()
         self._topic_to_sources.clear()
@@ -294,10 +306,36 @@ class Ledger:
         )
         with self._lock:
             self._sync_from_sqlite_if_changed()
+            origin_src = self._sources.get(assertion.source_id)
+            enclosing_sec: str | None = None
+            if origin_src is not None and assertion.quote:
+                q_pos = origin_src.text.lower().find(assertion.quote.strip().lower())
+                if q_pos >= 0:
+                    prefix_win = origin_src.text[max(0, q_pos - 80) : q_pos]
+                    sec_matches = list(
+                        re.finditer(r"\b((?:section|sec\.)\s+\d+\.\d+)\b", prefix_win, re.IGNORECASE)
+                    )
+                    if sec_matches:
+                        enclosing_sec = re.sub(r"\s+", " ", sec_matches[-1].group(1).strip().lower())
+
+            eligible_sids: set[str] = set()
+            for sid, src in self._sources.items():
+                if sid == exclude_source_id:
+                    continue
+                if enclosing_sec is not None:
+                    dense_headers = re.findall(
+                        r"\b(?:section|sec\.)\s+\d+\.\d+\b", src.text[:2000], re.IGNORECASE
+                    )
+                    if len(dense_headers) >= 5 and enclosing_sec not in src.text.lower():
+                        continue
+                self._ensure_source_indexed(src)
+                eligible_sids.add(sid)
+
             cand_ids: set[str] = set()
             for tok in topics:
-                cand_ids.update(self._topic_to_sources.get(tok, ()))
-            for sid, sec_map in self._source_sections.items():
+                cand_ids.update(self._topic_to_sources.get(tok, set()) & eligible_sids)
+            for sid in eligible_sids:
+                sec_map = self._source_sections.get(sid, {})
                 if raw_pred_key in sec_map:
                     cand_ids.add(sid)
             cand_ids.discard(exclude_source_id)
@@ -353,7 +391,7 @@ class Ledger:
             exact = [f for f in candidates if normalize_entity_key(f.subject) == sk]
             if exact or not allow_section_predicate_match:
                 return exact
-            # Only relax subject matching when the predicate itself is a section/clause identifier (C7c vs C1fp)
+            # Only relax subject matching when the predicate itself is a section/clause identifier
             if raw_pk.startswith(_SECTION_PREDICATE_PREFIXES):
                 return candidates
             return []
@@ -411,7 +449,7 @@ class Ledger:
             return list(self._resolutions.values())
 
     def save_sealed_policy(self, policy: Policy) -> None:
-        """Persist canonical policy inside SQLite ledger_meta to prevent workspace policy tampering (W3)."""
+        """Persist canonical policy inside SQLite ledger_meta to prevent workspace policy tampering."""
         if self._db_path is None:
             return
         with self._lock:
@@ -487,7 +525,7 @@ class Ledger:
             return dict(entry)
 
     def _is_verdict_fully_resolved(self, verdict_payload: dict[str, Any]) -> bool:
-        """Check whether ALL escalated (subject, predicate) items in a verdict have human resolutions (F1)."""
+        """Check whether ALL escalated (subject, predicate) items in a verdict have human resolutions."""
         escalated_pairs: set[tuple[str, str]] = set()
         for iss in verdict_payload.get("issues", []):
             if iss.get("disposition") == "ESCALATE":
@@ -614,11 +652,32 @@ class Ledger:
             resolved_escalations = sum(
                 1 for e in self._verdict_log if e["triage_state"] in {"RESOLVED", "REJECTED"}
             )
-            # Each PASS can account for at most 1 recovered RETRY; unrecovered retry loops never inflate savings (F2, F2v)
             if total == 0 or pass_count == 0:
                 saved_pct = 0.0
             else:
-                recovered_retries = min(retry_count, pass_count)
+                pending_retry_pairs: set[tuple[str, str]] = set()
+                recovered_retries = 0
+                for entry in self._verdict_log:
+                    v_payload = entry.get("verdict") or {}
+                    if entry["status"] == "RETRY":
+                        for iss in v_payload.get("issues") or []:
+                            if iss.get("disposition") == "RETRY":
+                                s_k = normalize_entity_key(str(iss.get("subject") or ""))
+                                p_k = normalize_predicate_key(str(iss.get("predicate") or ""))
+                                if s_k or p_k:
+                                    pending_retry_pairs.add((s_k, p_k))
+                    elif entry["status"] in ("PASS", "ESCALATE") and pending_retry_pairs:
+                        pass_pairs = {
+                            (
+                                normalize_entity_key(str(a.get("subject") or "")),
+                                normalize_predicate_key(str(a.get("predicate") or "")),
+                            )
+                            for a in (v_payload.get("assertions") or [])
+                        }
+                        resolved_now = pass_pairs & pending_retry_pairs
+                        if resolved_now:
+                            recovered_retries += 1
+                            pending_retry_pairs -= resolved_now
                 autonomous_handled = pass_count + recovered_retries
                 saved_pct = round((autonomous_handled / total) * 100.0, 1)
 
@@ -640,39 +699,28 @@ class Ledger:
         assertions: tuple[Assertion, ...],
         agent_id: str,
     ) -> list[Issue]:
-        """Detect when an agent responds to a RETRY verdict by silently pruning the rejected assertion (PRUNE)."""
+        """Detect when an agent responds to a RETRY verdict by silently pruning a rejected assertion."""
         with self._lock:
             self._sync_from_sqlite_if_changed()
+            if not self._verdict_log:
+                return []
             last_entry: dict[str, Any] | None = None
             for entry in reversed(self._verdict_log):
                 if entry["agent_id"] == agent_id:
                     last_entry = entry
                     break
-            if last_entry is None or last_entry["status"] != "RETRY":
+            if last_entry is None:
+                last_entry = self._verdict_log[-1]
+            if last_entry["status"] != "RETRY":
                 return []
 
             prev_verdict = last_entry["verdict"]
             prev_assertions = prev_verdict.get("assertions") or []
-            if len(prev_assertions) <= 1 or len(assertions) >= len(prev_assertions):
+            if len(prev_assertions) <= 1 or not assertions:
                 return []
 
-            current_pairs = {
-                (normalize_entity_key(a.subject), normalize_predicate_key(a.predicate))
-                for a in assertions
-            }
-            prev_pairs = {
-                (
-                    normalize_entity_key(pa.get("subject") or ""),
-                    normalize_predicate_key(pa.get("predicate") or ""),
-                )
-                for pa in prev_assertions
-            }
-            # Only enforce when the new proposal is a strict subset continuation of the prior proposal
-            if not current_pairs or not (current_pairs < prev_pairs):
-                return []
-
-            issues: list[Issue] = []
-            seen_dropped: set[tuple[str, str]] = set()
+            failed_pairs: list[tuple[str, str, str, str]] = []
+            failed_pair_keys: set[tuple[str, str]] = set()
             for iss in prev_verdict.get("issues") or []:
                 if iss.get("disposition") != "RETRY":
                     continue
@@ -680,9 +728,52 @@ class Ledger:
                 p_raw = str(iss.get("predicate") or "")
                 if not p_raw:
                     continue
-                pair = (normalize_entity_key(s_raw), normalize_predicate_key(p_raw))
-                if pair not in current_pairs and pair not in seen_dropped:
-                    seen_dropped.add(pair)
+                pair_key = (normalize_entity_key(s_raw), normalize_predicate_key(p_raw))
+                if pair_key not in failed_pair_keys:
+                    failed_pair_keys.add(pair_key)
+                    failed_pairs.append((s_raw, p_raw, pair_key[0], pair_key[1]))
+
+            if not failed_pairs:
+                return []
+
+            prev_good_pairs: set[tuple[str, str]] = set()
+            prev_good_quotes: set[str] = set()
+            for pa in prev_assertions:
+                pk = (
+                    normalize_entity_key(str(pa.get("subject") or "")),
+                    normalize_predicate_key(str(pa.get("predicate") or "")),
+                )
+                if pk not in failed_pair_keys:
+                    prev_good_pairs.add(pk)
+                    q_str = re.sub(r"\s+", " ", str(pa.get("quote") or "").strip().lower())
+                    if q_str:
+                        prev_good_quotes.add(q_str)
+
+            current_pairs = {
+                (normalize_entity_key(a.subject), normalize_predicate_key(a.predicate))
+                for a in assertions
+            }
+            current_raw_pairs = {
+                (normalize_entity_key(a.subject), normalize_key(a.predicate))
+                for a in assertions
+            }
+            current_quotes = {
+                re.sub(r"\s+", " ", (a.quote or "").strip().lower())
+                for a in assertions
+                if a.quote
+            }
+
+            # Verify that the new batch continues the prior multi-assertion proposal (by pair or quote)
+            is_continuation = bool(
+                (current_pairs & prev_good_pairs) or (current_quotes & prev_good_quotes)
+            )
+            if not is_continuation:
+                return []
+
+            issues: list[Issue] = []
+            for s_raw, p_raw, s_k, p_k in failed_pairs:
+                raw_pk = normalize_key(p_raw)
+                if (s_k, p_k) not in current_pairs and (s_k, raw_pk) not in current_raw_pairs:
                     issues.append(
                         Issue(
                             code="DROPPED_AFTER_RETRY",
@@ -704,6 +795,7 @@ class Ledger:
         """Clear all state (useful for demos and tests)."""
         with self._lock:
             self._sources.clear()
+            self._indexed_sources.clear()
             self._source_sections.clear()
             self._source_clauses.clear()
             self._topic_to_sources.clear()

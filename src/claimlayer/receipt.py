@@ -83,7 +83,7 @@ def compute_merkle_root(leaf_hashes: list[str] | tuple[str, ...]) -> str:
 
 
 def compute_sources_digest(sources: list[Source]) -> str:
-    """Commit to full source state including tier name, rank, validity dates, supersedes, and metadata (E5)."""
+    """Commit to full source state including tier name, rank, validity dates, supersedes, and metadata."""
     items = [
         {
             "id": s.id,
@@ -105,7 +105,7 @@ def compute_policy_digest(policy: Policy) -> str:
 
 
 def compute_ledger_digest(ledger: Ledger | None) -> str:
-    """Commit to full ledger state: sources, registered facts, and human resolutions (E5)."""
+    """Commit to full ledger state: sources, registered facts, and human resolutions."""
     if ledger is None:
         return ""
     facts_payload = [
@@ -247,7 +247,7 @@ def build_receipt(
 
 
 def _assertions_self_consistent_for_pass(assertions: tuple[Assertion, ...]) -> bool:
-    """Verify intrinsic quote/quantity consistency for PASS verdicts (defeats E1 status-rewrite forgery)."""
+    """Verify intrinsic quote/quantity consistency for PASS verdicts."""
     if not assertions:
         return False
     for a in assertions:
@@ -271,8 +271,9 @@ def verify_receipt(
     ledger: Ledger | None = None,
     policy: Policy | dict[str, Any] | None = None,
     signing_key: str | bytes | None = None,
+    allow_unkeyed: bool = False,
 ) -> bool:
-    """Verify offline (or against a live Ledger/Policy/HMAC key) that a Verdict has not been forged or tampered with."""
+    """Verify a Verdict receipt against an HMAC signing key, a live Ledger, or (if allow_unkeyed=True) structural Merkle digests."""
     data = verdict.to_dict() if isinstance(verdict, Verdict) else dict(verdict)
     receipt = data.get("receipt") or {}
     if receipt.get("scheme") != RECEIPT_SCHEME:
@@ -282,7 +283,7 @@ def verify_receipt(
     if status not in {"PASS", "RETRY", "ESCALATE"}:
         return False
 
-    # 1. Verify status/flag invariant consistency (E1, E2)
+    # 1. Verify status/flag invariant consistency
     allowed = data.get("allowed_to_proceed")
     req_human = data.get("requires_human")
     if not isinstance(allowed, bool) or allowed != (status == "PASS"):
@@ -307,7 +308,7 @@ def verify_receipt(
         if not raw_issues:
             return False
 
-    # 2. Recompute leaf hashes and RFC 9162 Merkle root (E4)
+    # 2. Recompute leaf hashes and RFC 9162 Merkle root
     raw_assertions = data.get("assertions") or []
     try:
         typed_assertions = tuple(
@@ -337,17 +338,12 @@ def verify_receipt(
     if recomputed_root != receipt.get("merkle_root"):
         return False
 
-    # 3. Verify external bindings against live Ledger and Policy if provided (E3, E5)
+    # 3. Verify external bindings against live Ledger and Policy if provided
     sources_digest = str(receipt.get("sources_digest") or "")
     policy_digest = str(receipt.get("policy_digest") or "")
     ledger_digest = str(receipt.get("ledger_digest") or "")
 
-    if ledger is not None:
-        if sources_digest != compute_sources_digest(ledger.list_sources()):
-            return False
-        if ledger_digest and ledger_digest != compute_ledger_digest(ledger):
-            return False
-
+    pol_obj: Policy | None = None
     if policy is not None:
         from claimlayer.verify import _coerce_policy
 
@@ -355,7 +351,28 @@ def verify_receipt(
         if policy_digest != compute_policy_digest(pol_obj):
             return False
 
-    # 4. Recompute full envelope signature / HMAC (E1, E2)
+    if ledger is not None:
+        if sources_digest != compute_sources_digest(ledger.list_sources()):
+            return False
+        if ledger_digest and ledger_digest != compute_ledger_digest(ledger):
+            return False
+        from claimlayer.verify import verify as _run_verify
+
+        reverified = _run_verify(
+            typed_assertions,
+            ledger=ledger,
+            policy=pol_obj,
+            as_of=data.get("as_of"),
+            agent_id=str(data.get("agent_id") or "agent"),
+            signing_key=signing_key or getattr(ledger, "signing_key", None),
+            check_retry_history=False,
+        )
+        if reverified.status != status:
+            return False
+        if reverified.allowed_to_proceed != allowed or reverified.requires_human != req_human:
+            return False
+
+    # 4. Recompute full envelope signature / HMAC
     envelope = _build_signature_envelope(
         scheme=RECEIPT_SCHEME,
         merkle_root=recomputed_root,
@@ -378,6 +395,10 @@ def verify_receipt(
     eff_key = signing_key or (getattr(ledger, "signing_key", None) if ledger is not None else None)
     expected_sig, is_hmac = _sign_payload(envelope, signing_key=eff_key)
     if receipt.get("hmac_authenticated") and not is_hmac:
+        return False
+
+    # Without an HMAC key or a live Ledger to re-verify against, an unkeyed SHA-256 digest cannot authenticate origin
+    if not is_hmac and ledger is None and not allow_unkeyed:
         return False
 
     actual_sig = str(receipt.get("signature") or "")

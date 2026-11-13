@@ -142,7 +142,17 @@ class Source:
         raw_text = self.text or ""
         digest = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
         object.__setattr__(self, "_sha256", digest)
-        norm_text = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", raw_text).strip()).lower()
+        body_lines = [
+            ln
+            for ln in unicodedata.normalize("NFKC", raw_text).splitlines()
+            if not re.match(
+                r"^\s*(?:draft|borrador|confidential|confidencial|page\s+\d+|p[áa]gina\s+\d+)"
+                r"(?:\s*[-—:|]\s*(?:page\s+\d+|p[áa]gina\s+\d+|\w+))?\s*$",
+                ln,
+                flags=re.IGNORECASE,
+            )
+        ]
+        norm_text = re.sub(r"\s+", " ", " ".join(body_lines).strip()).lower()
         content_digest = hashlib.sha256(norm_text.encode("utf-8")).hexdigest()
         object.__setattr__(self, "_content_sha256", content_digest)
 
@@ -253,6 +263,8 @@ class Policy:
     numeric_bounds: dict[str, tuple[float | None, float | None]] = field(default_factory=dict)
     predicate_aliases: dict[str, str] = field(default_factory=dict)
     as_of: str | None = None
+    required_value_tokens: dict[str, list[str]] = field(default_factory=dict)
+    vocabulary: Any | None = None
 
     def __post_init__(self) -> None:
         if self.confidence_threshold is not None:
@@ -278,10 +290,18 @@ class Policy:
                 k: [v[0], v[1]] for k, v in sorted(self.numeric_bounds.items())
             },
         }
+        if self.required_value_tokens:
+            payload["required_value_tokens"] = dict(sorted(self.required_value_tokens.items()))
         if self.predicate_aliases:
             payload["predicate_aliases"] = dict(sorted(self.predicate_aliases.items()))
         if self.as_of is not None:
             payload["as_of"] = self.as_of
+        if self.vocabulary is not None:
+            payload["vocabulary"] = (
+                self.vocabulary.describe()
+                if hasattr(self.vocabulary, "describe")
+                else self.vocabulary
+            )
         return payload
 
 
@@ -395,6 +415,7 @@ class Verdict:
         ledger: Any | None = None,
         policy: Policy | dict[str, Any] | None = None,
         signing_key: str | bytes | None = None,
+        allow_unkeyed: bool = False,
     ) -> bool:
         from claimlayer.receipt import verify_receipt
 
@@ -403,6 +424,7 @@ class Verdict:
             ledger=ledger,
             policy=policy,
             signing_key=signing_key,
+            allow_unkeyed=allow_unkeyed,
         )
 
     def to_dict(self) -> dict[str, Any]:

@@ -1,0 +1,25 @@
+"""ClaimLayer v4 (experimental, 4.0.0a1): the model proposes, deterministic policy decides.
+
+    from claimlayer.v4 import EvidenceLayer, Vocabulary, PredicateSpec, FieldSpec
+
+v4 reuses the v3 source/reference/store contracts and the v2 epistemic table,
+and replaces model verdicts with deterministic comparison over a declared
+vocabulary. v3 (claimlayer.ClaimLayer) and v2 (claimlayer.legacy) are unchanged.
+"""
+from .engine import ENGINE_VERSION, TIER_ANNEX, TIER_EXTERNAL, TIER_PRIMARY, EvidenceLayer
+from .epistemics import DEFAULT_PROFILE, EXPLICIT, EpistemicProfile
+from .models import AcceptancePolicy, EvidenceUnit
+from .paths import TransitiveRule
+from .reader import LLMProposalReader, ProposalReader, READER_PROMPT
+from .vocabulary import STANDARD_UNITS, FieldSpec, PredicateSpec, Unit, UnitRegistry, UnmappedProposal, Vocabulary
+from .autovocab import build_vocabulary, propose_vocabulary, with_entities
+from .triage import LANES, draft_vocabulary, segment_text, triage, verify_draft
+from ..semantic.models import EvidenceRef, SourceDocument, StructuredQuery
+from ..semantic.adapters import OpenAICompatibleModel
+
+__all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'Vocabulary', 'PredicateSpec', 'FieldSpec', 'Unit', 'UnitRegistry',
+           'STANDARD_UNITS', 'UnmappedProposal', 'EpistemicProfile', 'DEFAULT_PROFILE', 'EXPLICIT',
+           'AcceptancePolicy', 'EvidenceUnit', 'TransitiveRule', 'LLMProposalReader', 'ProposalReader',
+           'READER_PROMPT', 'SourceDocument', 'EvidenceRef', 'StructuredQuery', 'OpenAICompatibleModel',
+           'TIER_PRIMARY', 'TIER_ANNEX', 'TIER_EXTERNAL', 'propose_vocabulary', 'build_vocabulary', 'with_entities',
+           'verify_draft', 'triage', 'segment_text', 'LANES', 'draft_vocabulary']

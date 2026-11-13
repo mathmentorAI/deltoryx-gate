@@ -94,7 +94,7 @@ def main() -> int:
     )
     assert good.status == "PASS", f"Expected PASS, got {good.status}"
     assert good.allowed_to_proceed is True
-    assert verify_receipt(good) is True
+    assert verify_receipt(good, ledger=ledger) is True
 
     print(
         json.dumps(

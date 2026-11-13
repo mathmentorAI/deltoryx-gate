@@ -1,0 +1,514 @@
+[
+  {
+    "id": "aggregate-sum",
+    "items": [
+      {
+        "id": "invoice-1",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 10,
+        "unit": "EUR",
+        "event_id": "invoice-1",
+        "rank": 100
+      },
+      {
+        "id": "invoice-2",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 20,
+        "unit": "EUR",
+        "event_id": "invoice-2",
+        "rank": 100
+      }
+    ],
+    "operation": "sum",
+    "expected": 30,
+    "kind": "value"
+  },
+  {
+    "id": "aggregate-count",
+    "items": [
+      {
+        "id": "invoice-1",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 10,
+        "unit": "EUR",
+        "event_id": "invoice-1",
+        "rank": 100
+      },
+      {
+        "id": "invoice-2",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 20,
+        "unit": "EUR",
+        "event_id": "invoice-2",
+        "rank": 100
+      }
+    ],
+    "operation": "count",
+    "expected": 2,
+    "kind": "value"
+  },
+  {
+    "id": "aggregate-average",
+    "items": [
+      {
+        "id": "invoice-1",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 10,
+        "unit": "EUR",
+        "event_id": "invoice-1",
+        "rank": 100
+      },
+      {
+        "id": "invoice-2",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 20,
+        "unit": "EUR",
+        "event_id": "invoice-2",
+        "rank": 100
+      }
+    ],
+    "operation": "average",
+    "expected": 15,
+    "kind": "value"
+  },
+  {
+    "id": "aggregate-min",
+    "items": [
+      {
+        "id": "invoice-1",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 10,
+        "unit": "EUR",
+        "event_id": "invoice-1",
+        "rank": 100
+      },
+      {
+        "id": "invoice-2",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 20,
+        "unit": "EUR",
+        "event_id": "invoice-2",
+        "rank": 100
+      }
+    ],
+    "operation": "min",
+    "expected": 10,
+    "kind": "value"
+  },
+  {
+    "id": "aggregate-max",
+    "items": [
+      {
+        "id": "invoice-1",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 10,
+        "unit": "EUR",
+        "event_id": "invoice-1",
+        "rank": 100
+      },
+      {
+        "id": "invoice-2",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 20,
+        "unit": "EUR",
+        "event_id": "invoice-2",
+        "rank": 100
+      }
+    ],
+    "operation": "max",
+    "expected": 20,
+    "kind": "value"
+  },
+  {
+    "id": "aggregate-list",
+    "items": [
+      {
+        "id": "invoice-1",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 10,
+        "unit": "EUR",
+        "event_id": "invoice-1",
+        "rank": 100
+      },
+      {
+        "id": "invoice-2",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 20,
+        "unit": "EUR",
+        "event_id": "invoice-2",
+        "rank": 100
+      }
+    ],
+    "operation": "list",
+    "expected": [
+      10,
+      20
+    ],
+    "kind": "value"
+  },
+  {
+    "id": "same-event-copy",
+    "items": [
+      {
+        "id": "invoice-1",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 10,
+        "unit": "EUR",
+        "event_id": "invoice-1",
+        "rank": 100
+      },
+      {
+        "id": "invoice-2",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 20,
+        "unit": "EUR",
+        "event_id": "invoice-2",
+        "rank": 100
+      },
+      {
+        "id": "copy",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 10,
+        "unit": "EUR",
+        "event_id": "invoice-1",
+        "rank": 100
+      }
+    ],
+    "operation": "sum",
+    "expected": 30,
+    "kind": "value"
+  },
+  {
+    "id": "distinct-events-equal-values",
+    "items": [
+      {
+        "id": "i1",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 10,
+        "unit": "EUR",
+        "event_id": "i1",
+        "rank": 100
+      },
+      {
+        "id": "i2",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 10,
+        "unit": "EUR",
+        "event_id": "i2",
+        "rank": 100
+      }
+    ],
+    "operation": "sum",
+    "expected": 20,
+    "kind": "value"
+  },
+  {
+    "id": "conflicting-event-values",
+    "items": [
+      {
+        "id": "i1",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 10,
+        "unit": "EUR",
+        "event_id": "one",
+        "rank": 100
+      },
+      {
+        "id": "i2",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 20,
+        "unit": "EUR",
+        "event_id": "one",
+        "rank": 100
+      }
+    ],
+    "operation": "sum",
+    "kind": "abstain"
+  },
+  {
+    "id": "unknown-event-identity",
+    "items": [
+      {
+        "id": "i1",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 10,
+        "unit": "EUR",
+        "event_id": null,
+        "rank": 100
+      },
+      {
+        "id": "i2",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 20,
+        "unit": "EUR",
+        "event_id": null,
+        "rank": 100
+      }
+    ],
+    "operation": "sum",
+    "kind": "abstain"
+  },
+  {
+    "id": "mixed-units-no-conversion",
+    "items": [
+      {
+        "id": "i1",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 10,
+        "unit": "EUR",
+        "event_id": "i1",
+        "rank": 100
+      },
+      {
+        "id": "i2",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 20,
+        "unit": "USD",
+        "event_id": "i2",
+        "rank": 100
+      }
+    ],
+    "operation": "sum",
+    "kind": "abstain"
+  },
+  {
+    "id": "primary-beats-external",
+    "items": [
+      {
+        "id": "p",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 30,
+        "unit": "EUR",
+        "event_id": "p",
+        "rank": 100
+      },
+      {
+        "id": "e",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 90,
+        "unit": "EUR",
+        "event_id": "e",
+        "rank": 10
+      }
+    ],
+    "operation": "resolve",
+    "expected": 30,
+    "kind": "value"
+  },
+  {
+    "id": "annex-beats-external",
+    "items": [
+      {
+        "id": "a",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 45,
+        "unit": "EUR",
+        "event_id": "a",
+        "rank": 50
+      },
+      {
+        "id": "e",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 90,
+        "unit": "EUR",
+        "event_id": "e",
+        "rank": 10
+      }
+    ],
+    "operation": "resolve",
+    "expected": 45,
+    "kind": "value"
+  },
+  {
+    "id": "primary-wins-after-reopen",
+    "items": [
+      {
+        "id": "p",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 30,
+        "unit": "EUR",
+        "event_id": "p",
+        "rank": 100
+      },
+      {
+        "id": "e",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 90,
+        "unit": "EUR",
+        "event_id": "e",
+        "rank": 10
+      }
+    ],
+    "operation": "resolve",
+    "expected": 30,
+    "kind": "value",
+    "reopen": true
+  },
+  {
+    "id": "historical-period",
+    "items": [
+      {
+        "id": "old",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 30,
+        "unit": "EUR",
+        "event_id": "old",
+        "rank": 100,
+        "valid_from": "2023-01-01",
+        "valid_until": "2023-12-31"
+      },
+      {
+        "id": "new",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 45,
+        "unit": "EUR",
+        "event_id": "new",
+        "rank": 100,
+        "valid_from": "2024-01-01",
+        "valid_until": "2030-12-31"
+      }
+    ],
+    "operation": "resolve",
+    "as_of": "2023-06-15",
+    "expected": 30,
+    "kind": "value"
+  },
+  {
+    "id": "current-period",
+    "items": [
+      {
+        "id": "old",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 30,
+        "unit": "EUR",
+        "event_id": "old",
+        "rank": 100,
+        "valid_from": "2023-01-01",
+        "valid_until": "2023-12-31"
+      },
+      {
+        "id": "new",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 45,
+        "unit": "EUR",
+        "event_id": "new",
+        "rank": 100,
+        "valid_from": "2024-01-01",
+        "valid_until": "2030-12-31"
+      }
+    ],
+    "operation": "resolve",
+    "as_of": "2026-01-01",
+    "expected": 45,
+    "kind": "value"
+  },
+  {
+    "id": "dependency-valid",
+    "items": [
+      {
+        "id": "root",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 30,
+        "unit": "EUR",
+        "event_id": "root",
+        "rank": 100,
+        "valid_until": "2030-12-31"
+      }
+    ],
+    "operation": "resolve",
+    "dependency": "valid",
+    "expected": 30,
+    "kind": "dependency"
+  },
+  {
+    "id": "dependency-expired",
+    "items": [
+      {
+        "id": "root",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 30,
+        "unit": "EUR",
+        "event_id": "root",
+        "rank": 100,
+        "valid_until": "2024-12-31"
+      }
+    ],
+    "operation": "resolve",
+    "dependency": "expired",
+    "expected": 30,
+    "kind": "dependency"
+  },
+  {
+    "id": "dependency-changed-value",
+    "items": [
+      {
+        "id": "root",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 30,
+        "unit": "EUR",
+        "event_id": "root",
+        "rank": 100,
+        "valid_until": "2030-12-31"
+      }
+    ],
+    "operation": "resolve",
+    "dependency": "changed-value",
+    "expected": 30,
+    "kind": "dependency"
+  },
+  {
+    "id": "dependency-missing-premise",
+    "items": [
+      {
+        "id": "root",
+        "entity": "ACME",
+        "predicate": "amount",
+        "value": 30,
+        "unit": "EUR",
+        "event_id": "root",
+        "rank": 100,
+        "valid_until": "2030-12-31"
+      }
+    ],
+    "operation": "resolve",
+    "dependency": "missing-premise",
+    "expected": 30,
+    "kind": "dependency"
+  }
+]

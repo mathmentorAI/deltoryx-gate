@@ -57,7 +57,9 @@ def _read_doc_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
-def _classify_tier(filename: str) -> str:
+def _classify_tier(filename: str, manifest_tiers: dict[str, str] | None = None) -> str:
+    if manifest_tiers and filename in manifest_tiers:
+        return manifest_tiers[filename]
     low = filename.lower()
     tokens = set(re.split(r"[^a-z0-9]+", Path(low).stem))
     if (
@@ -72,6 +74,14 @@ def _classify_tier(filename: str) -> str:
         "emails",
         "note",
         "notes",
+        "comment",
+        "comments",
+        "wip",
+        "negotiation",
+        "memo",
+        "working",
+        "feedback",
+        "discussion",
         "instruction",
         "instructions",
         "unsigned",
@@ -84,16 +94,12 @@ def _classify_tier(filename: str) -> str:
     }:
         return "draft"
     if tokens & {
-        "indenture",
         "executed",
         "signed",
-        "msa",
-        "agreement",
-        "contract",
-        "charter",
-        "statute",
-        "governing",
         "final",
+        "governing",
+        "statute",
+        "charter",
     }:
         return "authoritative"
     return "standard"
@@ -105,6 +111,7 @@ def _compute_canonical_policy(sources: list[Source]) -> tuple[Policy, list[dict[
 
     required_predicates: list[str] = []
     divergence_report: list[dict[str, Any]] = []
+    required_values: dict[str, list[str]] = {}
 
     if auth_sources and std_sources:
         pairs = [(a, b) for a in auth_sources for b in std_sources]
@@ -117,7 +124,9 @@ def _compute_canonical_policy(sources: list[Source]) -> tuple[Policy, list[dict[
         ]
 
     for pri_src, sec_src in pairs:
-        _, divergences = build_comparison_policy(pri_src, sec_src)
+        comparison, divergences = build_comparison_policy(pri_src, sec_src)
+        for key, values in comparison.required_value_tokens.items():
+            required_values[key] = sorted(set(required_values.get(key, [])) | set(values))
         for d in divergences:
             if d.section_key not in required_predicates:
                 required_predicates.append(d.section_key)
@@ -128,6 +137,7 @@ def _compute_canonical_policy(sources: list[Source]) -> tuple[Policy, list[dict[
         min_tier_rank=100 if auth_sources else 50,
         required_predicates=required_predicates,
         required_source_ids=[s.id for s in auth_sources],
+        required_value_tokens=required_values,
     )
     return policy, divergence_report
 
@@ -141,15 +151,24 @@ def _load_sources_from_dir(docs_dir: Path) -> list[Source]:
     sources: list[Source] = []
     if not docs_dir.is_dir():
         return sources
+    manifest_tiers: dict[str, str] = {}
+    manifest_file = docs_dir / "manifest.json"
+    if manifest_file.is_file():
+        try:
+            raw_manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+            if isinstance(raw_manifest, dict):
+                manifest_tiers = {str(k): str(v) for k, v in raw_manifest.items()}
+        except Exception:
+            manifest_tiers = {}
     for f in sorted(docs_dir.iterdir()):
-        if not f.is_file() or f.name.startswith("."):
+        if not f.is_file() or f.name.startswith(".") or f.name == "manifest.json":
             continue
         sources.append(
             Source(
                 id=f.name,
                 title=f.name,
                 text=_read_doc_text(f),
-                tier=_classify_tier(f.name),
+                tier=_classify_tier(f.name, manifest_tiers),
             )
         )
     return sources
@@ -157,11 +176,16 @@ def _load_sources_from_dir(docs_dir: Path) -> list[Source]:
 
 def cmd_prepare(docs_dir: Path, workspace: Path) -> int:
     state_dir = workspace / ".claimlayer"
-    state_dir.mkdir(parents=True, exist_ok=True)
     db_path = state_dir / "ledger.sqlite"
-    if db_path.exists():
-        db_path.unlink()
+    seal_file = _external_seal_path(workspace)
+    if db_path.exists() or (state_dir / "policy.json").exists() or seal_file.exists():
+        return _fail_tampered(
+            "WORKSPACE_ALREADY_SEALED",
+            "Workspace has already been prepared and sealed; re-running prepare is forbidden.",
+            "Do not re-run prepare after initial workspace initialization.",
+        )
 
+    state_dir.mkdir(parents=True, exist_ok=True)
     ledger = Ledger(db_path=db_path)
     sources = _load_sources_from_dir(docs_dir)
     for src in sources:
@@ -180,12 +204,9 @@ def cmd_prepare(docs_dir: Path, workspace: Path) -> int:
         },
         "policy": policy.to_dict(),
     }
-    try:
-        _external_seal_path(workspace).write_text(
-            json.dumps(seal_payload, sort_keys=True), encoding="utf-8"
-        )
-    except OSError:
-        pass
+    seal_file.write_text(
+        json.dumps(seal_payload, sort_keys=True), encoding="utf-8"
+    )
 
     print(
         json.dumps(
@@ -229,40 +250,54 @@ def cmd_verify(proposal_path: Path, workspace: Path) -> int:
     sealed_policy_dict = ledger.load_sealed_policy()
 
     seal_file = _external_seal_path(workspace)
-    ext_seal: dict[str, Any] = {}
-    if seal_file.is_file():
-        try:
-            ext_seal = json.loads(seal_file.read_text(encoding="utf-8"))
-        except Exception:
-            ext_seal = {}
+    if not seal_file.is_file():
+        return _fail_tampered(
+            "SEAL_MISSING",
+            "External workspace seal is missing; cannot verify unsealed workspace.",
+            "Run prepare once in a clean workspace before running verify.",
+        )
+    try:
+        ext_seal = json.loads(seal_file.read_text(encoding="utf-8"))
+    except Exception:
+        return _fail_tampered(
+            "SEAL_CORRUPTED",
+            "External workspace seal is unreadable or corrupted.",
+            "Do not modify the external workspace seal.",
+        )
 
     docs_dir = Path(ext_seal.get("docs_dir") or (workspace / "documents"))
     disk_sources = _load_sources_from_dir(docs_dir)
     ledger_sources = ledger.list_sources()
 
-    # 1. Verify that SQLite sources have not been tampered with (W3v2)
-    expected_hashes = ext_seal.get("sources") or {
+    # 1. Require strict triple agreement across disk documents, external seal, and SQLite ledger
+    seal_hashes = ext_seal.get("sources") or {}
+    disk_hashes = {
         s.id: hashlib.sha256(s.text.encode("utf-8")).hexdigest() for s in disk_sources
     }
     actual_hashes = {
         s.id: hashlib.sha256(s.text.encode("utf-8")).hexdigest() for s in ledger_sources
     }
-    if expected_hashes and actual_hashes != expected_hashes:
+    if not disk_hashes or actual_hashes != seal_hashes or actual_hashes != disk_hashes:
         return _fail_tampered(
             "LEDGER_TAMPERED",
-            "Sources inside .claimlayer/ledger.sqlite were modified and do not match the sealed source documents.",
-            "Do not modify .claimlayer/ledger.sqlite; re-run `prepare` or cite the true source documents.",
+            "Sources in .claimlayer/ledger.sqlite or external seal do not match the original source documents.",
+            "Do not modify .claimlayer/ledger.sqlite, the seal, or the source documents.",
         )
 
-    recomputed_policy, _ = _compute_canonical_policy(disk_sources or ledger_sources)
-    canonical_policy_dict = ext_seal.get("policy") or recomputed_policy.to_dict()
+    recomputed_policy, _ = _compute_canonical_policy(disk_sources)
+    canonical_policy_dict = recomputed_policy.to_dict()
+    seal_policy_dict = ext_seal.get("policy")
 
-    # 2. Verify that neither SQLite sealed_policy nor policy.json was tampered with (W3, W3v1)
-    if sealed_policy_dict is not None and sealed_policy_dict != canonical_policy_dict:
+    # 2. Require strict triple agreement across recomputed policy, external seal, SQLite sealed_policy, and policy.json
+    if (
+        seal_policy_dict != canonical_policy_dict
+        or sealed_policy_dict is None
+        or sealed_policy_dict != canonical_policy_dict
+    ):
         return _fail_tampered(
             "POLICY_TAMPERED",
-            "Sealed policy in .claimlayer/ledger.sqlite was modified and does not match the canonical document comparison policy.",
-            "Do not modify .claimlayer/ledger.sqlite; satisfy the original sealed verification policy.",
+            "Sealed policy in .claimlayer/ledger.sqlite or external seal was modified and does not match the canonical document comparison policy.",
+            "Do not modify .claimlayer/ledger.sqlite or the seal; satisfy the original sealed verification policy.",
         )
 
     policy_file = state_dir / "policy.json"

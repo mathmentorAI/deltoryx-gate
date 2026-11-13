@@ -136,7 +136,7 @@ def test_self_contained_harness2_c7_gate_in_isolated_sandbox(tmp_path: Path) -> 
     assert res_good.returncode == 0
     good_verdict = json.loads(res_good.stdout)
     assert good_verdict["status"] == "PASS"
-    assert verify_receipt(good_verdict) is True
+    assert verify_receipt(good_verdict, allow_unkeyed=True) is True
 
 
 def test_developer_integration_skill_and_smoke_script() -> None:

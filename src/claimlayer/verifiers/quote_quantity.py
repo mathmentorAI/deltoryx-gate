@@ -300,6 +300,7 @@ _DMY_DATE_RE = re.compile(
     re.IGNORECASE,
 )
 _SLASH_DATE_RE = re.compile(r"\b(?P<p1>\d{1,2})/(?P<p2>\d{1,2})/(?P<y>\d{4})\b")
+_DOT_DATE_RE = re.compile(r"\b(?P<d>\d{1,2})\.(?P<m>\d{1,2})\.(?P<y>\d{4})\b")
 _SHORT_SLASH_DATE_RE = re.compile(r"\b\d{1,2}/\d{1,2}/\d{2}\b")
 
 # Structural document identifiers that must NOT be parsed as numeric quantities:
@@ -316,8 +317,8 @@ _STRUCTURAL_ID_RE = re.compile(
 )
 
 _UNIT_PATTERN = (
-    r"(?:business\s+days?|working\s+days?|d[ií]as?\s+h[aá]biles|"
-    r"calendar\s+days?|d[ií]as?\s+naturales|"
+    r"(?:business[\s-]+days?|working[\s-]+days?|d[ií]as?\s+h[aá]biles|"
+    r"calendar[\s-]+days?|d[ií]as?\s+naturales|"
     r"per\s+cent\.?|por\s+ciento|percent\b|pct\b|%|"
     r"basis\s+points?\b|puntos?\s+b[aá]sicos?\b|bps\b|"
     r"us\$|\$|€|£|"
@@ -352,7 +353,7 @@ _RATIO_COVENANT_RE = re.compile(
 
 _NUMERIC_QUANTITY_RE = re.compile(
     r"(?<![a-zA-Z0-9_])"
-    r"(?P<sign>[-−])?(?=\$|\€|\£|\(|(?:USD|EUR|GBP|CHF|JPY|CAD|AUD|MXN)|\d)"
+    r"(?P<sign>[-−])?(?=US\$|\$|\€|\£|\(|(?:USD|EUR|GBP|CHF|JPY|CAD|AUD|MXN)|\d)"
     r"\(?(?:(?P<iso_prefix>\b(?:USD|EUR|GBP|CHF|JPY|CAD|AUD|MXN))\s*|(?P<sym_prefix>US\$|\$|€|£)\s*)?"
     r"(?P<num>"
     r"\d{1,3}(?:,\d{3})+(?:\.\d+)?"
@@ -365,18 +366,15 @@ _NUMERIC_QUANTITY_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Table/header scale declarations (must NOT be followed by "of <noun>" in prose like "millions of dollars")
+# Scale declarations are evaluated in their source block, not a character window.
 _TABLE_SCALE_HEADER_RE = re.compile(
-    r"(?:\(\s*\$?\s*in\s+(?P<p_en>thousands|millions|billions)\s*\)"
-    r"|\b(?:amounts?|figures?|values?|data|table\s+\d+|summary[^\n.;]{0,30})\s*\(?\s*\$?\s*in\s+(?P<h_en>thousands|millions|billions)\s*\)?"
-    r"|\b(?:\$\s*in|in)\s+(?P<b_en>thousands|millions|billions)(?!\s+of\b)"
-    r"|\ben\s+(?P<es>miles|millones)(?!\s+de\b))",
-    re.IGNORECASE,
-)
+    r"\b(?:in|en)\s+(?P<scale>thousands|millions|billions|miles|millones)\b"
+    r"(?:\s+(?:of|de)\s+(?:U\.S\.\s+)?(?:dollars?|euros?|pounds?))?"
+    r"|\(\s*[$€£](?P<zeros>0{3,9})s?\s*\)", re.IGNORECASE)
 
 _SPANISH_CONTEXT_RE = re.compile(
     r"(?:\b(?:el|la|los|las|del|al|es|será|sera|por\s+ciento|euros?|d[ií]as?|a[ñn]os?|"
-    r"meses|cl[áa]usula|primera|segunda|tercera|cuarta|precio|importe|comisi[óo]n|inter[ée]s|pr[ée]stamo)\b|€|\d,\d)",
+    r"meses|cl[áa]usula|primera|segunda|tercera|cuarta|precio|importe|comisi[óo]n|inter[ée]s|pr[ée]stamo)\b|€)",
     re.IGNORECASE,
 )
 
@@ -385,6 +383,13 @@ _CLAUSE_NEGATION_RE = re.compile(
     r"cannot|can\s+not|will\s+not|is\s+not|are\s+not|never|not|neither|nor|none|"
     r"prohibited|forbid(?:den)?|unavailable|impermissible|"
     r"en\s+ning[uú]n\s+caso|no\s+podr[aá]|no\s+se\s+podr[aá]|nunca|jam[aá]s|prohibido)\b",
+    re.IGNORECASE,
+)
+
+_AFFIRMATIVE_PROPOSITION_RE = re.compile(
+    r"\b(?:is|are|was|were|be|may|can|shall|will|must|has|have|"
+    r"allow(?:ed|s)?|permit(?:ted|s)?|available|eligible|entitled|valid|authorized|authorised|yes|true|"
+    r"podr[aá]|puede|pueden|es|son|ser[aá]|est[aá]|permitid[oa]s?|autorizad[oa]s?|disponibles?)\b",
     re.IGNORECASE,
 )
 
@@ -498,7 +503,9 @@ def normalize_span(text: str) -> str:
 def canonicalize_unit(raw_unit: str | None) -> str:
     if not raw_unit:
         return "NONE"
-    cleaned = re.sub(r"\s+", " ", raw_unit.strip().lower())
+    cleaned = re.sub(r"[\s-]+", " ", raw_unit.strip().lower())
+    if cleaned.endswith(" day"):
+        cleaned += "s"
     return _UNIT_ALIASES.get(cleaned, _UNIT_ALIASES.get(cleaned.rstrip("."), cleaned.upper()))
 
 
@@ -539,6 +546,8 @@ def _to_commensurable_base(magnitude: Decimal, unit: str) -> tuple[Decimal, str]
     """Convert commensurable financial/duration units to a canonical base unit for comparison."""
     if unit == "BPS":
         return (magnitude / Decimal("100")), "PERCENT"
+    if unit == "YEARS":
+        return magnitude * Decimal("12"), "MONTHS"
     if unit == "WEEKS":
         return (magnitude * Decimal("7")), "DAYS"
     return magnitude, unit
@@ -553,7 +562,7 @@ class ParsedQuantity:
     span: tuple[int, int] = (0, 0)
 
     def matches(self, other: ParsedQuantity) -> bool:
-        # Strict unit check: NONE only matches NONE (A11)
+        # Strict unit check: NONE only matches NONE
         if (self.unit == "NONE") != (other.unit == "NONE"):
             return False
 
@@ -565,7 +574,7 @@ class ParsedQuantity:
         if m1 == m2:
             return True
 
-        # Vulgar fraction comparison (e.g. 66 2/3% vs 66.67%, B8)
+        # Vulgar fraction comparison (e.g. 66 2/3% vs 66.67%)
         if self.is_fraction != other.is_fraction:
             frac_mag = m1 if self.is_fraction else m2
             dec_mag = m2 if self.is_fraction else m1
@@ -584,7 +593,12 @@ class ParsedQuantity:
         return m1 == m2 and u1 != u2
 
 
-def _parse_decimal_token(raw_num: str, *, es_context: bool = False) -> Decimal:
+def _parse_decimal_token(
+    raw_num: str,
+    *,
+    es_context: bool = False,
+    is_percent: bool = False,
+) -> Decimal:
     if "," in raw_num and "." in raw_num:
         if raw_num.rfind(",") > raw_num.rfind("."):
             # European format: 1.250.000,50 or 1.250,50
@@ -602,8 +616,14 @@ def _parse_decimal_token(raw_num: str, *, es_context: bool = False) -> Decimal:
         # Multiple dots (1.250.000) -> European thousands separator
         if len(parts) > 2 and all(len(p) == 3 for p in parts[1:]):
             return Decimal(raw_num.replace(".", ""))
-        # Single dot with 3 trailing digits in Spanish/European context ("12.500 euros", A10v1/A10v2)
-        if es_context and len(parts) == 2 and 1 <= len(parts[0]) <= 3 and len(parts[1]) == 3:
+        # Single dot with 3 trailing digits in Spanish/European context ("12.500 euros")
+        if (
+            es_context
+            and not is_percent
+            and len(parts) == 2
+            and 1 <= len(parts[0]) <= 3
+            and len(parts[1]) == 3
+        ):
             return Decimal(raw_num.replace(".", ""))
     return Decimal(raw_num)
 
@@ -628,7 +648,7 @@ def extract_dates_with_spans(text: str, *, allow_slash: bool = True) -> list[tup
     norm = normalize_span(text)
     found: list[tuple[tuple[int, int], str]] = []
 
-    for m in _ISO_DATE_RE.finditer(norm):
+    for m in list(_ISO_DATE_RE.finditer(norm)) + list(_DOT_DATE_RE.finditer(norm)):
         try:
             dt = date(int(m.group("y")), int(m.group("m")), int(m.group("d")))
             found.append(((m.start(), m.end()), dt.isoformat()))
@@ -744,58 +764,34 @@ _COMPOUND_WORD_QTY_RE = re.compile(
 
 
 def _extract_scale_value(m: re.Match[str]) -> Decimal | None:
-    token = (
-        m.group("p_en")
-        or m.group("h_en")
-        or m.group("b_en")
-        or m.group("es")
-        or ""
-    ).lower()
-    if token in {"thousands", "miles"}:
-        return Decimal("1000")
-    if token in {"millions", "millones"}:
-        return Decimal("1000000")
-    if token == "billions":
-        return Decimal("1000000000")
-    return None
+    if m.group("zeros"):
+        return Decimal(10) ** len(m.group("zeros"))
+    return _SCALE_FACTORS.get(m.group("scale").lower())
 
 
-def _detect_contextual_table_scale(norm_quote: str, norm_source: str | None = None) -> Decimal | None:
-    """Detect whether *norm_quote* is governed by an active table/section scale header ('in thousands').
-
-    A scale header applies if:
-      1. It appears inside *norm_quote* with no intervening unrelated sentence before the target figure, OR
-      2. It appears in *norm_source* in the header/sentence immediately preceding *norm_quote* with no
-         intervening prose sentences between the header and *norm_quote*.
-    """
-    m_in_quote = _TABLE_SCALE_HEADER_RE.search(norm_quote or "")
-    if m_in_quote:
-        return _extract_scale_value(m_in_quote)
-
-    if not norm_source or not norm_quote:
+def _detect_contextual_table_scale(quote: str, source: str | None = None) -> Decimal | None:
+    """Track block-scoped headers; row-local declarations never leak to later lines."""
+    source = source or quote
+    # Keep line/paragraph boundaries while tolerating whitespace wrapping in a quote.
+    normalized_source = "\n".join(normalize_span(line) for line in source.splitlines())
+    norm_quote = normalize_span(quote)
+    location = re.search(re.escape(norm_quote).replace(r"\ ", r"\s+"), normalized_source, re.IGNORECASE)
+    if not location:
         return None
-
-    idx = norm_source.lower().find(norm_quote.lower())
-    if idx <= 0:
-        return None
-
-    # Look at the window immediately preceding the quote (up to 120 chars)
-    window_start = max(0, idx - 120)
-    preceding = norm_source[window_start:idx]
-    matches = list(_TABLE_SCALE_HEADER_RE.finditer(preceding))
+    offset = location.start()
+    matches = list(_TABLE_SCALE_HEADER_RE.finditer(normalized_source[:location.end()]))
     if not matches:
         return None
-
-    last_match = matches[-1]
-    between = preceding[last_match.end() :].strip()
-    # If there is an intervening full sentence (containing a period followed by another sentence before the quote),
-    # then the table header scope ended before this quote (A13v1 / A13v2).
-    # In "Amounts in thousands. Settlement claim: 95,000.", `between` is "." (empty after strip('. ')).
-    cleaned_between = between.lstrip(".:;-— ").strip()
-    if "." in cleaned_between or ";" in cleaned_between:
+    match = matches[-1]
+    between = normalized_source[match.end():offset].lstrip(" .:;)-")
+    if re.search(r"[.;](?:\s|$)|\n\s*\n", between):
         return None
-
-    return _extract_scale_value(last_match)
+    line_end = normalized_source.find("\n", match.end())
+    if line_end >= 0 and offset > line_end:
+        tail = normalized_source[match.end():line_end]
+        if re.search(r"\d", tail):
+            return None
+    return _extract_scale_value(match)
 
 
 def _mask_preserving_len(match: re.Match[str]) -> str:
@@ -820,7 +816,8 @@ def extract_quantities(
     is_es = bool(_SPANISH_CONTEXT_RE.search(norm)) if es_context is None else es_context
 
     # Mask ISO dates, natural dates, slash dates, and structural identifiers while preserving character offsets
-    scrubbed = _ISO_DATE_RE.sub(_mask_preserving_len, norm)
+    scrubbed = _DOT_DATE_RE.sub(_mask_preserving_len, norm)
+    scrubbed = _ISO_DATE_RE.sub(_mask_preserving_len, scrubbed)
     scrubbed = _MDY_DATE_RE.sub(_mask_preserving_len, scrubbed)
     scrubbed = _DMY_DATE_RE.sub(_mask_preserving_len, scrubbed)
     scrubbed = _SLASH_DATE_RE.sub(_mask_preserving_len, scrubbed)
@@ -846,11 +843,24 @@ def extract_quantities(
         occupied_spans.append(span)
         results.append(ParsedQuantity(magnitude=mag, unit=unit, is_fraction=True, span=span))
 
-    # 2. Financial ratio covenants ("1.25 to 1.00" -> 1.25 MULTIPLIER, B23)
+    denominator_words = {"half": 2, "halves": 2, "third": 3, "quarter": 4,
+                         "fourth": 4, "fifth": 5, "sixth": 6, "seventh": 7,
+                         "eighth": 8, "ninth": 9, "tenth": 10}
+    fraction_pattern = re.compile(
+        r"\b(" + "|".join(_ONES_EN) + r")[ -]+("
+        + "|".join(denominator_words) + r")s?\b", re.IGNORECASE)
+    for m in fraction_pattern.finditer(scrubbed):
+        if _overlaps(m.start(), m.end()):
+            continue
+        magnitude = Decimal(_ONES_EN[m[1].lower()]) / Decimal(denominator_words[m[2].lower()]) * 100
+        occupied_spans.append(m.span())
+        results.append(ParsedQuantity(magnitude, "PERCENT", is_fraction=True, span=m.span()))
+
+    # 2. Financial ratio covenants ("1.25 to 1.00" -> 1.25 MULTIPLIER)
     for m in _RATIO_COVENANT_RE.finditer(scrubbed):
         if _overlaps(m.start(), m.end()):
             continue
-        mag = _parse_decimal_token(m.group("num"), es_context=is_es)
+        mag = _parse_decimal_token(m.group("num"), es_context=is_es, is_percent=True)
         span = (m.start(), m.end())
         occupied_spans.append(span)
         results.append(ParsedQuantity(magnitude=mag.normalize(), unit="MULTIPLIER", span=span))
@@ -864,8 +874,8 @@ def extract_quantities(
         if not raw_n1 or not raw_n2:
             continue
         u = canonicalize_unit(m.group("unit"))
-        d1 = _parse_decimal_token(raw_n1, es_context=is_es)
-        d2 = _parse_decimal_token(raw_n2, es_context=is_es)
+        d1 = _parse_decimal_token(raw_n1, es_context=is_es, is_percent=(u == "PERCENT"))
+        d2 = _parse_decimal_token(raw_n2, es_context=is_es, is_percent=(u == "PERCENT"))
         span = (m.start(), m.end())
         occupied_spans.append(span)
         results.append(ParsedQuantity(magnitude=d1.normalize(), unit=u, is_range_endpoint=True, span=span))
@@ -903,14 +913,6 @@ def extract_quantities(
         scale = m.group("scale")
         suffix = m.group("suffix")
 
-        try:
-            magnitude = _parse_decimal_token(raw_num, es_context=is_es)
-        except InvalidOperation:
-            continue
-
-        if sign:
-            magnitude = -magnitude
-
         unit = "NONE"
         if iso_prefix:
             unit = canonicalize_unit(iso_prefix)
@@ -922,6 +924,18 @@ def extract_quantities(
                 unit = suffix_unit
         if unit == "NONE" and default_unit != "NONE":
             unit = default_unit
+
+        try:
+            magnitude = _parse_decimal_token(
+                raw_num,
+                es_context=is_es,
+                is_percent=(unit in {"PERCENT", "BPS", "MULTIPLIER"}),
+            )
+        except InvalidOperation:
+            continue
+
+        if sign or (unit == "PERCENT" and re.match(r"\([\d.,]+\)\s*%", m.group(0))):
+            magnitude = -magnitude
 
         if scale:
             scale_key = re.sub(r"\s+", " ", scale.strip().lower())
@@ -1107,6 +1121,17 @@ def _check_multi_quantity_subject_binding(
         return True
 
     norm_quote = normalize_span(assertion.quote)
+    # Ordered parallel lists have positional binding, not nearest-neighbour binding.
+    if re.search(r"\brespectively\b", norm_quote, re.IGNORECASE):
+        designators = list(re.finditer(r"\b(?:class|tranche|series|tier)\s+[a-z0-9]+\b",
+                                      norm_quote, re.IGNORECASE))
+        targets, _ = _extract_binding_cues(assertion.subject, assertion.predicate)
+        if (len(designators) == len(non_range) and designators
+                and designators[-1].end() < non_range[0].span[0]):
+            indexes = [i for i, d in enumerate(designators) if d[0].lower() in targets]
+            if len(indexes) == 1:
+                return vq.matches(non_range[indexes[0]])
+        return False
     subclauses = _split_quote_subclauses(norm_quote)
     phrases, tokens = _extract_binding_cues(assertion.subject, assertion.predicate)
 
@@ -1152,14 +1177,18 @@ def _check_multi_date_binding(
     proposed_iso_date: str,
     quote_date_spans: list[tuple[tuple[int, int], str]],
 ) -> bool:
-    """When a quote contains 2+ distinct dates (e.g. Maturity Date vs Closing Date, A3v),
+    """When a quote contains 2+ distinct dates (e.g. Maturity Date vs Closing Date),
     bind *proposed_iso_date* to the sub-clause matching `(assertion.subject, assertion.predicate)`."""
     distinct_dates = {iso for _, iso in quote_date_spans}
     if len(distinct_dates) <= 1:
         return True
 
     norm_quote = normalize_span(assertion.quote)
-    subclauses = _split_quote_subclauses(norm_quote)
+    subclauses = []
+    previous_end = 0
+    for (start, end), _ in sorted(quote_date_spans):
+        subclauses.append((previous_end, end, norm_quote[previous_end:end]))
+        previous_end = end
     phrases, tokens = _extract_binding_cues(assertion.subject, assertion.predicate)
 
     if len(subclauses) >= 2:
@@ -1216,7 +1245,7 @@ def _tokens_grounded_in_quote(val_tokens: set[str], quote_tokens: set[str]) -> b
 
 
 def _has_polarity_inversion(quote_text: str, value_text: str) -> bool:
-    """Return True if *quote_text* has clausal negation that is inverted/omitted in *value_text* (or vice versa)."""
+    """Return True if *quote_text* has clausal negation that is inverted/omitted in a propositional *value_text*."""
     q_low = normalize_span(quote_text).lower()
     v_low = normalize_span(value_text).lower()
     # Remove shared "without <noun>" phrases so "without cause" in both does not mask "In no event" in quote
@@ -1226,7 +1255,12 @@ def _has_polarity_inversion(quote_text: str, value_text: str) -> bool:
             v_low = v_low.replace(shared, " ")
     q_neg = bool(_CLAUSE_NEGATION_RE.search(q_low))
     v_neg = bool(_CLAUSE_NEGATION_RE.search(v_low))
-    return q_neg != v_neg
+    if q_neg == v_neg:
+        return False
+    # If the value is a bare noun phrase (not a negative or affirmative proposition), it is a slot extraction (e.g. carveout/excluded item), not a polarity inversion
+    if not v_neg and not _AFFIRMATIVE_PROPOSITION_RE.search(v_low):
+        return False
+    return True
 
 
 def verify_quote_and_quantities(
@@ -1293,7 +1327,7 @@ def verify_quote_and_quantities(
             )
             return issues
 
-        # Reject bare single-token / out-of-context quotes or section-header-only quotes (A1, C4, C4v1)
+        # Reject bare single-token / out-of-context quotes or section-header-only quotes
         quote_words = re.findall(r"[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]+", norm_quote)
         if len(norm_source) > len(norm_quote) and (
             len(norm_quote) < 6
@@ -1317,7 +1351,7 @@ def verify_quote_and_quantities(
             )
             return issues
 
-        # Reject quotes that truncate a leading negation or trailing exception from the sentence (A4, A4v2, A4v3)
+        # Reject quotes that truncate a leading negation or trailing exception from the sentence
         truncated_qual = _has_truncated_sentence_qualifier(norm_source, norm_quote)
         if truncated_qual is not None:
             issues.append(
@@ -1341,7 +1375,7 @@ def verify_quote_and_quantities(
     is_es = bool(_SPANISH_CONTEXT_RE.search(norm_source))
 
     if policy.require_quantity_match:
-        # 1. Check dates in value strictly against the verified quote (NO fallback to full source! A3, A3v)
+        # 1. Check dates in value strictly against the verified quote
         if _SLASH_DATE_RE.search(assertion.value or "") or _SHORT_SLASH_DATE_RE.search(assertion.value or ""):
             issues.append(
                 Issue(
@@ -1375,8 +1409,21 @@ def verify_quote_and_quantities(
                     )
                 )
 
-        # 2. Check numeric quantities & units strictly against the verified quote (A2, A8, A13)
-        table_scale = _detect_contextual_table_scale(norm_quote if quote_in_source else norm_source, norm_source)
+        # 2. Check numeric quantities & units strictly against the verified quote
+        table_scale = _detect_contextual_table_scale(assertion.quote if quote_in_source else source.text, source.text)
+        def rate_period(text: str) -> str | None:
+            match = re.search(r"(?:%|percent|bps)\s+(?:per\s+|/)([a-z]+)", text, re.IGNORECASE)
+            if not match:
+                return None
+            token = match[1].lower()
+            return "YEARS" if token == "annum" else canonicalize_unit(token)
+
+        proposed_period, cited_period = rate_period(assertion.value), rate_period(reference_text)
+        if proposed_period and cited_period and proposed_period != cited_period:
+            issues.append(Issue(code="UNIT_MISMATCH", disposition="RETRY", assertion_id=assertion.id,
+                                subject=assertion.subject, predicate=assertion.predicate,
+                                message="The proposed rate uses a different time denominator from the citation.",
+                                remediation="Preserve the rate period; annualization requires an explicit conversion policy."))
         val_quantities = extract_quantities(assertion.value, explicit_unit=assertion.unit, es_context=is_es)
         quote_quantities = extract_quantities(
             reference_text,
@@ -1384,10 +1431,10 @@ def verify_quote_and_quantities(
             es_context=is_es,
         )
 
-        # If predicate explicitly requires a dimension (e.g. cure_period_days) and value is dimensionless (unit="NONE"), reject (A1v)
+        # If predicate explicitly requires a dimension (e.g. cure_period_days) and value is dimensionless (unit="NONE"), reject
         req_dim = infer_predicate_dimension(assertion.predicate)
         for vq in val_quantities:
-            if vq.unit == "NONE" and req_dim == "DURATION":
+            if vq.unit == "NONE" and req_dim in {"DURATION", "CURRENCY"}:
                 issues.append(
                     Issue(
                         code="UNIT_MISMATCH",
@@ -1396,7 +1443,7 @@ def verify_quote_and_quantities(
                         subject=assertion.subject,
                         predicate=assertion.predicate,
                         message=(
-                            f"Predicate '{assertion.predicate}' requires a duration unit, but proposed value '{assertion.value}' is dimensionless."
+                            f"Predicate '{assertion.predicate}' requires an explicit unit, but proposed value '{assertion.value}' is dimensionless."
                         ),
                         remediation=f"Include the governing duration unit from '{source.id}'.",
                     )
@@ -1472,7 +1519,7 @@ def verify_quote_and_quantities(
                     )
                 )
 
-        # 3. Verify substantive content-token grounding and polarity parity between quote and value (A4v1, C4, C4v2)
+        # 3. Verify substantive content-token grounding and polarity parity between quote and value
         if quote_in_source and not issues:
             val_tokens = _content_tokens(assertion.value)
             quote_tokens = _content_tokens(reference_text)

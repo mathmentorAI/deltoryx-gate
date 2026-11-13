@@ -40,6 +40,19 @@ def verify_coverage(assertions: tuple[Assertion, ...], policy: Policy) -> list[I
                 )
             )
 
+    # The operator's comparison policy records changed values, not just section labels.
+    from claimlayer.verifiers.diff import _quantity_tokens
+    for predicate, required in policy.required_value_tokens.items():
+        provided = set()
+        for assertion in assertions:
+            if normalize_predicate_key(assertion.predicate, policy.predicate_aliases) == normalize_predicate_key(predicate, policy.predicate_aliases):
+                provided.update(_quantity_tokens(assertion.value))
+        missing = set(required) - provided
+        if missing:
+            issues.append(Issue(code="MISSING_REQUIRED_VALUE", disposition="RETRY", predicate=predicate,
+                                message=f"Comparison omits governing values: {sorted(missing)}",
+                                remediation="Report the changed governing values, not only the section topic."))
+
     cited_sources = {a.source_id for a in assertions}
     for req_src in policy.required_source_ids:
         if req_src not in cited_sources:

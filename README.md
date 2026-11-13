@@ -105,7 +105,7 @@ for attempt in range(3):
     verdict = ledger.verify(assertions=proposal, policy=policy, agent_id="contract-agent")
 
     if verdict.status == "PASS":
-        assert verify_receipt(verdict)  # Offline SHA-256 Merkle verification
+        assert verify_receipt(verdict, ledger=ledger, policy=policy)  # Re-run verification against trusted state
         break                           # Auto-approved — 0 seconds of human wait!
 
     if verdict.status == "RETRY":
@@ -216,3 +216,25 @@ See **[`examples/harness2_securitization/`](./examples/harness2_securitization/)
 
 - Licensed under the **Business Source License 1.1 (BSL 1.1)** — see [`LICENSE`](./LICENSE) and [`compliance-check-license.md`](./compliance-check-license.md). Converts to **MPL 2.0** on `2030-03-31`.
 - Prior v2.1 retrieval/evidence experiments (Study A & Study B) are archived under Git tag [`v2.1-study-a-archive`](https://github.com/mathmentorAI/claim-layer/tree/v2.1-study-a-archive).
+
+
+### v3.2.1 and experimental v4
+
+See [the implementation and evaluation report](docs/v3_2_1_evaluation.md) for the
+external evaluation, unresolved cases, and reproducible commands. The external
+suite is not distributed in this repository. Passing structured v4 contracts does
+not establish natural-language extraction accuracy.
+
+Unkeyed receipts are rejected by default unless verified against a trusted ledger.
+Use a protected signing key for authenticated offline verification. Explicit
+`allow_unkeyed=True` checks internal consistency only; it does not authenticate
+who produced the verdict. The CLI's three-way file checks detect disagreement,
+not an attacker rewriting all copies under the same operating-system identity.
+
+`Policy.vocabulary` validates the proposed value, unit, entity, predicate and
+representability of conditions. It does not translate v3 free text into typed
+v4 evidence. Use `claimlayer.v4.EvidenceLayer` and `LLMProposalReader` for that
+separate pipeline, with application-controlled vocabulary and evidence admission.
+A serialized vocabulary description alone is not an executable vocabulary in v3;
+pass the operator-created `Vocabulary` object when verifying. An unsupported
+representation fails closed.

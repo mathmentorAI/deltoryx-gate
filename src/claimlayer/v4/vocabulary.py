@@ -1,0 +1,564 @@
+"""Application-declared domain vocabulary: the shared contract between reader and engine.
+
+Free-form keys and ad-hoc unit strings made v3 comparisons depend on a model
+reproducing hidden labels verbatim. v4 requires every admitted proposition to
+conform to a versioned vocabulary declared by the application. Normalization is
+deterministic and limited to declared labels: no similarity matching, no
+natural-language parsing and no unit conversion that the registry does not
+explicitly define.
+"""
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
+import re
+from typing import Any, Mapping
+
+from ..semantic.models import KINDS, canonical, digest, instant, require_string
+
+VALUE_TYPES = frozenset({'quantity', 'number', 'bound', 'boolean', 'enum', 'set', 'string', 'entity', 'date', 'record'})
+BOUND_OPERATORS = frozenset({'lt', 'le', 'gt', 'ge'})
+CONDITION_OPERATORS = frozenset({'eq', 'ne', 'lt', 'le', 'gt', 'ge'})
+
+
+class UnmappedProposal(ValueError):
+    """A proposal cannot be represented in the declared vocabulary."""
+
+    def __init__(self, reason: str, path: str = '', detail: Any = None):
+        self.reason, self.path, self.detail = reason, path, detail
+        super().__init__(f'{reason} at {path or "/"}' + ('' if detail is None else f': {detail}'))
+
+    def as_dict(self):
+        return {'reason': self.reason, 'path': self.path, 'detail': self.detail}
+
+
+def label_key(text: str) -> str:
+    """Canonical key for a declared label: case, spacing, '_' and '-' are not meaningful."""
+    return re.sub(r'[\s_\-]+', ' ', text.strip().casefold())
+
+
+def decimal_text(value: Any, path: str) -> str:
+    if type(value) is bool or type(value) not in (int, float, str, Decimal):
+        raise UnmappedProposal('number_required', path, value)
+    try:
+        number = Decimal(str(value))
+    except InvalidOperation:
+        raise UnmappedProposal('number_required', path, value) from None
+    if not number.is_finite():
+        raise UnmappedProposal('finite_number_required', path, value)
+    normalized = number.normalize()
+    if normalized == normalized.to_integral_value():
+        normalized = normalized.quantize(Decimal(1))
+    return format(normalized, 'f')
+
+
+# ------------------------------------------------------------------- dates
+# A date value keeps the precision its source states. Comparing values of different precision, or a local
+# time with an instant, is not a contradiction unless no reading of the coarser value can match the finer one.
+_LOCAL_SLACK = (timedelta(hours=14), timedelta(hours=12))  # UTC offsets range from -12:00 to +14:00
+
+
+def normalize_date(value: Any) -> str:
+    """Canonical ISO text: YYYY, YYYY-MM, YYYY-MM-DD, YYYY-MM-DDTHH:MM:SS (local) or ...Z (instant)."""
+    if not isinstance(value, str):
+        raise ValueError('date text required')
+    text = value.strip()
+    if re.fullmatch(r'\d{4}', text):
+        return text
+    if re.fullmatch(r'\d{4}-\d{2}', text):
+        date(int(text[:4]), int(text[5:7]), 1)
+        return text
+    if re.fullmatch(r'\d{4}-\d{2}-\d{2}', text):
+        return date.fromisoformat(text).isoformat()
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?', text):
+        raise ValueError('not an ISO 8601 date')
+    moment = datetime.fromisoformat(text.replace('Z', '+00:00').replace(' ', 'T', 1))
+    if moment.tzinfo is None:  # local time without offset: kept as stated, never shifted
+        return moment.replace(microsecond=0).isoformat()
+    return moment.astimezone(timezone.utc).replace(microsecond=0).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def date_precision(text: str) -> str:
+    if len(text) == 4:
+        return 'year'
+    if len(text) == 7:
+        return 'month'
+    if len(text) == 10:
+        return 'day'
+    return 'instant' if text.endswith('Z') else 'local_time'
+
+
+def _date_span(text: str):
+    """(earliest, latest) naive-UTC instants the value can denote, allowing any UTC offset for local values."""
+    precision = date_precision(text)
+    if precision == 'instant':
+        moment = datetime.strptime(text, '%Y-%m-%dT%H:%M:%SZ')
+        return moment, moment
+    if precision == 'local_time':
+        moment = datetime.fromisoformat(text)
+        return moment - _LOCAL_SLACK[0], moment + _LOCAL_SLACK[1]
+    year = int(text[:4])
+    if precision == 'year':
+        start, end = datetime(year, 1, 1), datetime(year + 1, 1, 1)
+    elif precision == 'month':
+        month = int(text[5:7])
+        start = datetime(year, month, 1)
+        end = datetime(year + (month == 12), month % 12 + 1, 1)
+    else:
+        start = datetime.fromisoformat(text)
+        end = start + timedelta(days=1)
+    return start - _LOCAL_SLACK[0], end + _LOCAL_SLACK[1]
+
+
+def date_relation(a: str, b: str) -> str:
+    """'equal' | 'compatible' (one refines the other) | 'unknown' (time zone undecidable) | 'incompatible'."""
+    if a == b:
+        return 'equal'
+    pa, pb = date_precision(a), date_precision(b)
+    calendar = {'year', 'month', 'day', 'local_time'}
+    if pa in calendar and pb in calendar:
+        if pa == pb:
+            return 'incompatible'
+        coarse, fine = (a, b) if len(a) < len(b) else (b, a)
+        return 'compatible' if fine.startswith(coarse) else 'incompatible'
+    if pa == pb == 'instant':
+        return 'incompatible'
+    local, moment = (a, b) if pb == 'instant' else (b, a)
+    start, end = _date_span(local)
+    instant_value = datetime.strptime(moment, '%Y-%m-%dT%H:%M:%SZ')
+    if not start <= instant_value <= end:
+        return 'incompatible'
+    if date_precision(local) != 'local_time' and moment.startswith(local):
+        return 'compatible'  # the instant falls inside the stated calendar period in UTC as well
+    return 'unknown'
+
+
+def _text_relation(a: str, b: str) -> str:
+    ka, kb = label_key(a), label_key(b)
+    if ka == kb:
+        return 'equal'
+    short, long_ = (ka, kb) if len(ka) <= len(kb) else (kb, ka)
+    if short and re.search(r'(?<!\w)' + re.escape(short) + r'(?!\w)', long_):
+        return 'compatible'  # one names the other more fully ('Ridgeline' / 'Ridgeline Capital Advisors LLC')
+    return 'incompatible'
+
+
+def value_relation(spec: 'FieldSpec', a: Any, b: Any) -> str:
+    """Relation between two canonical values of one schema; used only where single values would conflict.
+
+    'equal', 'compatible' (one value states the other less precisely or less fully), 'unknown' (cannot be
+    decided without information the values do not carry) or 'incompatible'."""
+    if canonical(a) == canonical(b):
+        return 'equal'
+    if spec.type == 'date' and isinstance(a, str) and isinstance(b, str):
+        return date_relation(a, b)
+    if spec.type in {'string', 'entity'} and isinstance(a, str) and isinstance(b, str):
+        return _text_relation(a, b)
+    if spec.type == 'set' and isinstance(a, list) and isinstance(b, list):
+        return 'compatible' if set(a) <= set(b) or set(b) <= set(a) else 'incompatible'
+    if spec.type == 'record' and isinstance(a, dict) and isinstance(b, dict):
+        relations = []
+        for name, child in spec.fields:
+            if name in a and name in b:
+                relations.append(value_relation(child, a[name], b[name]))
+        for verdict in ('incompatible', 'unknown', 'compatible'):
+            if verdict in relations:
+                return verdict
+        return 'equal' if relations else 'unknown'
+    return 'incompatible'
+
+
+@dataclass(frozen=True)
+class Unit:
+    """A declared unit. value_in_base = value * factor within one dimension."""
+    name: str
+    dimension: str
+    factor: str = '1'
+    aliases: tuple[str, ...] = ()
+
+    def __post_init__(self):
+        require_string(self.name, 'unit name')
+        require_string(self.dimension, 'unit dimension')
+        if Decimal(self.factor) <= 0:
+            raise ValueError('Unit factors must be positive')
+
+
+class UnitRegistry:
+    def __init__(self, units=()):
+        self._units: dict[str, Unit] = {}
+        self._labels: dict[str, str] = {}
+        self._base: dict[str, str] = {}
+        for unit in units:
+            self.add(unit)
+
+    def add(self, unit: Unit):
+        if unit.name in self._units:
+            raise ValueError(f'Duplicate unit {unit.name}')
+        for label in (unit.name, *unit.aliases):
+            key = label_key(label)
+            if key in self._labels and self._labels[key] != unit.name:
+                raise ValueError(f'Ambiguous unit label {label!r}')
+            self._labels[key] = unit.name
+        self._units[unit.name] = unit
+        if Decimal(unit.factor) == 1:
+            if unit.dimension in self._base and self._base[unit.dimension] != unit.name:
+                raise ValueError(f'Two base units for dimension {unit.dimension}')
+            self._base[unit.dimension] = unit.name
+
+    def extend(self, units):
+        registry = UnitRegistry(self._units.values())
+        for unit in units:
+            registry.add(unit)
+        return registry
+
+    def lookup(self, label: str | None, path: str = 'unit') -> Unit:
+        if not isinstance(label, str) or not label.strip():
+            raise UnmappedProposal('unit_required', path, label)
+        name = self._labels.get(label_key(label))
+        if name is None:
+            raise UnmappedProposal('unknown_unit', path, label)
+        return self._units[name]
+
+    def base(self, dimension: str) -> str:
+        if dimension not in self._base:
+            raise ValueError(f'Dimension {dimension} has no declared base unit')
+        return self._base[dimension]
+
+    def to_base(self, value: Any, label: str, path: str) -> tuple[str, str]:
+        unit = self.lookup(label, path)
+        number = Decimal(decimal_text(value, path)) * Decimal(unit.factor)
+        return decimal_text(number, path), self.base(unit.dimension)
+
+    def dimension_of(self, unit_name: str) -> str:
+        return self._units[unit_name].dimension
+
+    def describe(self):
+        return [asdict(u) for u in sorted(self._units.values(), key=lambda u: u.name)]
+
+
+# Conversions are declared only where they are exact. Calendar days, business days and
+# months are different dimensions: converting between them requires a calendar policy.
+STANDARD_UNITS = UnitRegistry([
+    Unit('percent', 'ratio', '1', ('%', 'pct', 'per cent')),
+    Unit('fraction', 'ratio', '100', ()),
+    Unit('percentage_point', 'ratio_difference', '1', ('pp', 'percentage points', 'percentage point')),
+    Unit('basis_point', 'ratio_difference', '0.01', ('bp', 'bps', 'basis points')),
+    Unit('percent_per_annum', 'annual_rate', '1', ('% per annum', '% p.a.', 'percent per annum', 'percent per year', 'percent annually')),
+    Unit('percentage_points_per_annum', 'annual_rate_difference', '1', ('percentage points per annum', 'pp per annum')),
+    Unit('multiple', 'multiplier', '1', ('times', 'x', 'multiplier')),
+    Unit('calendar_days', 'duration_calendar_days', '1', ('days', 'day', 'calendar day')),
+    Unit('weeks', 'duration_calendar_days', '7', ('week',)),
+    Unit('business_days', 'duration_business_days', '1', ('business day', 'working days', 'working day')),
+    Unit('months', 'duration_months', '1', ('month',)),
+    Unit('years', 'duration_months', '12', ('year',)),
+    Unit('hours', 'duration_hours', '1', ('hour',)),
+    Unit('hours_per_week', 'hours_per_week', '1', ('hours/week', 'hours a week')),
+    Unit('hours_per_day', 'hours_per_day', '1', ('hours/day', 'hours a day')),
+    Unit('count', 'count', '1', ('items', 'number')),
+    Unit('USD', 'currency:USD', '1', ('US dollars', 'dollars', '$')),
+    Unit('EUR', 'currency:EUR', '1', ('euros', 'euro', '€')),
+    Unit('GBP', 'currency:GBP', '1', ('pounds sterling', '£')),
+    Unit('USD_per_year', 'currency_rate:USD/year', '1', ('USD per year', 'USD annually', 'USD per annum')),
+    Unit('USD_per_month', 'currency_rate:USD/year', '12', ('USD per month', 'USD monthly')),
+    Unit('EUR_per_year', 'currency_rate:EUR/year', '1', ('EUR per year', 'EUR per annum')),
+    Unit('EUR_per_month', 'currency_rate:EUR/year', '12', ('EUR per month',)),
+])
+
+
+@dataclass(frozen=True)
+class FieldSpec:
+    """Typed value schema. Quantities carry a unit restricted to declared dimensions."""
+    type: str
+    dimensions: tuple[str, ...] = ()
+    enum: tuple[str, ...] = ()
+    fields: tuple[tuple[str, 'FieldSpec'], ...] = ()
+    required: tuple[str, ...] | None = None
+    description: str = ''
+
+    def __post_init__(self):
+        if self.type not in VALUE_TYPES:
+            raise ValueError(f'Unknown value type {self.type}')
+        if self.type in {'quantity', 'bound'} and not self.dimensions:
+            raise ValueError('Quantities and bounds need declared dimensions')
+        if self.type in {'enum', 'set'} and not self.enum:
+            raise ValueError('Enum and set values need declared members')
+        if self.type == 'record' and not self.fields:
+            raise ValueError('Records need declared fields')
+
+    @classmethod
+    def record(cls, description='', required=None, **fields):
+        return cls('record', fields=tuple(sorted(fields.items())), required=None if required is None else tuple(sorted(required)), description=description)
+
+    SHAPES = {
+        'quantity': 'number in "value" with the unit name in "unit"; inside records or conditions use {"value": number, "unit": unit_name}',
+        'bound': '{"operator": "lt"|"le"|"gt"|"ge", "value": number, "unit": unit_name}',
+        'number': 'a JSON number, no unit',
+        'boolean': 'true or false',
+        'enum': 'exactly one of the listed enum members (string)',
+        'set': 'JSON array of listed enum members',
+        'string': 'text, compared verbatim after whitespace normalization',
+        'entity': 'the name of an entity (string)',
+        'date': 'ISO 8601 string at the precision the text states: YYYY, YYYY-MM, YYYY-MM-DD, or a date-time '
+                'such as 2023-03-08T02:14:00; add the offset (2023-03-08T02:14:00-07:00) only when the text states '
+                'the time zone. Never invent a day or month the text does not give.',
+        'record': 'JSON object with exactly the listed fields',
+    }
+
+    def describe(self):
+        out = {'type': self.type, 'json_shape': self.SHAPES[self.type]}
+        if self.dimensions:
+            out['dimensions'] = list(self.dimensions)
+        if self.enum:
+            out['enum'] = list(self.enum)
+        if self.fields:
+            out['fields'] = {k: v.describe() for k, v in self.fields}
+            out['required'] = list(self.required) if self.required is not None else [k for k, _ in self.fields]
+        if self.description:
+            out['description'] = self.description
+        return out
+
+
+@dataclass(frozen=True)
+class PredicateSpec:
+    name: str
+    value: FieldSpec
+    cardinality: str = 'single'
+    conditions: tuple[tuple[str, FieldSpec], ...] = ()
+    assertion_kinds: tuple[str, ...] = tuple(sorted(KINDS))
+    description: str = ''
+
+    def __post_init__(self):
+        require_string(self.name, 'predicate name')
+        if self.cardinality not in {'single', 'multi'}:
+            raise ValueError('cardinality must be single or multi')
+        if not set(self.assertion_kinds) <= KINDS:
+            raise ValueError('Unknown assertion kind in predicate spec')
+        for name, spec in self.conditions:
+            require_string(name, 'condition field')
+            if spec.type in {'record', 'set', 'string', 'bound'}:
+                raise ValueError('Condition values must be boolean, number, quantity, enum or entity')
+
+    def describe(self):
+        return {'name': self.name, 'value': self.value.describe(), 'cardinality': self.cardinality,
+                'conditions': {k: v.describe() for k, v in self.conditions},
+                'assertion_kinds': list(self.assertion_kinds), 'description': self.description}
+
+
+@dataclass(frozen=True)
+class Vocabulary:
+    """Versioned application contract for admitted propositions."""
+    name: str
+    version: str
+    predicates: tuple[PredicateSpec, ...]
+    units: UnitRegistry = field(default=STANDARD_UNITS, compare=False)
+    entities: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    closed_entities: bool = False
+    scope_keys: tuple[str, ...] = ('event_id',)
+
+    def __post_init__(self):
+        require_string(self.name, 'vocabulary name')
+        require_string(self.version, 'vocabulary version')
+        names = [p.name for p in self.predicates]
+        if len(names) != len(set(names)):
+            raise ValueError('Duplicate predicate')
+        labels = {}
+        for canonical_name, aliases in self.entities:
+            for label in (canonical_name, *aliases):
+                key = label_key(label)
+                if labels.get(key, canonical_name) != canonical_name:
+                    raise ValueError(f'Entity alias {label!r} maps to two entities')
+                labels[key] = canonical_name
+        object.__setattr__(self, '_entity_labels', labels)
+        object.__setattr__(self, '_predicates', {p.name: p for p in self.predicates})
+        # Validate declared dimensions exist with a base unit.
+        for predicate in self.predicates:
+            for spec in self._specs(predicate.value):
+                for dimension in spec.dimensions:
+                    self.units.base(dimension)
+
+    def _specs(self, spec):
+        yield spec
+        for _, child in spec.fields:
+            yield from self._specs(child)
+
+    @property
+    def fingerprint(self) -> str:
+        return digest(self.describe())
+
+    def describe(self):
+        return {'name': self.name, 'version': self.version,
+                'predicates': [p.describe() for p in self.predicates],
+                'units': self.units.describe(),
+                'entities': {k: list(v) for k, v in self.entities}, 'closed_entities': self.closed_entities,
+                'scope_keys': list(self.scope_keys), 'assertion_kinds': sorted(KINDS)}
+
+    def predicate(self, name: str) -> PredicateSpec:
+        if not isinstance(name, str) or name not in self._predicates:
+            raise UnmappedProposal('unknown_predicate', 'predicate', name)
+        return self._predicates[name]
+
+    def entity(self, label: Any) -> str:
+        if not isinstance(label, str) or not label.strip():
+            raise UnmappedProposal('entity_required', 'entity', label)
+        canonical_name = self._entity_labels.get(label_key(label))
+        if canonical_name is not None:
+            return canonical_name
+        if self.closed_entities:
+            raise UnmappedProposal('unknown_entity', 'entity', label)
+        return ' '.join(label.split())
+
+    # ----------------------------------------------------------------- values
+    def value(self, spec: FieldSpec, value: Any, unit: str | None, path: str):
+        """Return (canonical_value, canonical_unit_or_None)."""
+        t = spec.type
+        if t == 'quantity':
+            if type(value) is dict:
+                if set(value) != {'value', 'unit'}:
+                    raise UnmappedProposal('quantity_shape', path, sorted(value))
+                value, unit = value['value'], value['unit']
+            amount, base = self.units.to_base(value, unit, path + '/unit')
+            if self.units.dimension_of(base) not in spec.dimensions:
+                raise UnmappedProposal('unit_dimension_mismatch', path,
+                                       {'unit': unit, 'allowed': list(spec.dimensions)})
+            return {'value': amount, 'unit': base}, base
+        if t == 'bound':
+            if type(value) is not dict or not {'operator', 'value'} <= set(value) <= {'operator', 'value', 'unit'}:
+                raise UnmappedProposal('bound_shape', path, value)
+            if value['operator'] not in BOUND_OPERATORS:
+                raise UnmappedProposal('bound_operator', path, value['operator'])
+            inner_unit = value.get('unit', unit)
+            amount, base = self.units.to_base(value['value'], inner_unit, path + '/unit')
+            if self.units.dimension_of(base) not in spec.dimensions:
+                raise UnmappedProposal('unit_dimension_mismatch', path,
+                                       {'unit': inner_unit, 'allowed': list(spec.dimensions)})
+            return {'operator': value['operator'], 'value': amount, 'unit': base}, base
+        if unit is not None and path == 'value':
+            raise UnmappedProposal('unit_not_applicable', 'unit', unit)
+        if t == 'number':
+            return decimal_text(value, path), None
+        if t == 'boolean':
+            if type(value) is not bool:
+                raise UnmappedProposal('boolean_required', path, value)
+            return value, None
+        if t == 'enum':
+            return self._member(spec, value, path), None
+        if t == 'set':
+            if type(value) not in (list, tuple) or not value:
+                raise UnmappedProposal('set_required', path, value)
+            members = sorted({self._member(spec, v, path) for v in value})
+            return members, None
+        if t == 'string':
+            if not isinstance(value, str) or not value.strip():
+                raise UnmappedProposal('string_required', path, value)
+            return ' '.join(value.split()), None
+        if t == 'entity':
+            return self.entity(value), None
+        if t == 'date':
+            try:
+                return normalize_date(value), None
+            except ValueError:
+                raise UnmappedProposal('iso_date_required', path, value) from None
+        # record
+        if type(value) is not dict:
+            raise UnmappedProposal('record_required', path, value)
+        declared = dict(spec.fields)
+        extra = set(value) - set(declared)
+        if extra:
+            raise UnmappedProposal('undeclared_field', path, sorted(extra))
+        required = set(spec.required) if spec.required is not None else set(declared)
+        missing = required - set(value)
+        if missing:
+            raise UnmappedProposal('missing_field', path, sorted(missing))
+        out = {}
+        for key in sorted(value):
+            out[key], _ = self.value(declared[key], value[key], None, f'{path}/{key}')
+        return out, None
+
+    def _member(self, spec, value, path):
+        if not isinstance(value, str):
+            raise UnmappedProposal('enum_member_required', path, value)
+        for member in spec.enum:
+            if label_key(member) == label_key(value):
+                return member
+        raise UnmappedProposal('unknown_enum_member', path, value)
+
+    def conditions(self, predicate: PredicateSpec, conditions: Any):
+        if conditions in (None, ()):
+            return ()
+        if type(conditions) not in (list, tuple):
+            raise UnmappedProposal('conditions_list_required', 'conditions', conditions)
+        declared = dict(predicate.conditions)
+        out = []
+        for i, condition in enumerate(conditions):
+            path = f'conditions[{i}]'
+            if type(condition) is not dict or set(condition) != {'field', 'operator', 'value'}:
+                raise UnmappedProposal('condition_shape', path, condition)
+            name = condition['field']
+            if name not in declared:
+                raise UnmappedProposal('undeclared_condition', path, name)
+            if condition['operator'] not in CONDITION_OPERATORS:
+                raise UnmappedProposal('condition_operator', path, condition['operator'])
+            spec = declared[name]
+            if spec.type in {'quantity', 'bound'}:
+                raw = condition['value']
+                if type(raw) is not dict or set(raw) != {'value', 'unit'}:
+                    raise UnmappedProposal('quantity_shape', path, raw)
+                amount, base = self.units.to_base(raw['value'], raw['unit'], path + '/unit')
+                if self.units.dimension_of(base) not in spec.dimensions:
+                    raise UnmappedProposal('unit_dimension_mismatch', path, raw)
+                canonical_value = {'value': amount, 'unit': base}
+            else:
+                if condition['operator'] in {'lt', 'le', 'gt', 'ge'} and spec.type not in {'number', 'date'}:
+                    raise UnmappedProposal('ordering_requires_number_or_date', path, name)
+                canonical_value, _ = self.value(spec, condition['value'], None, path + '/value')
+            out.append({'field': name, 'operator': condition['operator'], 'value': canonical_value})
+        out.sort(key=canonical)
+        if len({canonical(c) for c in out}) != len(out):
+            raise UnmappedProposal('duplicate_condition', 'conditions')
+        return tuple(out)
+
+    def scope(self, scope: Any):
+        if scope in (None, {}):
+            return {}
+        if type(scope) is not dict:
+            raise UnmappedProposal('scope_object_required', 'scope', scope)
+        extra = set(scope) - set(self.scope_keys)
+        if extra:
+            raise UnmappedProposal('undeclared_scope_key', 'scope', sorted(extra))
+        for key, value in scope.items():
+            if not isinstance(value, str) or not value.strip():
+                raise UnmappedProposal('scope_value_must_be_identifier', f'scope/{key}', value)
+        return {k: scope[k].strip() for k in sorted(scope)}
+
+    def proposition(self, proposal: Mapping[str, Any]):
+        """Normalize a proposal to the canonical proposition, or raise UnmappedProposal."""
+        allowed = {'entity', 'predicate', 'value', 'unit', 'polarity', 'assertion_kind', 'conditions',
+                   'scope', 'valid_from', 'valid_until'}
+        extra = set(proposal) - allowed
+        if extra:
+            raise UnmappedProposal('undeclared_proposal_field', '', sorted(extra))
+        predicate = self.predicate(proposal.get('predicate'))
+        kind = proposal.get('assertion_kind', 'unknown')
+        if kind not in KINDS:
+            raise UnmappedProposal('unknown_assertion_kind', 'assertion_kind', kind)
+        if kind not in predicate.assertion_kinds:
+            raise UnmappedProposal('assertion_kind_not_declared_for_predicate', 'assertion_kind', kind)
+        polarity = proposal.get('polarity', 'affirmed')
+        if polarity not in {'affirmed', 'negated'}:
+            raise UnmappedProposal('unknown_polarity', 'polarity', polarity)
+        if 'value' not in proposal:
+            raise UnmappedProposal('value_required', 'value')
+        value, unit = self.value(predicate.value, proposal['value'], proposal.get('unit'), 'value')
+        valid_from, valid_until = proposal.get('valid_from'), proposal.get('valid_until')
+        try:
+            start, end = instant(valid_from), instant(valid_until)
+        except (ValueError, TypeError, AttributeError):
+            raise UnmappedProposal('invalid_validity_instant', 'valid_from/valid_until') from None
+        if start and end and start > end:
+            raise UnmappedProposal('inverted_validity_interval', 'valid_from/valid_until')
+        return {'entity': self.entity(proposal.get('entity')), 'predicate': predicate.name,
+                'value': value, 'unit': unit, 'polarity': polarity, 'assertion_kind': kind,
+                'conditions': list(self.conditions(predicate, proposal.get('conditions'))),
+                'scope': self.scope(proposal.get('scope')),
+                'valid_from': valid_from, 'valid_until': valid_until}

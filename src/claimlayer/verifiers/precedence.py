@@ -19,6 +19,7 @@ from claimlayer.verifiers.diff import _split_into_sections
 from claimlayer.verifiers.quote_quantity import (
     _to_commensurable_base,
     canonicalize_value,
+    extract_dates,
     extract_quantities,
     normalize_span,
     parse_iso_date,
@@ -44,11 +45,13 @@ _GENERIC_SUBJECT_KEYS = frozenset(
         "customer",
         "loan",
         "facility",
-        "x",
-        "s",
-        "o",
     }
 )
+
+
+def _is_generic_subject_key(key: str) -> bool:
+    return not key or len(key) <= 1 or key in _GENERIC_SUBJECT_KEYS
+
 
 _DESIGNATOR_RE = re.compile(
     r"\b((?:class|tranche|series|tier)\s+[a-z0-9]+)\b",
@@ -146,12 +149,6 @@ _CLAUSE_TOPIC_STOPWORDS = frozenset(
         "servicer",
         "senior",
         "junior",
-        "ahead",
-        "new",
-        "york",
-        "delaware",
-        "california",
-        "amended",
     }
 )
 
@@ -180,6 +177,18 @@ def _subjects_and_designators_compatible(
     cand_text: str,
 ) -> bool:
     """Return True if *assertion* and a candidate fact/clause refer to compatible entities and note classes."""
+    # Copular noun phrases with an added modifier name different subjects.
+    # Only compare strict token inclusion; arbitrary rewordings remain unresolved here.
+    def copular_subject(text: str) -> set[str]:
+        match = re.match(r"^\s*(.*?)\s+(?:is|are|was|were)\b", normalize_span(text), re.IGNORECASE)
+        if not match:
+            return set()
+        return set(normalize_entity_key(match[1]).split("_")) - {"the", "a", "an"}
+
+    left, right = copular_subject(assertion.quote), copular_subject(cand_text)
+    if left and right and (left < right or right < left):
+        return False
+
     a_des = _extract_designators(f"{assertion.subject} {assertion.quote}")
     c_des = _extract_designators(f"{cand_subj or ''} {cand_text}")
     if a_des and c_des and not (a_des & c_des):
@@ -188,13 +197,13 @@ def _subjects_and_designators_compatible(
     a_sk = normalize_entity_key(assertion.subject)
     c_sk = normalize_entity_key(cand_subj) if cand_subj else ""
     if a_sk and c_sk and a_sk != c_sk:
-        if a_sk not in _GENERIC_SUBJECT_KEYS and c_sk not in _GENERIC_SUBJECT_KEYS:
+        if not _is_generic_subject_key(a_sk) and not _is_generic_subject_key(c_sk):
             return False
 
-    if a_sk and a_sk not in _GENERIC_SUBJECT_KEYS:
+    if a_sk and not _is_generic_subject_key(a_sk):
         quote_words = set(normalize_key(assertion.quote).split("_"))
         cand_words = set(normalize_key(cand_text).split("_"))
-        # If the assertion quote explicitly names the specific party (e.g. "Beta Inc"), the candidate clause must too (C1fp)
+        # If the assertion quote explicitly names the specific party, the candidate clause must too
         if a_sk in quote_words and a_sk not in cand_words and c_sk != a_sk:
             return False
 
@@ -207,7 +216,15 @@ def _clauses_address_same_topic(
     cand_pred: str | None = None,
 ) -> bool:
     """Return True if *assertion* (quote/predicate) and *cand_text* address the same substantive provision."""
-    a_quote_topics = _extract_clause_topic_tokens(assertion.quote, assertion.subject)
+    # Strip assertion.value from assertion.quote when extracting question topic tokens so answer tokens do not masquerade as shared topic
+    quote_for_topic = assertion.quote
+    if assertion.value and len(assertion.value.strip()) >= 3:
+        val_re = re.compile(re.escape(assertion.value.strip()), re.IGNORECASE)
+        stripped = val_re.sub(" ", quote_for_topic).strip()
+        if stripped:
+            quote_for_topic = stripped
+
+    a_quote_topics = _extract_clause_topic_tokens(quote_for_topic, assertion.subject)
     a_pred_topics = _extract_clause_topic_tokens(assertion.predicate.replace("_", " "), assertion.subject)
     a_topics = a_quote_topics | a_pred_topics
 
@@ -227,7 +244,17 @@ def _extract_conflicting_clause_value(
     assertion: Assertion,
     cand_text: str,
 ) -> str | None:
-    """If *cand_text* states a conflicting quantity or textual value for *assertion*, return the competing value string."""
+    """If *cand_text* states a conflicting date, quantity, or textual value for *assertion*, return the competing value string."""
+    val_dates = extract_dates(assertion.value)
+    if val_dates:
+        cand_dates = extract_dates(cand_text)
+        if not cand_dates:
+            return None
+        for vd in val_dates:
+            if vd not in cand_dates:
+                return cand_dates[-1]
+        return None
+
     val_quants = extract_quantities(assertion.value, explicit_unit=assertion.unit)
     if val_quants:
         cand_quants = extract_quantities(cand_text)
@@ -252,6 +279,12 @@ def _extract_conflicting_clause_value(
     if prop_canon.startswith("STR:"):
         val_core = prop_canon[4:].strip()
         cand_norm = normalize_span(cand_text).lower()
+        quote_norm = normalize_span(assertion.quote).lower()
+        # If the cited quote is a copular definition ("is X" / "shall be X") and the candidate is a non-copular modal obligation ("shall hold"), they are not competing definitions
+        if re.search(r"\b(?:is|are|shall\s+be)\b", quote_norm) and re.search(
+            r"\bshall\s+(?!be\b)[a-z]+\b", cand_norm
+        ):
+            return None
         if val_core and val_core not in cand_norm:
             return normalize_span(cand_text).rstrip(".")
     return None
@@ -300,7 +333,7 @@ def _find_governing_clause_override(
     sec_body: str | None,
     clauses: list[str],
 ) -> str | None:
-    """Detect if a higher-authority source's pre-indexed section or clauses override *assertion.value* (C7b, C7c, C7v1, C7fp)."""
+    """Detect if a higher-authority source's pre-indexed section or clauses override *assertion.value*."""
     if sec_body is not None and _subjects_and_designators_compatible(assertion, None, sec_body):
         conflict_val = _extract_conflicting_clause_value(assertion, sec_body)
         if conflict_val is not None:
@@ -328,7 +361,7 @@ def verify_precedence_and_validity(
     issues: list[Issue] = []
     effective_as_of = as_of or policy.as_of
 
-    # 1. Temporal validity gate ALWAYS runs first (even if a prior human resolution existed, C8b)
+    # 1. Temporal validity gate ALWAYS runs first (even if a prior human resolution existed)
     if policy.block_expired:
         active, code, reason = is_source_active(source, effective_as_of)
         if not active:
@@ -374,7 +407,7 @@ def verify_precedence_and_validity(
     proposed_canon = canonicalize_value(assertion.value, assertion.unit)
 
     # 3. Explicit document supersession check (Source.supersedes)
-    # Runs BEFORE human resolution short-circuit so post-resolution amendments supersede old resolutions (C8)
+    # Runs BEFORE human resolution short-circuit so post-resolution amendments supersede old resolutions
     for candidate_src in ledger.list_sources():
         if candidate_src.id == source.id:
             continue
@@ -397,7 +430,7 @@ def verify_precedence_and_validity(
                 )
                 return issues
 
-            # Partial amendment: match using canonical entity & predicate keys or clause topic (catching C1b, C1c, C1v1-v3, while avoiding C1fp)
+            # Partial amendment: match using canonical entity & predicate keys or clause topic
             for cf in cand_facts:
                 cf_pred = normalize_predicate_key(cf.predicate, policy.predicate_aliases)
                 cf_raw_pred = normalize_key(cf.predicate)
@@ -435,7 +468,7 @@ def verify_precedence_and_validity(
     if ledger.get_resolution(assertion.subject, assertion.predicate) is not None:
         return issues
 
-    # 4. Higher authority tier override check across active ledger facts (catching C7c)
+    # 4. Higher authority tier override check across active ledger facts
     matching_facts = ledger.get_facts(
         assertion.subject,
         assertion.predicate,
@@ -471,7 +504,7 @@ def verify_precedence_and_validity(
                 )
                 return issues
 
-    # 5. Higher authority tier override from Ledger's pre-computed clause index (C7b, C7v1)
+    # 5. Higher authority tier override from Ledger's pre-computed clause index
     for candidate_src, sec_body, clauses in ledger.get_indexed_source_clauses(
         assertion, raw_pred_key, exclude_source_id=source.id
     ):

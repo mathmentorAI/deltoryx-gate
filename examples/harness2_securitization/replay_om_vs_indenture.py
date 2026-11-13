@@ -238,13 +238,13 @@ def main() -> int:
     print(f"\n[Turn 3] Agent self-corrected -> Verdict: {v_turn3.status} (Allowed to Proceed: {v_turn3.allowed_to_proceed})")
     print(f"   ✓ All 4 divergent sections verified in {elapsed_ms:.2f} ms total (0 LLM judge calls, 0 human wait)")
     print(f"   ✓ Merkle Root ({v_turn3.receipt.scheme}): {v_turn3.receipt.merkle_root}")
-    print(f"   ✓ Offline Receipt Signature Valid: {verify_receipt(v_turn3)}")
+    print(f"   ✓ Offline Receipt Signature Valid: {verify_receipt(v_turn3, ledger=ledger)}")
     print("=" * 78)
 
     assert v_turn1.status == "RETRY"
     assert v_turn2.status == "RETRY"
     assert v_turn3.status == "PASS"
-    assert verify_receipt(v_turn3) is True
+    assert verify_receipt(v_turn3, ledger=ledger) is True
     return 0
 
 

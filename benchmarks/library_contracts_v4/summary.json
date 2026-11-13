@@ -1,0 +1,1197 @@
+{
+  "blocks": {
+    "A": {
+      "cases": 20,
+      "v2": {
+        "pass": 17,
+        "fail": 3
+      },
+      "v3": {
+        "pass": 20
+      },
+      "v4": {
+        "pass": 20
+      }
+    },
+    "B": {
+      "cases": 11,
+      "v2": {
+        "fail": 4,
+        "pass": 7
+      },
+      "v3": {
+        "pass": 5,
+        "fail": 6
+      },
+      "v4": {
+        "pass": 11
+      }
+    }
+  },
+  "per_case": [
+    {
+      "block": "A",
+      "id": "aggregate-sum",
+      "kind": "value",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "aggregate-count",
+      "kind": "value",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "aggregate-average",
+      "kind": "value",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "aggregate-min",
+      "kind": "value",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "aggregate-max",
+      "kind": "value",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "aggregate-list",
+      "kind": "value",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": false,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "same-event-copy",
+      "kind": "value",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "distinct-events-equal-values",
+      "kind": "value",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "conflicting-event-values",
+      "kind": "abstain",
+      "arms": {
+        "v2": {
+          "pass": false,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "unknown-event-identity",
+      "kind": "abstain",
+      "arms": {
+        "v2": {
+          "pass": false,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "mixed-units-no-conversion",
+      "kind": "abstain",
+      "arms": {
+        "v2": {
+          "pass": false,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "primary-beats-external",
+      "kind": "value",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "annex-beats-external",
+      "kind": "value",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "primary-wins-after-reopen",
+      "kind": "value",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "historical-period",
+      "kind": "value",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "current-period",
+      "kind": "value",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "dependency-valid",
+      "kind": "dependency",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "dependency-expired",
+      "kind": "dependency",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": false,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "dependency-changed-value",
+      "kind": "dependency",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "A",
+      "id": "dependency-missing-premise",
+      "kind": "dependency",
+      "arms": {
+        "v2": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v3": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        },
+        "v4": {
+          "pass": true,
+          "error_type": null,
+          "integrity": true,
+          "tamper_detected": true
+        }
+      }
+    },
+    {
+      "block": "B",
+      "id": "P01-dependent-copies-do-not-corroborate",
+      "paper": "Sec. 5.2 dependence groups: b_{g,d}=max",
+      "gold": {
+        "top_value": 30,
+        "selected_count": 1
+      },
+      "arms": {
+        "v2": {
+          "pass": false,
+          "checks": {
+            "top_value": true,
+            "selected_count": false
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": true,
+            "top_value": 30.0,
+            "selected_count": 2,
+            "values": null,
+            "contradiction": false,
+            "conditional_label": false
+          }
+        },
+        "v3": {
+          "pass": true,
+          "checks": {
+            "top_value": true,
+            "selected_count": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": true,
+            "top_value": 30.0,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": false,
+            "conditional_label": false
+          }
+        },
+        "v4": {
+          "pass": true,
+          "checks": {
+            "top_value": true,
+            "selected_count": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": true,
+            "top_value": 30.0,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": false,
+            "conditional_label": false
+          }
+        }
+      }
+    },
+    {
+      "block": "B",
+      "id": "P02-equal-support-conflict-is-unresolved",
+      "paper": "Sec. 5.3 S=O gives Q=0.5 and fails the margin",
+      "gold": {
+        "settled": false
+      },
+      "arms": {
+        "v2": {
+          "pass": true,
+          "checks": {
+            "settled": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": false,
+            "top_value": 30.0,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": true,
+            "conditional_label": false
+          }
+        },
+        "v3": {
+          "pass": true,
+          "checks": {
+            "settled": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": false,
+            "top_value": 30.0,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": true,
+            "conditional_label": false
+          }
+        },
+        "v4": {
+          "pass": true,
+          "checks": {
+            "settled": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": true,
+            "settled": false,
+            "top_value": 30.0,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": true,
+            "conditional_label": false
+          }
+        }
+      }
+    },
+    {
+      "block": "B",
+      "id": "P03-explicit-statement-outweighs-weak-inference",
+      "paper": "v2 epistemic weights inside a_i",
+      "gold": {
+        "top_value": 30
+      },
+      "arms": {
+        "v2": {
+          "pass": true,
+          "checks": {
+            "top_value": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": false,
+            "top_value": 30.0,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": true,
+            "conditional_label": false
+          }
+        },
+        "v3": {
+          "pass": true,
+          "checks": {
+            "top_value": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": false,
+            "top_value": 30.0,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": true,
+            "conditional_label": false
+          }
+        },
+        "v4": {
+          "pass": true,
+          "checks": {
+            "top_value": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": true,
+            "top_value": 30.0,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": true,
+            "conditional_label": false
+          }
+        }
+      }
+    },
+    {
+      "block": "B",
+      "id": "P04-blocked-inference-basis-is-excluded",
+      "paper": "v2 BLOCKED_INFERENCE_TYPES",
+      "gold": {
+        "abstain": true
+      },
+      "arms": {
+        "v2": {
+          "pass": true,
+          "checks": {
+            "abstain": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": true,
+            "settled": false,
+            "top_value": null,
+            "selected_count": null,
+            "values": null,
+            "contradiction": false,
+            "conditional_label": false
+          }
+        },
+        "v3": {
+          "pass": false,
+          "checks": {
+            "abstain": false
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": true,
+            "top_value": 45.0,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": false,
+            "conditional_label": false
+          }
+        },
+        "v4": {
+          "pass": true,
+          "checks": {
+            "abstain": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": true,
+            "settled": false,
+            "top_value": null,
+            "selected_count": null,
+            "values": null,
+            "contradiction": false,
+            "conditional_label": false
+          }
+        }
+      }
+    },
+    {
+      "block": "B",
+      "id": "P05-authority-from-application-metadata-not-filename",
+      "paper": "Sec. 6.3 authority controlled outside untrusted content",
+      "gold": {
+        "top_value": 45
+      },
+      "arms": {
+        "v2": {
+          "pass": false,
+          "checks": {
+            "top_value": false
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": false,
+            "top_value": 30.0,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": true,
+            "conditional_label": false
+          }
+        },
+        "v3": {
+          "pass": true,
+          "checks": {
+            "top_value": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": false,
+            "top_value": 45.0,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": true,
+            "conditional_label": false
+          }
+        },
+        "v4": {
+          "pass": true,
+          "checks": {
+            "top_value": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": true,
+            "top_value": 45.0,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": false,
+            "conditional_label": false
+          }
+        }
+      }
+    },
+    {
+      "block": "B",
+      "id": "P06-multivalued-values-are-compatible",
+      "paper": "Sec. 4.2 compatible alternatives are not opposition",
+      "gold": {
+        "values": [
+          "Barcelona",
+          "Madrid"
+        ],
+        "contradiction": false
+      },
+      "arms": {
+        "v2": {
+          "pass": true,
+          "checks": {
+            "values": true,
+            "contradiction": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": true,
+            "top_value": "Madrid",
+            "selected_count": null,
+            "values": [
+              "Barcelona",
+              "Madrid"
+            ],
+            "contradiction": false,
+            "conditional_label": false
+          }
+        },
+        "v3": {
+          "pass": true,
+          "checks": {
+            "values": true,
+            "contradiction": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": true,
+            "top_value": "Barcelona",
+            "selected_count": 1,
+            "values": [
+              "Barcelona",
+              "Madrid"
+            ],
+            "contradiction": false,
+            "conditional_label": false
+          }
+        },
+        "v4": {
+          "pass": true,
+          "checks": {
+            "values": true,
+            "contradiction": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": true,
+            "top_value": "Barcelona",
+            "selected_count": 1,
+            "values": [
+              "Barcelona",
+              "Madrid"
+            ],
+            "contradiction": false,
+            "conditional_label": false
+          }
+        }
+      }
+    },
+    {
+      "block": "B",
+      "id": "P07-unit-labels-canonicalized-under-declared-policy",
+      "paper": "Sec. 4.1 canonicalization under a versioned policy",
+      "gold": {
+        "top_value": 0.75,
+        "settled": true,
+        "selected_count": 2
+      },
+      "arms": {
+        "v2": {
+          "pass": true,
+          "checks": {
+            "top_value": true,
+            "settled": true,
+            "selected_count": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": true,
+            "top_value": 0.75,
+            "selected_count": 2,
+            "values": null,
+            "contradiction": false,
+            "conditional_label": false
+          }
+        },
+        "v3": {
+          "pass": false,
+          "checks": {
+            "top_value": true,
+            "settled": false,
+            "selected_count": false
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": false,
+            "top_value": 0.75,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": false,
+            "conditional_label": false
+          }
+        },
+        "v4": {
+          "pass": true,
+          "checks": {
+            "top_value": true,
+            "settled": true,
+            "selected_count": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": true,
+            "top_value": 0.75,
+            "selected_count": 2,
+            "values": null,
+            "contradiction": false,
+            "conditional_label": false
+          }
+        }
+      }
+    },
+    {
+      "block": "B",
+      "id": "P08-declared-exact-conversion-before-aggregation",
+      "paper": "Sec. 7 conversions require recorded rules",
+      "gold": {
+        "aggregate": 18,
+        "aggregate_unit": "months"
+      },
+      "arms": {
+        "v2": {
+          "pass": false,
+          "checks": {
+            "aggregate": false,
+            "aggregate_unit": false
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": false,
+            "top_value": null,
+            "selected_count": null,
+            "values": null,
+            "contradiction": true,
+            "conditional_label": false,
+            "aggregate": 1.0,
+            "aggregate_unit": null
+          }
+        },
+        "v3": {
+          "pass": false,
+          "checks": {
+            "aggregate": false,
+            "aggregate_unit": false
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": true,
+            "settled": false,
+            "top_value": null,
+            "selected_count": null,
+            "values": null,
+            "contradiction": false,
+            "conditional_label": false,
+            "aggregate": null,
+            "aggregate_unit": null
+          }
+        },
+        "v4": {
+          "pass": true,
+          "checks": {
+            "aggregate": true,
+            "aggregate_unit": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": true,
+            "top_value": null,
+            "selected_count": null,
+            "values": null,
+            "contradiction": false,
+            "conditional_label": false,
+            "aggregate": 18.0,
+            "aggregate_unit": "months"
+          }
+        }
+      }
+    },
+    {
+      "block": "B",
+      "id": "P09-conditions-stay-attached-to-answers",
+      "paper": "Sec. 3.1 context chi is part of the claim",
+      "gold": {
+        "top_value": 1.5,
+        "conditional_label": true
+      },
+      "arms": {
+        "v2": {
+          "pass": false,
+          "checks": {
+            "top_value": true,
+            "conditional_label": false
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": true,
+            "top_value": 1.5,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": false,
+            "conditional_label": false
+          }
+        },
+        "v3": {
+          "pass": false,
+          "checks": {
+            "top_value": false,
+            "conditional_label": false
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": true,
+            "settled": false,
+            "top_value": null,
+            "selected_count": null,
+            "values": null,
+            "contradiction": false,
+            "conditional_label": false
+          }
+        },
+        "v4": {
+          "pass": true,
+          "checks": {
+            "top_value": true,
+            "conditional_label": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": true,
+            "top_value": 1.5,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": false,
+            "conditional_label": true
+          }
+        }
+      }
+    },
+    {
+      "block": "B",
+      "id": "P10-weakest-link-path-ranking",
+      "paper": "Sec. 6.2 R(pi)=gamma^h min s, example 0.676875",
+      "gold": {
+        "path_score": 0.676875
+      },
+      "arms": {
+        "v2": {
+          "pass": true,
+          "checks": {
+            "path_score": true
+          },
+          "error_type": null,
+          "observation": {
+            "path_score": 0.6769
+          }
+        },
+        "v3": {
+          "pass": false,
+          "checks": {
+            "path_score": false
+          },
+          "error_type": null,
+          "observation": {
+            "path_score": null,
+            "capability": "heterogeneous candidate-path ranking not provided by v3"
+          }
+        },
+        "v4": {
+          "pass": true,
+          "checks": {
+            "path_score": true
+          },
+          "error_type": null,
+          "observation": {
+            "path_score": 0.676875
+          }
+        }
+      }
+    },
+    {
+      "block": "B",
+      "id": "P03b-explicit-outweighs-inference-reversed-order",
+      "paper": "v2 epistemic weights inside a_i (post-hoc sensitivity)",
+      "gold": {
+        "top_value": 45
+      },
+      "arms": {
+        "v2": {
+          "pass": true,
+          "checks": {
+            "top_value": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": false,
+            "top_value": 45.0,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": true,
+            "conditional_label": false
+          }
+        },
+        "v3": {
+          "pass": false,
+          "checks": {
+            "top_value": false
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": false,
+            "top_value": 30.0,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": true,
+            "conditional_label": false
+          }
+        },
+        "v4": {
+          "pass": true,
+          "checks": {
+            "top_value": true
+          },
+          "error_type": null,
+          "observation": {
+            "abstain": false,
+            "settled": true,
+            "top_value": 45.0,
+            "selected_count": 1,
+            "values": null,
+            "contradiction": true,
+            "conditional_label": false
+          }
+        }
+      }
+    }
+  ],
+  "scope": "Contract outcomes on fixed structured fixtures; not accuracy, extraction quality or a global score."
+}

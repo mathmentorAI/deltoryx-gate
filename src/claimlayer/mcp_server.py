@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -168,12 +169,31 @@ class MCPVerificationServer:
 
     def _validate_and_merge_policy(self, raw_policy: Any) -> Policy:
         base = self.default_policy or Policy()
+        server_as_of = base.as_of or date.today().isoformat()
         if raw_policy is None:
-            return base
+            if base.as_of is not None:
+                return base
+            return Policy(
+                policy_id=base.policy_id,
+                require_exact_quote=base.require_exact_quote,
+                require_quantity_match=base.require_quantity_match,
+                min_tier_rank=base.min_tier_rank,
+                block_superseded=base.block_superseded,
+                block_expired=base.block_expired,
+                min_support=base.min_support,
+                conflict_escalation_threshold=base.conflict_escalation_threshold,
+                required_predicates=list(base.required_predicates),
+                required_source_ids=list(base.required_source_ids),
+                numeric_bounds=dict(base.numeric_bounds),
+                required_value_tokens=dict(base.required_value_tokens),
+                vocabulary=base.vocabulary,
+                predicate_aliases=dict(base.predicate_aliases),
+                as_of=server_as_of,
+            )
         if not isinstance(raw_policy, dict):
             raise MCPError(JSONRPC_INVALID_PARAMS, "policy must be an object")
 
-        # Never allow an MCP caller to disable core verification invariants (C5a)
+        # Never allow an MCP caller to disable core verification invariants
         for invariant_flag in (
             "require_exact_quote",
             "require_quantity_match",
@@ -184,6 +204,13 @@ class MCPVerificationServer:
                 raise MCPError(
                     JSONRPC_INVALID_PARAMS,
                     f"Caller policy cannot disable core verification invariant '{invariant_flag}'.",
+                )
+
+        if "as_of" in raw_policy and raw_policy["as_of"] is not None:
+            if str(raw_policy["as_of"]) != server_as_of:
+                raise MCPError(
+                    JSONRPC_INVALID_PARAMS,
+                    f"Caller policy cannot override server evaluation date as_of='{server_as_of}'.",
                 )
 
         min_rank = int(raw_policy.get("min_tier_rank", base.min_tier_rank))
@@ -232,6 +259,13 @@ class MCPVerificationServer:
                 else:
                     bounds[key_str] = (new_lo, new_hi)
 
+        aliases = dict(base.predicate_aliases)
+        if "predicate_aliases" in raw_policy and isinstance(raw_policy["predicate_aliases"], dict):
+            for k, v in raw_policy["predicate_aliases"].items():
+                if aliases.get(str(k)) != str(v):
+                    raise MCPError(JSONRPC_INVALID_PARAMS,
+                                   "Predicate aliases are controlled by the server policy.")
+
         return Policy(
             policy_id=str(raw_policy.get("policy_id") or base.policy_id),
             require_exact_quote=True,
@@ -244,10 +278,19 @@ class MCPVerificationServer:
             required_predicates=req_preds,
             required_source_ids=req_srcs,
             numeric_bounds=bounds,
-            as_of=base.as_of or raw_policy.get("as_of"),
+            required_value_tokens=dict(base.required_value_tokens),
+            vocabulary=base.vocabulary,
+            predicate_aliases=aliases,
+            as_of=server_as_of,
         )
 
-    def execute_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    def execute_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        *,
+        session_agent_id: str = "mcp_agent",
+    ) -> dict[str, Any]:
         if name == "register_source":
             if not self.allow_source_registration:
                 raise MCPError(
@@ -268,7 +311,7 @@ class MCPVerificationServer:
             has_existing_authoritative = any(s.rank >= 100 for s in existing_sources)
             supersedes_list = [str(x) for x in (arguments.get("supersedes") or [])]
 
-            # Prevent an agent from injecting a new authoritative/superseding source over an existing authoritative corpus (C5b)
+            # Prevent an agent from injecting a new authoritative/superseding source over an existing authoritative corpus
             if has_existing_authoritative and (tier == "authoritative" or supersedes_list):
                 raise MCPError(
                     JSONRPC_INVALID_PARAMS,
@@ -285,7 +328,7 @@ class MCPVerificationServer:
                 supersedes=supersedes_list,
             )
             try:
-                # Forbid overwriting existing sources (C5c)
+                # Forbid overwriting existing sources
                 self.ledger.add_source(src, allow_overwrite=False)
             except ValueError as exc:
                 raise MCPError(JSONRPC_INVALID_PARAMS, str(exc)) from exc
@@ -320,12 +363,17 @@ class MCPVerificationServer:
 
         if name == "verify_proposal":
             pol = self._validate_and_merge_policy(arguments.get("policy"))
-            effective_as_of = pol.as_of or arguments.get("as_of")
+            if "as_of" in arguments and arguments["as_of"] is not None:
+                if str(arguments["as_of"]) != pol.as_of:
+                    raise MCPError(
+                        JSONRPC_INVALID_PARAMS,
+                        f"Caller cannot override server evaluation date as_of='{pol.as_of}'.",
+                    )
             verdict = self.ledger.verify(
                 assertions=arguments.get("assertions") or [],
                 policy=pol,
-                as_of=effective_as_of,
-                agent_id=str(arguments.get("agent_id") or "mcp_agent"),
+                as_of=pol.as_of,
+                agent_id=session_agent_id,
                 record=True,
             )
             return verdict.to_dict()
@@ -412,7 +460,11 @@ class MCPVerificationServer:
             if not tool_name:
                 raise MCPError(JSONRPC_INVALID_PARAMS, "Tool name is required")
             try:
-                output = self.execute_tool(tool_name, tool_args)
+                output = self.execute_tool(
+                    tool_name,
+                    tool_args,
+                    session_agent_id=session.session_id or "mcp_agent",
+                )
                 return {
                     "jsonrpc": JSONRPC_VERSION,
                     "id": req_id,

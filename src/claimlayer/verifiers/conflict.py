@@ -39,12 +39,12 @@ if TYPE_CHECKING:
 _CONDITIONAL_CLAUSE_RE = re.compile(
     r"\b(?:if|when|where|in\s+the\s+case\s+of|in\s+case\s+of|with\s+respect\s+to|"
     r"for\s+interest|for\s+principal|for\s+covenant|for\s+payment|for\s+non-payment|"
-    r"prior\s+to|after|during|si\b|cuando\b|en\s+caso\s+de|respecto\s+a)\b",
+    r"prior\s+to|after|during\s+(?!the\s+term\b)|si\b|cuando\b|en\s+caso\s+de|respecto\s+a)\b",
     re.IGNORECASE,
 )
 
 _MAIN_VERB_SPLIT_RE = re.compile(
-    r"\b(?:is|are|was|were|has|have|shall|will|may|must|bears?|accrues?|es|son|tiene|ser[aá])\b",
+    r"\b(?:is|are|was|were|has|have|shall|will|may|must|bears?|accrues?|pays?|es|son|tiene|ser[aá])\b",
     re.IGNORECASE,
 )
 
@@ -96,7 +96,7 @@ def noisy_or(scores: Iterable[float]) -> float:
 
 
 def _effective_assertion_support(source: Source | None) -> float:
-    """Determine assertion support from the operator-configured source reliability (never from self-declared agent confidence, C6)."""
+    """Determine assertion support from the operator-configured source reliability."""
     if source is not None and "reliability" in source.metadata:
         return max(0.0, min(1.0, float(source.metadata["reliability"])))
     return 1.0
@@ -115,11 +115,15 @@ def _grammatical_subject_key(sentence: str) -> str:
     m = _MAIN_VERB_SPLIT_RE.search(sentence)
     if not m or m.start() == 0:
         return ""
-    return normalize_entity_key(sentence[: m.start()].strip())
+    raw_subj = normalize_entity_key(sentence[: m.start()].strip())
+    tokens = sorted(
+        t for t in raw_subj.split("_") if t and t not in {"of", "de", "del", "the", "a", "an"}
+    )
+    return "_".join(tokens)
 
 
 def _are_distinct_conditional_clauses(a1: Assertion, a2: Assertion) -> bool:
-    """Return True if two assertions on the same source describe distinct conditional branches or sub-cases (B11 vs C3v)."""
+    """Return True if two assertions on the same source describe distinct conditional branches or sub-cases."""
     if a1.condition and a2.condition and normalize_key(a1.condition) != normalize_key(a2.condition):
         return True
     q1 = normalize_span(a1.quote)
@@ -154,7 +158,7 @@ def _match_numeric_bound(
     q_unit: str,
     policy: Policy,
 ) -> tuple[float | None, float | None] | None:
-    """Match an assertion & quantity against policy.numeric_bounds with dimension and quote-topic awareness (C11b, C11v1, C11v2, C11fp)."""
+    """Match an assertion & quantity against policy.numeric_bounds with dimension and quote-topic awareness."""
     if not policy.numeric_bounds:
         return None
     predicate = assertion.predicate
@@ -172,9 +176,15 @@ def _match_numeric_bound(
             return bounds
 
     pred_stems = {t for t in norm_pred.split("_") if t and t not in _GENERIC_BOUND_SUFFIXES}
+    affirmative_quote = re.sub(
+        r"\b(?:no|without|sin)\s+[a-zA-Záéíóúñü]+\b",
+        " ",
+        assertion.quote or "",
+        flags=re.IGNORECASE,
+    )
     quote_stems = {
         t
-        for t in normalize_predicate_key(assertion.quote).split("_")
+        for t in normalize_predicate_key(affirmative_quote).split("_")
         if len(t) >= 3 and t not in _GENERIC_BOUND_SUFFIXES
     }
 
@@ -196,7 +206,7 @@ def _find_indexed_peer_clause_conflict(
     sec_body: str | None,
     clauses: list[str],
 ) -> tuple[str, str] | None:
-    """Check pre-indexed section/clauses of a peer source for a conflicting value (C2, C2v1-v3, C2fp)."""
+    """Check pre-indexed section/clauses of a peer source for a conflicting value."""
     if sec_body is not None and _subjects_and_designators_compatible(assertion, None, sec_body):
         comp_val = _extract_conflicting_clause_value(assertion, sec_body)
         if comp_val is not None:
@@ -240,7 +250,7 @@ def evaluate_conflicts_and_thresholds(
         predicate=assertion.predicate,
     )
 
-    # 1. Human resolution check (unless superseded by a newer active amendment, C8)
+    # 1. Human resolution check (unless superseded by a newer active amendment)
     resolution = ledger.get_resolution(assertion.subject, assertion.predicate)
     if resolution is not None:
         resolved_canon = canonicalize_value(resolution.selected_value)
@@ -266,7 +276,7 @@ def evaluate_conflicts_and_thresholds(
             return 0.0, issues, conflicts
         net_confidence = 1.0
     else:
-        # 2. Gather peer-tier evidence deduplicated by content hash (source.sha256, N1)
+        # 2. Gather peer-tier evidence deduplicated by content hash
         # canon_val -> dedup_key (sha256) -> (confidence, raw_value, quote, tier, source_id)
         by_canon_source: dict[str, dict[str, tuple[float, str, str, str, str]]] = {}
 
@@ -296,7 +306,7 @@ def evaluate_conflicts_and_thresholds(
             source.tier,
         )
 
-        # Check sibling assertions in the same proposal batch (by index, closing C3b duplicate-id bypass!)
+        # Check sibling assertions in the same proposal batch by index
         for other_idx, other in enumerate(all_assertions):
             if other_idx == assertion_index:
                 continue
@@ -350,7 +360,7 @@ def evaluate_conflicts_and_thresholds(
                     fact_src.tier,
                 )
 
-        # Query Ledger's pre-computed clause index for active peer-rank conflicts (closing C2 omission bypass in O(1)!)
+        # Query Ledger's pre-computed clause index for active peer-rank conflicts
         for peer_src, sec_body, clauses in ledger.get_indexed_source_clauses(
             assertion, raw_pred_key, exclude_source_id=source.id
         ):
@@ -447,7 +457,7 @@ def evaluate_conflicts_and_thresholds(
                     )
                 )
 
-    # 3. Numeric policy threshold gate (with dimension, predicate-stem, and quote-topic matching for C11b, C11v1, C11v2, C11fp)
+    # 3. Numeric policy threshold gate
     if policy.numeric_bounds:
         quantities = extract_quantities(assertion.value, explicit_unit=assertion.unit)
         for q in quantities:

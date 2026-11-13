@@ -21,24 +21,32 @@ _CROSS_REF_CONTINUATION_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Named headers: Section 2.04, ARTICLE IV, Cláusula 4, Anexo A, etc. (tolerates leading spaces/markdown)
+# Named headers: Section 2.04, ARTICLE IV, Cláusula 4, Cláusula Primera, Anexo A, etc.
 _NAMED_SECTION_HEADER_RE = re.compile(
     r"(?m)^[ \t]*(?:#{1,6}\s*)?"
     r"(?P<kw>Section|Sec\.|Article|Art\.|Clause|Cláusula|Clausula|Artículo|Articulo|"
     r"Item|Schedule|Annex|Anexo|Exhibit|Apartado|Punto|§)\s*"
-    r"(?P<num>\d+(?:\.\d+)*|[IVXLCDM]+|[A-Z](?:\.\d+)*)\b"
+    r"(?P<num>\d+(?:\.\d+)*|"
+    r"primera|segunda|tercera|cuarta|quinta|sexta|s[eé]ptima|octava|novena|d[eé]cima|"
+    r"first|second|third|fourth|fifth|"
+    r"[IVXLCDM]+|[A-Z](?:\.\d+)*)\b"
     r"(?:(?P<sep>\s*[:.\-—]\s*)(?P<title>[^\n]+)|[ \t]+(?P<bare_title>[A-ZÁÉÍÓÚÑ][^\n]*)|[ \t]*$)",
     re.IGNORECASE,
 )
 
-# Bare numbered or ordinal headers at line start: "4.01 Events of Default", "PRIMERA.- Objeto", "1.- Objeto"
+# Bare numbered or ordinal headers at line start: "4.01 Events of Default", "PRIMERA.- Objeto", "1.- Objeto", "1) Purpose"
 _BARE_NUMBER_HEADER_RE = re.compile(
     r"(?m)^[ \t]*(?:#{1,6}\s*)?"
     r"(?:"
-    r"(?P<num>\d+\.\d+(?:\.\d+)*)(?P<num_sep>\s*[:.\-—]\s*|\s+)"
-    r"|(?P<ord>[A-ZÁÉÍÓÚÑ]{4,18}|\d+)(?P<ord_sep>\s*(?:\.\s*[-—:]|[:—]))\s*"
+    r"(?P<num>\d+\.\d+(?:\.\d+)*)(?P<num_sep>\s*[:.\-—)]\s*|\s+)"
+    r"|(?P<ord>[A-ZÁÉÍÓÚÑ]{4,18}|\d+)(?P<ord_sep>\s*(?:\.\s*[-—:]|[:—)]))\s*"
     r")"
     r"(?P<title>[A-ZÁÉÍÓÚÑ][^\n]+)"
+)
+
+_TRAILING_CONTINUATION_WORD_RE = re.compile(
+    r"\b(?:to|in|under|of|from|by|with|for|and|or|see|per|pursuant|bajo|seg[uú]n|conforme|a|de|en|por|para|con|y|o)$",
+    re.IGNORECASE,
 )
 
 
@@ -72,7 +80,12 @@ def _strip_leading_header_id(text: str, sec_id: str) -> str:
     return pattern.sub("", text, count=1).strip()
 
 
-def _is_wrapped_sentence_continuation(text: str, line_start: int) -> bool:
+def _is_wrapped_sentence_continuation(
+    text: str,
+    line_start: int,
+    *,
+    has_explicit_sep: bool = False,
+) -> bool:
     """Return True if the line before `line_start` ends mid-sentence (comma or lowercase word without punctuation)."""
     if line_start <= 0:
         return False
@@ -83,8 +96,12 @@ def _is_wrapped_sentence_continuation(text: str, line_start: int) -> bool:
         return False
     if prev_line.endswith(","):
         return True
+    if _TRAILING_CONTINUATION_WORD_RE.search(prev_line):
+        return True
     # If previous line is an all-caps header (e.g. "ARTICLE IV" or "EVENTS OF DEFAULT"), next line is a section header
     if prev_line.isupper():
+        return False
+    if has_explicit_sep:
         return False
     # If previous line does not end with sentence-closing punctuation (., :, ;, !, ?, ), ])
     if prev_line[-1] not in ".:;!?)]\"'":
@@ -101,21 +118,21 @@ def _split_into_sections(text: str) -> dict[str, _ParsedSection]:
     occupied_starts: set[int] = set()
 
     for m in _NAMED_SECTION_HEADER_RE.finditer(text):
-        if _is_wrapped_sentence_continuation(text, m.start()):
+        sep = m.group("sep")
+        if _is_wrapped_sentence_continuation(text, m.start(), has_explicit_sep=bool(sep)):
             continue
         kw = m.group("kw").rstrip(".")
         num = m.group("num")
-        sep = m.group("sep")
         raw_title = (m.group("title") or m.group("bare_title") or "").strip()
 
         # Without explicit header punctuation (: . - —), a title starting with a lowercase word is an inline verb ("Section 7.01 requires...")
         if not sep and raw_title and raw_title[0].islower():
             continue
-        # Filter out inline cross-references like "Section 7.01 above..." at start of wrapped line (D3)
+        # Filter out inline cross-references like "Section 7.01 above..." at start of wrapped line
         if raw_title and _CROSS_REF_CONTINUATION_RE.match(raw_title):
             continue
-        # Ensure Roman numeral match is uppercase unless explicit separator is present
-        if not num[0].isdigit() and not sep and not num.isupper():
+        # Ensure single-token Roman numeral match is uppercase unless explicit separator is present
+        if not num[0].isdigit() and not sep and not num.isupper() and len(num) <= 4:
             continue
 
         sec_id = f"{kw} {num}"
@@ -123,14 +140,22 @@ def _split_into_sections(text: str) -> dict[str, _ParsedSection]:
         occupied_starts.add(m.start())
 
     for m in _BARE_NUMBER_HEADER_RE.finditer(text):
-        if m.start() in occupied_starts or _is_wrapped_sentence_continuation(text, m.start()):
+        has_sep = bool(m.group("ord_sep")) or bool((m.group("num_sep") or "").strip())
+        if m.start() in occupied_starts or _is_wrapped_sentence_continuation(
+            text, m.start(), has_explicit_sep=has_sep
+        ):
             continue
         num = m.group("num")
         ord_tok = m.group("ord")
         raw_title = (m.group("title") or "").strip()
         if raw_title and (raw_title[0].islower() or _CROSS_REF_CONTINUATION_RE.match(raw_title)):
             continue
-        sec_id = f"Section {num}" if num else f"Cláusula {ord_tok}"
+        if num:
+            sec_id = f"Section {num}"
+        elif ord_tok and ord_tok.isdigit():
+            sec_id = f"Section {ord_tok}"
+        else:
+            sec_id = f"Cláusula {ord_tok}"
         candidates.append((m.start(), m.end(), sec_id, raw_title))
 
     if not candidates:
@@ -157,7 +182,7 @@ def _split_into_sections(text: str) -> dict[str, _ParsedSection]:
             body=body,
             body_without_header=body_no_hdr,
         )
-        # If duplicate key appears, keep the longer substantive section (never overwrite with short reference, D3)
+        # If duplicate key appears, keep the longer substantive section (never overwrite with short reference)
         existing = sections.get(key)
         if existing is None or len(parsed.body) > len(existing.body):
             sections[key] = parsed
@@ -188,7 +213,7 @@ def extract_divergent_sections(
     sec_secs = _split_into_sections(secondary.text)
     divergences: list[SectionDivergence] = []
 
-    # Fail-closed when documents have no structured headers (D1)
+    # Fail-closed when documents have no structured headers
     if not prim_secs and not sec_secs:
         p_quants = _quantity_tokens(primary.text)
         s_quants = _quantity_tokens(secondary.text)
@@ -219,7 +244,7 @@ def extract_divergent_sections(
             s_sec = sec_secs[key]
             matched_sec_keys.add(key)
         else:
-            # Check for renumbered section with identical title or identical body content (D4)
+            # Check for renumbered section with identical title or identical body content
             for cand_key, cand_sec in sec_secs.items():
                 if cand_key in matched_sec_keys or cand_key in prim_secs:
                     continue
@@ -275,7 +300,7 @@ def extract_divergent_sections(
                 )
             )
 
-    # Also detect sections added ONLY in the secondary document (D2)
+    # Also detect sections added only in the secondary document
     for sec_key in sorted(sec_secs.keys()):
         if sec_key in matched_sec_keys:
             continue
@@ -315,5 +340,7 @@ def build_comparison_policy(
         min_tier_rank=effective_min_rank,
         required_predicates=required_preds,
         required_source_ids=[primary.id],
+        required_value_tokens={d.section_key: sorted(set(d.primary_quantities) - set(d.secondary_quantities))
+                               for d in divergences if set(d.primary_quantities) - set(d.secondary_quantities)},
     )
     return policy, divergences

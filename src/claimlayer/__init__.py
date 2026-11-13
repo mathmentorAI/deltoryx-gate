@@ -14,6 +14,19 @@ from claimlayer.models import (
     VerificationReceipt,
 )
 from claimlayer.receipt import RECEIPT_SCHEME, verify_receipt
+from claimlayer import semantic, v4
+from claimlayer.v4 import (
+    AcceptancePolicy,
+    EvidenceLayer,
+    EvidenceUnit,
+    FieldSpec,
+    PredicateSpec,
+    UnmappedProposal,
+    Vocabulary,
+    Unit,
+    UnitRegistry,
+    STANDARD_UNITS,
+)
 from claimlayer.verifiers.diff import (
     SectionDivergence,
     build_comparison_policy,
@@ -21,25 +34,37 @@ from claimlayer.verifiers.diff import (
 )
 from claimlayer.verify import verify
 
-__version__ = "3.2.0"
+__version__ = "3.2.1"
 
 __all__ = [
+    "AcceptancePolicy",
     "Assertion",
     "ConflictDiff",
+    "EvidenceLayer",
+    "EvidenceUnit",
     "FactRecord",
+    "FieldSpec",
     "Issue",
     "Ledger",
     "MCPVerificationServer",
     "Policy",
+    "PredicateSpec",
     "RECEIPT_SCHEME",
     "ResolutionRecord",
     "SectionDivergence",
     "Source",
+    "UnmappedProposal",
     "Verdict",
     "VerificationReceipt",
+    "Vocabulary",
+    "Unit",
+    "UnitRegistry",
+    "STANDARD_UNITS",
     "__version__",
     "build_comparison_policy",
     "extract_divergent_sections",
+    "semantic",
+    "v4",
     "verify",
     "verify_receipt",
 ]

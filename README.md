@@ -17,6 +17,8 @@ Agent Proposal + Exact Citations
 
 > **What ClaimLayer is (and isn't):** ClaimLayer is **not** a general agent orchestrator or open-ended prose judge. It is the **domain-grounded verification harness**: you declare a domain's semantic contract (`Vocabulary`, conditions, scopes, clause relations, and `AcceptancePolicy`), and ClaimLayer enforces that your agent cannot authorize an action unless both the evidence and the policy allow it.
 
+![ClaimLayer: Deterministic Verification Harness for AI Agents](./docs/assets/claimlayer_architecture.png)
+
 ---
 
 ## 1. Clone & Verify in 60 Seconds

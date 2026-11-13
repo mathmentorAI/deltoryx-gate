@@ -4,7 +4,7 @@
 
 AI agents now draft legal analyses, reconcile financials, and propose operational actions at 100× human speed—yet spend up to **80% of wall-clock time idle**, waiting for overwhelmed humans to manually cross-check every citation, number, and amendment against source documents.
 
-**ClaimLayer** is a zero-dependency Python library (~1,200 LoC, pure stdlib) that sits between your AI agent and task completion like a **deterministic `<1 ms` type-checker**, replacing manual post-hoc reading and probabilistic *LLM-as-a-Judge* rollouts with **computable verification (`verify()`)**:
+**ClaimLayer** is a zero-dependency Python library (~2,900 LoC, pure stdlib) that sits between your AI agent and task completion like a **deterministic `<1 ms` type-checker**, replacing manual post-hoc reading and probabilistic *LLM-as-a-Judge* rollouts with **computable verification (`verify()`)**:
 
 ```text
 Agent Proposal + Citations ──► ClaimLayer.verify() (<1 ms, 0 LLM calls, 0 external deps)
@@ -29,7 +29,7 @@ pip install -e .
 # Option B: Run directly from source with zero pip installs
 export PYTHONPATH="$PWD/src"
 
-# 1. Run formal invariant, sandbox E2E & 60+ adversarial audit tests (<0.6s)
+# 1. Run formal invariant, sandbox E2E, metamorphic & 137-case adversarial re-audit tests
 pytest -v
 
 # 2. Run the 200-task parameterized routing & throughput simulation (~17ms total)

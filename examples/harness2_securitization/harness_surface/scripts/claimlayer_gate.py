@@ -19,10 +19,12 @@ Commands:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -130,6 +132,29 @@ def _compute_canonical_policy(sources: list[Source]) -> tuple[Policy, list[dict[
     return policy, divergence_report
 
 
+def _external_seal_path(workspace: Path) -> Path:
+    ws_hash = hashlib.sha256(str(workspace.resolve()).encode("utf-8")).hexdigest()[:16]
+    return Path(tempfile.gettempdir()) / f"claimlayer_gate_seal_{ws_hash}.json"
+
+
+def _load_sources_from_dir(docs_dir: Path) -> list[Source]:
+    sources: list[Source] = []
+    if not docs_dir.is_dir():
+        return sources
+    for f in sorted(docs_dir.iterdir()):
+        if not f.is_file() or f.name.startswith("."):
+            continue
+        sources.append(
+            Source(
+                id=f.name,
+                title=f.name,
+                text=_read_doc_text(f),
+                tier=_classify_tier(f.name),
+            )
+        )
+    return sources
+
+
 def cmd_prepare(docs_dir: Path, workspace: Path) -> int:
     state_dir = workspace / ".claimlayer"
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -138,19 +163,9 @@ def cmd_prepare(docs_dir: Path, workspace: Path) -> int:
         db_path.unlink()
 
     ledger = Ledger(db_path=db_path)
-    sources: list[Source] = []
-
-    for f in sorted(docs_dir.iterdir()):
-        if not f.is_file() or f.name.startswith("."):
-            continue
-        src = Source(
-            id=f.name,
-            title=f.name,
-            text=_read_doc_text(f),
-            tier=_classify_tier(f.name),
-        )
+    sources = _load_sources_from_dir(docs_dir)
+    for src in sources:
         ledger.add_source(src)
-        sources.append(src)
 
     policy, divergence_report = _compute_canonical_policy(sources)
     ledger.save_sealed_policy(policy)
@@ -158,6 +173,19 @@ def cmd_prepare(docs_dir: Path, workspace: Path) -> int:
     (state_dir / "policy.json").write_text(
         json.dumps(policy.to_dict(), indent=2), encoding="utf-8"
     )
+    seal_payload = {
+        "docs_dir": str(docs_dir.resolve()),
+        "sources": {
+            s.id: hashlib.sha256(s.text.encode("utf-8")).hexdigest() for s in sources
+        },
+        "policy": policy.to_dict(),
+    }
+    try:
+        _external_seal_path(workspace).write_text(
+            json.dumps(seal_payload, sort_keys=True), encoding="utf-8"
+        )
+    except OSError:
+        pass
 
     print(
         json.dumps(
@@ -177,12 +205,65 @@ def cmd_prepare(docs_dir: Path, workspace: Path) -> int:
     return 0
 
 
+def _fail_tampered(code: str, message: str, remediation: str) -> int:
+    tampered_out = {
+        "status": "RETRY",
+        "allowed_to_proceed": False,
+        "requires_human": False,
+        "issues": [
+            {
+                "code": code,
+                "disposition": "RETRY",
+                "message": message,
+                "remediation": remediation,
+            }
+        ],
+    }
+    print(json.dumps(tampered_out, indent=2))
+    return 2
+
+
 def cmd_verify(proposal_path: Path, workspace: Path) -> int:
     state_dir = workspace / ".claimlayer"
     ledger = Ledger(db_path=state_dir / "ledger.sqlite")
     sealed_policy_dict = ledger.load_sealed_policy()
-    recomputed_policy, _ = _compute_canonical_policy(ledger.list_sources())
-    canonical_policy_dict = sealed_policy_dict or recomputed_policy.to_dict()
+
+    seal_file = _external_seal_path(workspace)
+    ext_seal: dict[str, Any] = {}
+    if seal_file.is_file():
+        try:
+            ext_seal = json.loads(seal_file.read_text(encoding="utf-8"))
+        except Exception:
+            ext_seal = {}
+
+    docs_dir = Path(ext_seal.get("docs_dir") or (workspace / "documents"))
+    disk_sources = _load_sources_from_dir(docs_dir)
+    ledger_sources = ledger.list_sources()
+
+    # 1. Verify that SQLite sources have not been tampered with (W3v2)
+    expected_hashes = ext_seal.get("sources") or {
+        s.id: hashlib.sha256(s.text.encode("utf-8")).hexdigest() for s in disk_sources
+    }
+    actual_hashes = {
+        s.id: hashlib.sha256(s.text.encode("utf-8")).hexdigest() for s in ledger_sources
+    }
+    if expected_hashes and actual_hashes != expected_hashes:
+        return _fail_tampered(
+            "LEDGER_TAMPERED",
+            "Sources inside .claimlayer/ledger.sqlite were modified and do not match the sealed source documents.",
+            "Do not modify .claimlayer/ledger.sqlite; re-run `prepare` or cite the true source documents.",
+        )
+
+    recomputed_policy, _ = _compute_canonical_policy(disk_sources or ledger_sources)
+    canonical_policy_dict = ext_seal.get("policy") or recomputed_policy.to_dict()
+
+    # 2. Verify that neither SQLite sealed_policy nor policy.json was tampered with (W3, W3v1)
+    if sealed_policy_dict is not None and sealed_policy_dict != canonical_policy_dict:
+        return _fail_tampered(
+            "POLICY_TAMPERED",
+            "Sealed policy in .claimlayer/ledger.sqlite was modified and does not match the canonical document comparison policy.",
+            "Do not modify .claimlayer/ledger.sqlite; satisfy the original sealed verification policy.",
+        )
 
     policy_file = state_dir / "policy.json"
     if policy_file.exists():
@@ -191,21 +272,11 @@ def cmd_verify(proposal_path: Path, workspace: Path) -> int:
         except Exception:
             disk_policy_dict = {}
         if disk_policy_dict != canonical_policy_dict:
-            tampered_out = {
-                "status": "RETRY",
-                "allowed_to_proceed": False,
-                "requires_human": False,
-                "issues": [
-                    {
-                        "code": "POLICY_TAMPERED",
-                        "disposition": "RETRY",
-                        "message": "Workspace .claimlayer/policy.json was modified and does not match the sealed ledger policy.",
-                        "remediation": "Do not modify .claimlayer/policy.json; satisfy the original sealed verification policy.",
-                    }
-                ],
-            }
-            print(json.dumps(tampered_out, indent=2))
-            return 2
+            return _fail_tampered(
+                "POLICY_TAMPERED",
+                "Workspace .claimlayer/policy.json was modified and does not match the sealed ledger policy.",
+                "Do not modify .claimlayer/policy.json; satisfy the original sealed verification policy.",
+            )
 
     proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
 

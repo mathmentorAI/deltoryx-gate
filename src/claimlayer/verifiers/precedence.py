@@ -10,6 +10,7 @@ from claimlayer.models import (
     Issue,
     Policy,
     Source,
+    _singularize_token,
     normalize_entity_key,
     normalize_key,
     normalize_predicate_key,
@@ -19,11 +20,241 @@ from claimlayer.verifiers.quote_quantity import (
     _to_commensurable_base,
     canonicalize_value,
     extract_quantities,
+    normalize_span,
     parse_iso_date,
 )
 
 if TYPE_CHECKING:
     from claimlayer.ledger import Ledger
+
+_GENERIC_SUBJECT_KEYS = frozenset(
+    {
+        "deal",
+        "waterfall",
+        "deal_waterfall",
+        "notes",
+        "note",
+        "agreement",
+        "contract",
+        "indenture",
+        "issuer",
+        "borrower",
+        "servicer",
+        "party",
+        "customer",
+        "loan",
+        "facility",
+        "x",
+        "s",
+        "o",
+    }
+)
+
+_DESIGNATOR_RE = re.compile(
+    r"\b((?:class|tranche|series|tier)\s+[a-z0-9]+)\b",
+    re.IGNORECASE,
+)
+
+_CLAUSE_TOPIC_STOPWORDS = frozenset(
+    {
+        "the",
+        "and",
+        "for",
+        "with",
+        "shall",
+        "will",
+        "may",
+        "must",
+        "are",
+        "was",
+        "were",
+        "been",
+        "being",
+        "from",
+        "that",
+        "this",
+        "these",
+        "those",
+        "each",
+        "all",
+        "any",
+        "within",
+        "upon",
+        "per",
+        "annum",
+        "under",
+        "into",
+        "such",
+        "days",
+        "day",
+        "business",
+        "calendar",
+        "working",
+        "weeks",
+        "week",
+        "months",
+        "month",
+        "years",
+        "year",
+        "hours",
+        "hour",
+        "percent",
+        "pct",
+        "bps",
+        "basis",
+        "points",
+        "usd",
+        "eur",
+        "gbp",
+        "dollars",
+        "dollar",
+        "euros",
+        "euro",
+        "million",
+        "millions",
+        "billion",
+        "billions",
+        "thousand",
+        "thousands",
+        "step",
+        "steps",
+        "section",
+        "article",
+        "clause",
+        "clausula",
+        "schedule",
+        "exhibit",
+        "annex",
+        "notes",
+        "note",
+        "class",
+        "tranche",
+        "series",
+        "tier",
+        "deal",
+        "company",
+        "corp",
+        "inc",
+        "llc",
+        "ltd",
+        "agreement",
+        "indenture",
+        "contract",
+        "party",
+        "issuer",
+        "borrower",
+        "servicer",
+        "senior",
+        "junior",
+        "ahead",
+        "new",
+        "york",
+        "delaware",
+        "california",
+        "amended",
+    }
+)
+
+
+def _extract_designators(text: str) -> set[str]:
+    cleaned = re.sub(r"[_\-]+", " ", (text or "").lower())
+    return {re.sub(r"\s+", " ", m.group(1).strip()) for m in _DESIGNATOR_RE.finditer(cleaned)}
+
+
+def _extract_clause_topic_tokens(text: str, subject: str = "") -> set[str]:
+    subj_tokens = set(normalize_entity_key(subject).split("_")) if subject else set()
+    words = re.findall(r"[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]{3,}", normalize_span(text).lower())
+    out: set[str] = set()
+    for w in words:
+        if w in _CLAUSE_TOPIC_STOPWORDS or w in subj_tokens:
+            continue
+        stem = _singularize_token(w)
+        if stem not in _CLAUSE_TOPIC_STOPWORDS and stem not in subj_tokens:
+            out.add(stem)
+    return out
+
+
+def _subjects_and_designators_compatible(
+    assertion: Assertion,
+    cand_subj: str | None,
+    cand_text: str,
+) -> bool:
+    """Return True if *assertion* and a candidate fact/clause refer to compatible entities and note classes."""
+    a_des = _extract_designators(f"{assertion.subject} {assertion.quote}")
+    c_des = _extract_designators(f"{cand_subj or ''} {cand_text}")
+    if a_des and c_des and not (a_des & c_des):
+        return False
+
+    a_sk = normalize_entity_key(assertion.subject)
+    c_sk = normalize_entity_key(cand_subj) if cand_subj else ""
+    if a_sk and c_sk and a_sk != c_sk:
+        if a_sk not in _GENERIC_SUBJECT_KEYS and c_sk not in _GENERIC_SUBJECT_KEYS:
+            return False
+
+    if a_sk and a_sk not in _GENERIC_SUBJECT_KEYS:
+        quote_words = set(normalize_key(assertion.quote).split("_"))
+        cand_words = set(normalize_key(cand_text).split("_"))
+        # If the assertion quote explicitly names the specific party (e.g. "Beta Inc"), the candidate clause must too (C1fp)
+        if a_sk in quote_words and a_sk not in cand_words and c_sk != a_sk:
+            return False
+
+    return True
+
+
+def _clauses_address_same_topic(
+    assertion: Assertion,
+    cand_text: str,
+    cand_pred: str | None = None,
+) -> bool:
+    """Return True if *assertion* (quote/predicate) and *cand_text* address the same substantive provision."""
+    a_quote_topics = _extract_clause_topic_tokens(assertion.quote, assertion.subject)
+    a_pred_topics = _extract_clause_topic_tokens(assertion.predicate.replace("_", " "), assertion.subject)
+    a_topics = a_quote_topics | a_pred_topics
+
+    c_quote_topics = _extract_clause_topic_tokens(cand_text, assertion.subject)
+    c_pred_topics = _extract_clause_topic_tokens((cand_pred or "").replace("_", " "), assertion.subject)
+    c_topics = c_quote_topics | c_pred_topics
+
+    shared = a_topics & c_topics
+    if not shared:
+        return False
+    if len(a_quote_topics) <= 2 or len(c_quote_topics) <= 2:
+        return len(shared) >= 1
+    return len(shared) >= 2
+
+
+def _extract_conflicting_clause_value(
+    assertion: Assertion,
+    cand_text: str,
+) -> str | None:
+    """If *cand_text* states a conflicting quantity or textual value for *assertion*, return the competing value string."""
+    val_quants = extract_quantities(assertion.value, explicit_unit=assertion.unit)
+    if val_quants:
+        cand_quants = extract_quantities(cand_text)
+        if not cand_quants:
+            return None
+        for vq in val_quants:
+            if any(vq.matches(cq) for cq in cand_quants):
+                continue
+            _, base_u = _to_commensurable_base(vq.magnitude, vq.unit)
+            same_unit_cq = [
+                cq
+                for cq in cand_quants
+                if _to_commensurable_base(cq.magnitude, cq.unit)[1] == base_u
+            ]
+            if same_unit_cq:
+                gov = same_unit_cq[-1]
+                unit_suffix = "%" if gov.unit == "PERCENT" else f" {gov.unit}"
+                return f"{gov.magnitude}{unit_suffix}"
+        return None
+
+    prop_canon = canonicalize_value(assertion.value, assertion.unit)
+    if prop_canon.startswith("STR:"):
+        val_core = prop_canon[4:].strip()
+        cand_norm = normalize_span(cand_text).lower()
+        if val_core and val_core not in cand_norm:
+            return normalize_span(cand_text).rstrip(".")
+    return None
 
 
 def is_source_active(source: Source, as_of: str | None) -> tuple[bool, str, str]:
@@ -64,49 +295,25 @@ def is_source_active(source: Source, as_of: str | None) -> tuple[bool, str, str]
     return True, "", ""
 
 
-def _find_governing_text_override(
+def _find_governing_clause_override(
     assertion: Assertion,
-    higher_src: Source,
-    pred_key: str,
+    sec_body: str | None,
+    clauses: list[str],
 ) -> str | None:
-    """Detect if *higher_src.text* directly overrides *assertion.value* on the same section or clause,
-    even when FactRecords were not manually preloaded (C7b, C7c)."""
-    val_quants = extract_quantities(assertion.value, explicit_unit=assertion.unit)
-    if not val_quants:
-        return None
+    """Detect if a higher-authority source's pre-indexed section or clauses override *assertion.value* (C7b, C7c, C7v1, C7fp)."""
+    if sec_body is not None and _subjects_and_designators_compatible(assertion, None, sec_body):
+        conflict_val = _extract_conflicting_clause_value(assertion, sec_body)
+        if conflict_val is not None:
+            return conflict_val
 
-    # 1. Check matching section in higher_src (e.g., predicate='section_2_04')
-    sections = _split_into_sections(higher_src.text)
-    target_text = ""
-    if pred_key in sections:
-        target_text = sections[pred_key].body
-    else:
-        # 2. Check sentence in higher_src mentioning both subject and predicate/quote tokens
-        subj_key = normalize_entity_key(assertion.subject)
-        subj_words = [w for w in subj_key.split("_") if len(w) >= 2]
-        for sent in re.split(r"(?<=[.;\n])\s+", higher_src.text):
-            sent_norm = normalize_key(sent)
-            if subj_words and all(w in sent_norm for w in subj_words):
-                target_text = sent
-                break
-
-    if not target_text:
-        return None
-
-    higher_quants = extract_quantities(target_text)
-    if not higher_quants:
-        return None
-
-    for vq in val_quants:
-        if any(vq.matches(hq) for hq in higher_quants):
+    for sent_clean in clauses:
+        if not _subjects_and_designators_compatible(assertion, None, sent_clean):
             continue
-        _, base_u = _to_commensurable_base(vq.magnitude, vq.unit)
-        same_unit_hq = [
-            hq for hq in higher_quants if _to_commensurable_base(hq.magnitude, hq.unit)[1] == base_u
-        ]
-        if same_unit_hq:
-            gov = same_unit_hq[-1]
-            return f"{gov.magnitude} {gov.unit}"
+        if not _clauses_address_same_topic(assertion, sent_clean):
+            continue
+        conflict_val = _extract_conflicting_clause_value(assertion, sent_clean)
+        if conflict_val is not None:
+            return conflict_val
     return None
 
 
@@ -190,15 +397,17 @@ def verify_precedence_and_validity(
                 )
                 return issues
 
-            # Partial amendment: match using canonical entity & predicate keys (catching C1b, C1c)
+            # Partial amendment: match using canonical entity & predicate keys or clause topic (catching C1b, C1c, C1v1-v3, while avoiding C1fp)
             for cf in cand_facts:
-                cf_subj = normalize_entity_key(cf.subject)
                 cf_pred = normalize_predicate_key(cf.predicate, policy.predicate_aliases)
                 cf_raw_pred = normalize_key(cf.predicate)
-                pred_matches = (cf_pred == pred_key) or (cf_raw_pred == raw_pred_key)
-                subj_matches = (cf_subj == subj_key) or (
-                    pred_matches and len(cand_facts) == 1
+                cf_text = cf.quote or candidate_src.text
+                pred_matches = (
+                    (cf_pred == pred_key)
+                    or (cf_raw_pred == raw_pred_key)
+                    or _clauses_address_same_topic(assertion, cf_text, cf.predicate)
                 )
+                subj_matches = _subjects_and_designators_compatible(assertion, cf.subject, cf_text)
                 if (
                     subj_matches
                     and pred_matches
@@ -262,14 +471,16 @@ def verify_precedence_and_validity(
                 )
                 return issues
 
-    # 5. Higher authority tier override directly from unindexed Source text (C7b)
-    for candidate_src in ledger.list_sources():
-        if candidate_src.id == source.id or candidate_src.rank <= source.rank:
+    # 5. Higher authority tier override from Ledger's pre-computed clause index (C7b, C7v1)
+    for candidate_src, sec_body, clauses in ledger.get_indexed_source_clauses(
+        assertion, raw_pred_key, exclude_source_id=source.id
+    ):
+        if candidate_src.rank <= source.rank:
             continue
         active_cand, _, _ = is_source_active(candidate_src, effective_as_of)
         if not active_cand:
             continue
-        override_desc = _find_governing_text_override(assertion, candidate_src, raw_pred_key)
+        override_desc = _find_governing_clause_override(assertion, sec_body, clauses)
         if override_desc is not None:
             issues.append(
                 Issue(

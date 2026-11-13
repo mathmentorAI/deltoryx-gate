@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -13,6 +14,7 @@ from typing import Any, Generator, Iterable, Mapping
 from claimlayer.models import (
     Assertion,
     FactRecord,
+    Issue,
     Policy,
     ResolutionRecord,
     Source,
@@ -21,7 +23,23 @@ from claimlayer.models import (
     normalize_key,
     normalize_predicate_key,
 )
-from claimlayer.verifiers.precedence import is_source_active
+from claimlayer.verifiers.diff import _split_into_sections
+from claimlayer.verifiers.precedence import _extract_clause_topic_tokens, is_source_active
+
+_SECTION_PREDICATE_PREFIXES = (
+    "section_",
+    "sec_",
+    "article_",
+    "art_",
+    "clause_",
+    "clausula_",
+    "schedule_",
+    "exhibit_",
+    "annex_",
+    "anexo_",
+    "apartado_",
+    "punto_",
+)
 
 _SQLITE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS sources (
@@ -89,6 +107,9 @@ class Ledger:
         self._db_path = Path(db_path) if db_path is not None else None
         self.signing_key = signing_key
         self._sources: dict[str, Source] = {}
+        self._source_sections: dict[str, dict[str, str]] = {}
+        self._source_clauses: dict[str, list[str]] = {}
+        self._topic_to_sources: dict[str, set[str]] = {}
         self._facts: list[FactRecord] = []
         self._fact_set: set[FactRecord] = set()
         self._facts_by_source: dict[str, list[FactRecord]] = {}
@@ -139,6 +160,23 @@ class Ledger:
             conn.executescript(_SQLITE_SCHEMA)
         self._last_db_sig = self._current_db_sig()
 
+    def _index_source_in_memory(self, src: Source) -> None:
+        # Remove any prior topic entries if overwriting an existing source
+        for tok_set in self._topic_to_sources.values():
+            tok_set.discard(src.id)
+        self._sources[src.id] = src
+        if len(src.text) > 50_000:
+            self._source_sections[src.id] = {}
+            self._source_clauses[src.id] = []
+            return
+        secs = _split_into_sections(src.text)
+        self._source_sections[src.id] = {k: v.body for k, v in secs.items()}
+        clauses = [s.strip() for s in re.split(r"(?<=[.;\n])\s+", src.text) if s.strip()]
+        self._source_clauses[src.id] = clauses
+        for cl in clauses:
+            for tok in _extract_clause_topic_tokens(cl):
+                self._topic_to_sources.setdefault(tok, set()).add(src.id)
+
     def _index_fact_in_memory(self, rec: FactRecord) -> bool:
         if rec in self._fact_set:
             return False
@@ -154,6 +192,9 @@ class Ledger:
 
     def _load_sqlite(self) -> None:
         self._sources.clear()
+        self._source_sections.clear()
+        self._source_clauses.clear()
+        self._topic_to_sources.clear()
         self._facts.clear()
         self._fact_set.clear()
         self._facts_by_source.clear()
@@ -166,7 +207,7 @@ class Ledger:
                 data = json.loads(row["payload_json"])
                 data.pop("sha256", None)
                 src = Source(**data)
-                self._sources[src.id] = src
+                self._index_source_in_memory(src)
 
             for row in conn.execute("SELECT payload_json FROM facts ORDER BY id ASC"):
                 data = json.loads(row["payload_json"])
@@ -211,7 +252,7 @@ class Ledger:
                     raise ValueError(
                         f"Source '{src.id}' is already registered and cannot be overwritten."
                     )
-            self._sources[src.id] = src
+            self._index_source_in_memory(src)
             if self._db_path is not None:
                 payload = src.to_dict()
                 payload.pop("sha256", None)
@@ -238,6 +279,38 @@ class Ledger:
         with self._lock:
             self._sync_from_sqlite_if_changed()
             return [self._sources[k] for k in sorted(self._sources.keys())]
+
+    def get_indexed_source_clauses(
+        self,
+        assertion: Assertion,
+        raw_pred_key: str,
+        *,
+        exclude_source_id: str,
+    ) -> list[tuple[Source, str | None, list[str]]]:
+        """Return pre-indexed `(Source, matching_section_body, clauses)` for sources sharing a section or topic token with *assertion*."""
+        topics = _extract_clause_topic_tokens(
+            f"{assertion.predicate.replace('_', ' ')} {assertion.quote}",
+            assertion.subject,
+        )
+        with self._lock:
+            self._sync_from_sqlite_if_changed()
+            cand_ids: set[str] = set()
+            for tok in topics:
+                cand_ids.update(self._topic_to_sources.get(tok, ()))
+            for sid, sec_map in self._source_sections.items():
+                if raw_pred_key in sec_map:
+                    cand_ids.add(sid)
+            cand_ids.discard(exclude_source_id)
+
+            out: list[tuple[Source, str | None, list[str]]] = []
+            for sid in sorted(cand_ids):
+                src = self._sources.get(sid)
+                if src is None:
+                    continue
+                sec_body = self._source_sections.get(sid, {}).get(raw_pred_key)
+                clauses = self._source_clauses.get(sid, [])
+                out.append((src, sec_body, clauses))
+            return out
 
     def add_fact(self, fact: FactRecord | dict[str, Any]) -> FactRecord:
         rec = fact if isinstance(fact, FactRecord) else FactRecord(**fact)
@@ -280,8 +353,10 @@ class Ledger:
             exact = [f for f in candidates if normalize_entity_key(f.subject) == sk]
             if exact or not allow_section_predicate_match:
                 return exact
-            # If predicate is a section identifier or unique across a source, match by predicate (C7c)
-            return candidates
+            # Only relax subject matching when the predicate itself is a section/clause identifier (C7c vs C1fp)
+            if raw_pk.startswith(_SECTION_PREDICATE_PREFIXES):
+                return candidates
+            return []
 
     def get_facts_by_source(self, source_id: str) -> list[FactRecord]:
         with self._lock:
@@ -539,11 +614,12 @@ class Ledger:
             resolved_escalations = sum(
                 1 for e in self._verdict_log if e["triage_state"] in {"RESOLVED", "REJECTED"}
             )
-            # Do not count unrecovered RETRY loops as human savings when zero proposals have passed (F2)
+            # Each PASS can account for at most 1 recovered RETRY; unrecovered retry loops never inflate savings (F2, F2v)
             if total == 0 or pass_count == 0:
                 saved_pct = 0.0
             else:
-                autonomous_handled = pass_count + retry_count
+                recovered_retries = min(retry_count, pass_count)
+                autonomous_handled = pass_count + recovered_retries
                 saved_pct = round((autonomous_handled / total) * 100.0, 1)
 
             return {
@@ -559,10 +635,78 @@ class Ledger:
                 "resolutions_count": len(self._resolutions),
             }
 
+    def check_dropped_retry_assertions(
+        self,
+        assertions: tuple[Assertion, ...],
+        agent_id: str,
+    ) -> list[Issue]:
+        """Detect when an agent responds to a RETRY verdict by silently pruning the rejected assertion (PRUNE)."""
+        with self._lock:
+            self._sync_from_sqlite_if_changed()
+            last_entry: dict[str, Any] | None = None
+            for entry in reversed(self._verdict_log):
+                if entry["agent_id"] == agent_id:
+                    last_entry = entry
+                    break
+            if last_entry is None or last_entry["status"] != "RETRY":
+                return []
+
+            prev_verdict = last_entry["verdict"]
+            prev_assertions = prev_verdict.get("assertions") or []
+            if len(prev_assertions) <= 1 or len(assertions) >= len(prev_assertions):
+                return []
+
+            current_pairs = {
+                (normalize_entity_key(a.subject), normalize_predicate_key(a.predicate))
+                for a in assertions
+            }
+            prev_pairs = {
+                (
+                    normalize_entity_key(pa.get("subject") or ""),
+                    normalize_predicate_key(pa.get("predicate") or ""),
+                )
+                for pa in prev_assertions
+            }
+            # Only enforce when the new proposal is a strict subset continuation of the prior proposal
+            if not current_pairs or not (current_pairs < prev_pairs):
+                return []
+
+            issues: list[Issue] = []
+            seen_dropped: set[tuple[str, str]] = set()
+            for iss in prev_verdict.get("issues") or []:
+                if iss.get("disposition") != "RETRY":
+                    continue
+                s_raw = str(iss.get("subject") or "")
+                p_raw = str(iss.get("predicate") or "")
+                if not p_raw:
+                    continue
+                pair = (normalize_entity_key(s_raw), normalize_predicate_key(p_raw))
+                if pair not in current_pairs and pair not in seen_dropped:
+                    seen_dropped.add(pair)
+                    issues.append(
+                        Issue(
+                            code="DROPPED_AFTER_RETRY",
+                            disposition="RETRY",
+                            subject=s_raw or None,
+                            predicate=p_raw,
+                            message=(
+                                f"Proposal silently dropped previously rejected assertion "
+                                f"'{s_raw}.{p_raw}' instead of remediating it."
+                            ),
+                            remediation=(
+                                f"Re-include '{p_raw}' grounded in the governing source rather than omitting it on retry."
+                            ),
+                        )
+                    )
+            return issues
+
     def reset(self) -> None:
         """Clear all state (useful for demos and tests)."""
         with self._lock:
             self._sources.clear()
+            self._source_sections.clear()
+            self._source_clauses.clear()
+            self._topic_to_sources.clear()
             self._facts.clear()
             self._fact_set.clear()
             self._facts_by_source.clear()

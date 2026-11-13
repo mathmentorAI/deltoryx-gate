@@ -47,23 +47,6 @@ _ENTITY_CORP_SUFFIXES = frozenset(
         "ag",
     }
 )
-_INVARIANT_PLURALS = frozenset(
-    {
-        "bps",
-        "status",
-        "class",
-        "series",
-        "alias",
-        "basis",
-        "analysis",
-        "paris",
-        "texas",
-        "illinois",
-        "massachusetts",
-    }
-)
-
-
 def resolve_tier_rank(tier: str, explicit_rank: int | None = None) -> int:
     """Resolve an authority rank integer from a named tier or explicit rank."""
     if explicit_rank is not None:
@@ -84,13 +67,13 @@ def normalize_key(raw: str) -> str:
 
 
 def _singularize_token(tok: str) -> str:
-    if len(tok) <= 3 or tok in _INVARIANT_PLURALS or not tok.isalpha():
+    if len(tok) <= 3 or not tok.isalpha():
         return tok
     if tok.endswith("ies") and len(tok) > 4:
         return tok[:-3] + "y"
     if tok.endswith("ses") and len(tok) > 4:
         return tok[:-2]
-    if tok.endswith("s") and not tok.endswith(("ss", "us", "is")):
+    if tok.endswith("s") and not tok.endswith(("ss", "us", "is", "os", "as")):
         return tok[:-1]
     return tok
 
@@ -145,6 +128,7 @@ class Source:
     supersedes: tuple[str, ...] | list[str] = field(default_factory=tuple)
     metadata: Mapping[str, Any] = field(default_factory=dict)
     _sha256: str = field(init=False, repr=False, compare=False)
+    _content_sha256: str = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         # Validate tier immediately
@@ -155,8 +139,12 @@ class Source:
             object.__setattr__(self, "supersedes", tuple(self.supersedes))
         frozen_meta = MappingProxyType(dict(self.metadata or {}))
         object.__setattr__(self, "metadata", frozen_meta)
-        digest = hashlib.sha256((self.text or "").encode("utf-8")).hexdigest()
+        raw_text = self.text or ""
+        digest = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
         object.__setattr__(self, "_sha256", digest)
+        norm_text = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", raw_text).strip()).lower()
+        content_digest = hashlib.sha256(norm_text.encode("utf-8")).hexdigest()
+        object.__setattr__(self, "_content_sha256", content_digest)
 
     @property
     def rank(self) -> int:
@@ -165,6 +153,10 @@ class Source:
     @property
     def sha256(self) -> str:
         return self._sha256
+
+    @property
+    def content_sha256(self) -> str:
+        return self._content_sha256
 
     def to_dict(self) -> dict[str, Any]:
         return {

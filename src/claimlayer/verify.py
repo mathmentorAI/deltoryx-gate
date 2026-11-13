@@ -62,8 +62,9 @@ def verify(
     all_conflicts: list[ConflictDiff] = []
     assertion_scores: dict[str, float] = {}
 
-    # 1. Coverage & completeness gate
+    # 1. Coverage & completeness gate (including stateful retry anti-pruning, PRUNE)
     all_issues.extend(verify_coverage(typed_assertions, pol))
+    all_issues.extend(ledger.check_dropped_retry_assertions(typed_assertions, agent_id))
 
     # 2. Per-assertion deterministic checks
     for idx, assertion in enumerate(typed_assertions):

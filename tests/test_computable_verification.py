@@ -414,7 +414,7 @@ def test_g7_merkle_receipt_tamper_detection() -> None:
 def test_sqlite_persistence_mcp_and_cli(tmp_path: Path) -> None:
     db_file = tmp_path / "ledger.sqlite"
     ledger = Ledger(db_path=db_file)
-    mcp = MCPVerificationServer(ledger)
+    mcp = MCPVerificationServer(ledger, allow_source_registration=True)
     session = MCPSession()
 
     init_resp = mcp.handle_envelope(

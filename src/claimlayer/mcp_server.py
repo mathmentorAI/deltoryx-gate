@@ -160,7 +160,7 @@ class MCPVerificationServer:
         ledger: Ledger,
         *,
         default_policy: Policy | None = None,
-        allow_source_registration: bool = True,
+        allow_source_registration: bool = False,
     ) -> None:
         self.ledger = ledger
         self.default_policy = default_policy
@@ -213,7 +213,24 @@ class MCPVerificationServer:
         bounds = dict(base.numeric_bounds)
         if "numeric_bounds" in raw_policy and isinstance(raw_policy["numeric_bounds"], dict):
             for k, v in raw_policy["numeric_bounds"].items():
-                bounds[str(k)] = (v[0], v[1])
+                key_str = str(k)
+                new_lo = float(v[0]) if v[0] is not None else None
+                new_hi = float(v[1]) if v[1] is not None else None
+                if key_str in bounds:
+                    base_lo, base_hi = bounds[key_str]
+                    eff_lo = (
+                        max(base_lo, new_lo)
+                        if (base_lo is not None and new_lo is not None)
+                        else (base_lo if base_lo is not None else new_lo)
+                    )
+                    eff_hi = (
+                        min(base_hi, new_hi)
+                        if (base_hi is not None and new_hi is not None)
+                        else (base_hi if base_hi is not None else new_hi)
+                    )
+                    bounds[key_str] = (eff_lo, eff_hi)
+                else:
+                    bounds[key_str] = (new_lo, new_hi)
 
         return Policy(
             policy_id=str(raw_policy.get("policy_id") or base.policy_id),
@@ -227,7 +244,7 @@ class MCPVerificationServer:
             required_predicates=req_preds,
             required_source_ids=req_srcs,
             numeric_bounds=bounds,
-            as_of=raw_policy.get("as_of") or base.as_of,
+            as_of=base.as_of or raw_policy.get("as_of"),
         )
 
     def execute_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -303,10 +320,11 @@ class MCPVerificationServer:
 
         if name == "verify_proposal":
             pol = self._validate_and_merge_policy(arguments.get("policy"))
+            effective_as_of = pol.as_of or arguments.get("as_of")
             verdict = self.ledger.verify(
                 assertions=arguments.get("assertions") or [],
                 policy=pol,
-                as_of=arguments.get("as_of"),
+                as_of=effective_as_of,
                 agent_id=str(arguments.get("agent_id") or "mcp_agent"),
                 record=True,
             )

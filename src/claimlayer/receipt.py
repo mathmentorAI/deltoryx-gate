@@ -44,8 +44,8 @@ def _sign_payload(payload: Any, signing_key: str | bytes | None = None) -> tuple
     return hashlib.sha256(raw).hexdigest(), False
 
 
-def compute_assertion_leaf_hash(assertion: Assertion) -> str:
-    """Compute RFC 9162 domain-separated leaf hash (0x00 prefix)."""
+def compute_assertion_leaf_hash(assertion: Assertion, *, verified: bool = True) -> str:
+    """Compute RFC 9162 domain-separated leaf hash (0x00 prefix) committing to assertion verification state."""
     leaf_payload: dict[str, Any] = {
         "id": assertion.id,
         "subject": assertion.subject,
@@ -55,6 +55,7 @@ def compute_assertion_leaf_hash(assertion: Assertion) -> str:
         "source_id": assertion.source_id,
         "quote": assertion.quote,
         "confidence": round(float(assertion.confidence), 6),
+        "verified": bool(verified),
     }
     if assertion.condition is not None:
         leaf_payload["condition"] = assertion.condition
@@ -189,7 +190,16 @@ def build_receipt(
     ledger: Ledger | None = None,
     signing_key: str | bytes | None = None,
 ) -> VerificationReceipt:
-    leaf_hashes = tuple(compute_assertion_leaf_hash(a) for a in assertions)
+    issues_dicts = [i.to_dict() if isinstance(i, Issue) else dict(i) for i in issues]
+    failed_ids = {
+        str(d.get("assertion_id"))
+        for d in issues_dicts
+        if d.get("disposition") == "RETRY" and d.get("assertion_id")
+    }
+    leaf_hashes = tuple(
+        compute_assertion_leaf_hash(a, verified=(a.id not in failed_ids and status != "RETRY"))
+        for a in assertions
+    )
     merkle_root = compute_merkle_root(leaf_hashes)
     sources_digest = compute_sources_digest(sources)
     policy_digest = compute_policy_digest(policy)
@@ -197,7 +207,6 @@ def build_receipt(
 
     eff_allowed = (status == "PASS") if allowed_to_proceed is None else bool(allowed_to_proceed)
     eff_human = (status == "ESCALATE") if requires_human is None else bool(requires_human)
-    issues_dicts = [i.to_dict() if isinstance(i, Issue) else dict(i) for i in issues]
     conflicts_dicts = [
         c.to_dict() if isinstance(c, ConflictDiff) else dict(c) for c in conflicts
     ]
@@ -310,7 +319,15 @@ def verify_receipt(
     if status == "PASS" and not _assertions_self_consistent_for_pass(typed_assertions):
         return False
 
-    recomputed_leaves = tuple(compute_assertion_leaf_hash(a) for a in typed_assertions)
+    failed_ids = {
+        str(d.get("assertion_id"))
+        for d in raw_issues
+        if isinstance(d, dict) and d.get("disposition") == "RETRY" and d.get("assertion_id")
+    }
+    recomputed_leaves = tuple(
+        compute_assertion_leaf_hash(a, verified=(a.id not in failed_ids and status != "RETRY"))
+        for a in typed_assertions
+    )
     if list(recomputed_leaves) != list(receipt.get("leaf_hashes") or []):
         return False
     if receipt.get("leaf_count", len(recomputed_leaves)) != len(recomputed_leaves):

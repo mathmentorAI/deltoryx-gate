@@ -25,17 +25,20 @@ _CROSS_REF_CONTINUATION_RE = re.compile(
 _NAMED_SECTION_HEADER_RE = re.compile(
     r"(?m)^[ \t]*(?:#{1,6}\s*)?"
     r"(?P<kw>Section|Sec\.|Article|Art\.|Clause|Cláusula|Clausula|Artículo|Articulo|"
-    r"Term|Item|Schedule|Annex|Anexo|Exhibit|Apartado|Punto|§)\s*"
+    r"Item|Schedule|Annex|Anexo|Exhibit|Apartado|Punto|§)\s*"
     r"(?P<num>\d+(?:\.\d+)*|[IVXLCDM]+|[A-Z](?:\.\d+)*)\b"
     r"(?:(?P<sep>\s*[:.\-—]\s*)(?P<title>[^\n]+)|[ \t]+(?P<bare_title>[A-ZÁÉÍÓÚÑ][^\n]*)|[ \t]*$)",
     re.IGNORECASE,
 )
 
-# Bare numbered headers at line start: "4.01 Events of Default" or "4.1. Payment Terms"
+# Bare numbered or ordinal headers at line start: "4.01 Events of Default", "PRIMERA.- Objeto", "1.- Objeto"
 _BARE_NUMBER_HEADER_RE = re.compile(
     r"(?m)^[ \t]*(?:#{1,6}\s*)?"
-    r"(?P<num>\d+\.\d+(?:\.\d+)*)"
-    r"(?:\s*[:.\-—]\s*|\s+)(?P<title>[A-ZÁÉÍÓÚÑ][^\n]+)"
+    r"(?:"
+    r"(?P<num>\d+\.\d+(?:\.\d+)*)(?P<num_sep>\s*[:.\-—]\s*|\s+)"
+    r"|(?P<ord>[A-ZÁÉÍÓÚÑ]{4,18}|\d+)(?P<ord_sep>\s*(?:\.\s*[-—:]|[:—]))\s*"
+    r")"
+    r"(?P<title>[A-ZÁÉÍÓÚÑ][^\n]+)"
 )
 
 
@@ -69,6 +72,26 @@ def _strip_leading_header_id(text: str, sec_id: str) -> str:
     return pattern.sub("", text, count=1).strip()
 
 
+def _is_wrapped_sentence_continuation(text: str, line_start: int) -> bool:
+    """Return True if the line before `line_start` ends mid-sentence (comma or lowercase word without punctuation)."""
+    if line_start <= 0:
+        return False
+    prev_chunk = text[:line_start].rstrip("\r\n")
+    last_nl = prev_chunk.rfind("\n")
+    prev_line = prev_chunk[last_nl + 1 :].strip()
+    if not prev_line:
+        return False
+    if prev_line.endswith(","):
+        return True
+    # If previous line is an all-caps header (e.g. "ARTICLE IV" or "EVENTS OF DEFAULT"), next line is a section header
+    if prev_line.isupper():
+        return False
+    # If previous line does not end with sentence-closing punctuation (., :, ;, !, ?, ), ])
+    if prev_line[-1] not in ".:;!?)]\"'":
+        return True
+    return False
+
+
 def _split_into_sections(text: str) -> dict[str, _ParsedSection]:
     """Map normalized section_key -> _ParsedSection (ignoring inline cross-references)."""
     if not text:
@@ -78,15 +101,18 @@ def _split_into_sections(text: str) -> dict[str, _ParsedSection]:
     occupied_starts: set[int] = set()
 
     for m in _NAMED_SECTION_HEADER_RE.finditer(text):
+        if _is_wrapped_sentence_continuation(text, m.start()):
+            continue
         kw = m.group("kw").rstrip(".")
         num = m.group("num")
         sep = m.group("sep")
         raw_title = (m.group("title") or m.group("bare_title") or "").strip()
 
-        # Filter out inline cross-references like "Section 7.01 above..." at start of wrapped line (D3)
-        if not sep and raw_title and _CROSS_REF_CONTINUATION_RE.match(raw_title):
+        # Without explicit header punctuation (: . - —), a title starting with a lowercase word is an inline verb ("Section 7.01 requires...")
+        if not sep and raw_title and raw_title[0].islower():
             continue
-        if sep and raw_title and _CROSS_REF_CONTINUATION_RE.match(raw_title):
+        # Filter out inline cross-references like "Section 7.01 above..." at start of wrapped line (D3)
+        if raw_title and _CROSS_REF_CONTINUATION_RE.match(raw_title):
             continue
         # Ensure Roman numeral match is uppercase unless explicit separator is present
         if not num[0].isdigit() and not sep and not num.isupper():
@@ -97,13 +123,14 @@ def _split_into_sections(text: str) -> dict[str, _ParsedSection]:
         occupied_starts.add(m.start())
 
     for m in _BARE_NUMBER_HEADER_RE.finditer(text):
-        if m.start() in occupied_starts:
+        if m.start() in occupied_starts or _is_wrapped_sentence_continuation(text, m.start()):
             continue
         num = m.group("num")
+        ord_tok = m.group("ord")
         raw_title = (m.group("title") or "").strip()
-        if _CROSS_REF_CONTINUATION_RE.match(raw_title):
+        if raw_title and (raw_title[0].islower() or _CROSS_REF_CONTINUATION_RE.match(raw_title)):
             continue
-        sec_id = f"Section {num}"
+        sec_id = f"Section {num}" if num else f"Cláusula {ord_tok}"
         candidates.append((m.start(), m.end(), sec_id, raw_title))
 
     if not candidates:

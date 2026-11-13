@@ -18,21 +18,33 @@ from claimlayer.models import (
     normalize_predicate_key,
 )
 from claimlayer.verifiers.diff import _split_into_sections
-from claimlayer.verifiers.precedence import is_source_active
+from claimlayer.verifiers.precedence import (
+    _clauses_address_same_topic,
+    _extract_conflicting_clause_value,
+    _subjects_and_designators_compatible,
+    is_source_active,
+)
 from claimlayer.verifiers.quote_quantity import (
     _to_commensurable_base,
     canonicalize_value,
     extract_quantities,
+    infer_predicate_dimension,
     normalize_span,
+    unit_dimension,
 )
 
 if TYPE_CHECKING:
     from claimlayer.ledger import Ledger
 
 _CONDITIONAL_CLAUSE_RE = re.compile(
-    r"\b(?:if|when|where|upon|in\s+the\s+case\s+of|in\s+case\s+of|with\s+respect\s+to|"
+    r"\b(?:if|when|where|in\s+the\s+case\s+of|in\s+case\s+of|with\s+respect\s+to|"
     r"for\s+interest|for\s+principal|for\s+covenant|for\s+payment|for\s+non-payment|"
-    r"prior\s+to|after|during|si\b|cuando\b|en\s+caso\s+de|respecto\s+a|para\b)\b",
+    r"prior\s+to|after|during|si\b|cuando\b|en\s+caso\s+de|respecto\s+a)\b",
+    re.IGNORECASE,
+)
+
+_MAIN_VERB_SPLIT_RE = re.compile(
+    r"\b(?:is|are|was|were|has|have|shall|will|may|must|bears?|accrues?|es|son|tiene|ser[aá])\b",
     re.IGNORECASE,
 )
 
@@ -59,6 +71,13 @@ _GENERIC_BOUND_SUFFIXES = frozenset(
         "payment",
         "term",
         "period",
+        "usd",
+        "eur",
+        "gbp",
+        "days",
+        "day",
+        "pct",
+        "percent",
     }
 )
 
@@ -76,17 +95,31 @@ def noisy_or(scores: Iterable[float]) -> float:
     return round(1.0 - prod_complement, 6) if has_any else 0.0
 
 
-def _effective_support(assertion_conf: float, source: Source | None) -> float:
-    """Cap agent-declared confidence by the source's operator-configured reliability."""
-    base = float(assertion_conf)
+def _effective_assertion_support(source: Source | None) -> float:
+    """Determine assertion support from the operator-configured source reliability (never from self-declared agent confidence, C6)."""
+    if source is not None and "reliability" in source.metadata:
+        return max(0.0, min(1.0, float(source.metadata["reliability"])))
+    return 1.0
+
+
+def _effective_fact_support(fact_conf: float, source: Source | None) -> float:
+    """Determine ledger FactRecord support capped by source reliability."""
+    base = float(fact_conf)
     if source is not None and "reliability" in source.metadata:
         src_rel = float(source.metadata["reliability"])
         return max(0.0, min(base, src_rel))
     return max(0.0, min(1.0, base))
 
 
+def _grammatical_subject_key(sentence: str) -> str:
+    m = _MAIN_VERB_SPLIT_RE.search(sentence)
+    if not m or m.start() == 0:
+        return ""
+    return normalize_entity_key(sentence[: m.start()].strip())
+
+
 def _are_distinct_conditional_clauses(a1: Assertion, a2: Assertion) -> bool:
-    """Return True if two assertions on the same source describe distinct conditional branches (B11)."""
+    """Return True if two assertions on the same source describe distinct conditional branches or sub-cases (B11 vs C3v)."""
     if a1.condition and a2.condition and normalize_key(a1.condition) != normalize_key(a2.condition):
         return True
     q1 = normalize_span(a1.quote)
@@ -95,81 +128,88 @@ def _are_distinct_conditional_clauses(a1: Assertion, a2: Assertion) -> bool:
         return False
     if _CONDITIONAL_CLAUSE_RE.search(q1) or _CONDITIONAL_CLAUSE_RE.search(q2):
         return True
+    gs1 = _grammatical_subject_key(q1)
+    gs2 = _grammatical_subject_key(q2)
+    if gs1 and gs2 and gs1 != gs2:
+        return True
     return False
 
 
+def _dimension_compatible_with_bound(bound_key: str, q_unit: str) -> bool:
+    b_dim = infer_predicate_dimension(bound_key)
+    q_dim = unit_dimension(q_unit)
+    if b_dim is None or q_dim == "NONE":
+        return True
+    if b_dim == "RATIO":
+        return q_dim == "RATIO"
+    if b_dim == "CURRENCY":
+        return q_dim.startswith("CURRENCY")
+    if b_dim == "DURATION":
+        return q_dim.startswith("DURATION")
+    return True
+
+
 def _match_numeric_bound(
-    predicate: str,
+    assertion: Assertion,
+    q_unit: str,
     policy: Policy,
 ) -> tuple[float | None, float | None] | None:
-    """Match a predicate against policy.numeric_bounds, catching predicate renaming/aliasing (C11b)."""
+    """Match an assertion & quantity against policy.numeric_bounds with dimension and quote-topic awareness (C11b, C11v1, C11v2, C11fp)."""
     if not policy.numeric_bounds:
         return None
+    predicate = assertion.predicate
     norm_pred = normalize_predicate_key(predicate, policy.predicate_aliases)
     raw_pred = normalize_key(predicate)
 
     for k, bounds in policy.numeric_bounds.items():
-        if k == predicate or normalize_key(k) == raw_pred or normalize_predicate_key(k, policy.predicate_aliases) == norm_pred:
+        if not _dimension_compatible_with_bound(k, q_unit):
+            continue
+        if (
+            k == predicate
+            or normalize_key(k) == raw_pred
+            or normalize_predicate_key(k, policy.predicate_aliases) == norm_pred
+        ):
             return bounds
 
-    # Stem matching: strip generic measure suffixes ('refund_total' <-> 'refund_amount')
-    pred_stems = [t for t in norm_pred.split("_") if t and t not in _GENERIC_BOUND_SUFFIXES]
-    if not pred_stems:
-        return None
+    pred_stems = {t for t in norm_pred.split("_") if t and t not in _GENERIC_BOUND_SUFFIXES}
+    quote_stems = {
+        t
+        for t in normalize_predicate_key(assertion.quote).split("_")
+        if len(t) >= 3 and t not in _GENERIC_BOUND_SUFFIXES
+    }
 
     for k, bounds in policy.numeric_bounds.items():
+        if not _dimension_compatible_with_bound(k, q_unit):
+            continue
         k_norm = normalize_predicate_key(k, policy.predicate_aliases)
-        k_stems = [t for t in k_norm.split("_") if t and t not in _GENERIC_BOUND_SUFFIXES]
-        if k_stems and pred_stems == k_stems:
+        k_stems = {t for t in k_norm.split("_") if t and t not in _GENERIC_BOUND_SUFFIXES}
+        if not k_stems:
+            continue
+        if pred_stems == k_stems or k_stems.issubset(pred_stems) or k_stems.issubset(quote_stems):
             return bounds
 
     return None
 
 
-def _scan_unindexed_peer_source_for_conflict(
+def _find_indexed_peer_clause_conflict(
     assertion: Assertion,
-    peer_src: Source,
-    raw_pred_key: str,
+    sec_body: str | None,
+    clauses: list[str],
 ) -> tuple[str, str] | None:
-    """Scan *peer_src.text* for an unindexed sentence/section contradicting *assertion* (C2)."""
-    val_quants = extract_quantities(assertion.value, explicit_unit=assertion.unit)
-    if not val_quants:
-        return None
+    """Check pre-indexed section/clauses of a peer source for a conflicting value (C2, C2v1-v3, C2fp)."""
+    if sec_body is not None and _subjects_and_designators_compatible(assertion, None, sec_body):
+        comp_val = _extract_conflicting_clause_value(assertion, sec_body)
+        if comp_val is not None:
+            return comp_val, sec_body[:160]
 
-    sections = _split_into_sections(peer_src.text)
-    candidate_sentences: list[str] = []
-    if raw_pred_key in sections:
-        candidate_sentences.append(sections[raw_pred_key].body)
-    else:
-        subj_words = [
-            w for w in normalize_entity_key(assertion.subject).split("_") if len(w) >= 2
-        ]
-        pred_words = [
-            w
-            for w in normalize_predicate_key(assertion.predicate).split("_")
-            if len(w) >= 3 and w not in _GENERIC_BOUND_SUFFIXES
-        ]
-        for sent in re.split(r"(?<=[.;\n])\s+", peer_src.text):
-            sent_norm = normalize_key(sent)
-            if subj_words and all(w in sent_norm for w in subj_words):
-                if not pred_words or any(pw in sent_norm for pw in pred_words):
-                    candidate_sentences.append(sent.strip())
-
-    for sent in candidate_sentences:
-        peer_quants = extract_quantities(sent)
-        for vq in val_quants:
-            if any(vq.matches(pq) for pq in peer_quants):
-                continue
-            _, base_u = _to_commensurable_base(vq.magnitude, vq.unit)
-            same_unit_pq = [
-                pq
-                for pq in peer_quants
-                if _to_commensurable_base(pq.magnitude, pq.unit)[1] == base_u
-            ]
-            if same_unit_pq:
-                comp_q = same_unit_pq[0]
-                unit_suffix = "%" if comp_q.unit == "PERCENT" else f" {comp_q.unit}"
-                return f"{comp_q.magnitude}{unit_suffix}", sent[:160]
+    for sent_clean in clauses:
+        if not _subjects_and_designators_compatible(assertion, None, sent_clean):
+            continue
+        if not _clauses_address_same_topic(assertion, sent_clean):
+            continue
+        comp_val = _extract_conflicting_clause_value(assertion, sent_clean)
+        if comp_val is not None:
+            return comp_val, sent_clean[:160]
 
     return None
 
@@ -239,13 +279,13 @@ def evaluate_conflicts_and_thresholds(
             quote_txt: str,
             tier_name: str,
         ) -> None:
-            dedup_key = src_obj.sha256 if src_obj is not None else f"id:{src_id}"
+            dedup_key = src_obj.content_sha256 if src_obj is not None else f"id:{src_id}"
             bucket = by_canon_source.setdefault(canon_val, {})
             prev = bucket.get(dedup_key)
             if prev is None or conf > prev[0]:
                 bucket[dedup_key] = (conf, raw_val, quote_txt, tier_name, src_id)
 
-        own_eff_conf = _effective_support(assertion.confidence, source)
+        own_eff_conf = _effective_assertion_support(source)
         _record_candidate(
             proposed_canon,
             source,
@@ -276,13 +316,14 @@ def evaluate_conflicts_and_thresholds(
                         canonicalize_value(other.value, other.unit),
                         other_src,
                         other.source_id,
-                        _effective_support(other.confidence, other_src),
+                        _effective_assertion_support(other_src),
                         other.value,
                         other.quote,
                         other_tier,
                     )
 
         # Check active peer-rank facts in ledger (excluding superseded sources)
+        indexed_peer_ids: set[str] = set()
         for fact in ledger.get_facts(
             assertion.subject,
             assertion.predicate,
@@ -298,35 +339,36 @@ def evaluate_conflicts_and_thresholds(
             if not active_src:
                 continue
             if fact_src.rank == source.rank:
+                indexed_peer_ids.add(fact.source_id)
                 _record_candidate(
                     canonicalize_value(fact.value, fact.unit),
                     fact_src,
                     fact.source_id,
-                    _effective_support(fact.confidence, fact_src),
+                    _effective_fact_support(fact.confidence, fact_src),
                     fact.value,
                     fact.quote or fact_src.text[:160],
                     fact_src.tier,
                 )
 
-        # Also scan active peer-rank sources in ledger for unindexed conflicts (closing C2 omission bypass!)
-        for peer_src in ledger.list_sources():
-            if peer_src.id == source.id or peer_src.id in superseded_ids:
+        # Query Ledger's pre-computed clause index for active peer-rank conflicts (closing C2 omission bypass in O(1)!)
+        for peer_src, sec_body, clauses in ledger.get_indexed_source_clauses(
+            assertion, raw_pred_key, exclude_source_id=source.id
+        ):
+            if peer_src.id in superseded_ids or peer_src.id in indexed_peer_ids:
                 continue
             if peer_src.rank != source.rank:
                 continue
             active_peer, _, _ = is_source_active(peer_src, effective_as_of)
             if not active_peer:
                 continue
-            unindexed = _scan_unindexed_peer_source_for_conflict(
-                assertion, peer_src, raw_pred_key
-            )
+            unindexed = _find_indexed_peer_clause_conflict(assertion, sec_body, clauses)
             if unindexed is not None:
                 comp_val_str, comp_quote_str = unindexed
                 _record_candidate(
                     canonicalize_value(comp_val_str, assertion.unit),
                     peer_src,
                     peer_src.id,
-                    _effective_support(1.0, peer_src),
+                    _effective_assertion_support(peer_src),
                     comp_val_str,
                     comp_quote_str,
                     peer_src.tier,
@@ -405,12 +447,14 @@ def evaluate_conflicts_and_thresholds(
                     )
                 )
 
-    # 3. Numeric policy threshold gate (with predicate alias/stem matching for C11b)
-    bounds = _match_numeric_bound(assertion.predicate, policy)
-    if bounds is not None:
-        min_bound, max_bound = bounds
+    # 3. Numeric policy threshold gate (with dimension, predicate-stem, and quote-topic matching for C11b, C11v1, C11v2, C11fp)
+    if policy.numeric_bounds:
         quantities = extract_quantities(assertion.value, explicit_unit=assertion.unit)
         for q in quantities:
+            bounds = _match_numeric_bound(assertion, q.unit, policy)
+            if bounds is None:
+                continue
+            min_bound, max_bound = bounds
             if min_bound is not None and q.magnitude < Decimal(str(min_bound)):
                 issues.append(
                     Issue(

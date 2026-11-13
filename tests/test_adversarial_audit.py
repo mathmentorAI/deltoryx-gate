@@ -1036,3 +1036,104 @@ def test_f1_f2_f3_l1_n1_and_w1_to_w3(tmp_path: Path) -> None:
     w3_out = json.loads(res_w3.stdout)
     assert w3_out["status"] == "RETRY"
     assert w3_out["issues"][0]["code"] == "POLICY_TAMPERED"
+
+
+def test_metamorphic_properties() -> None:
+    """Metamorphic property checks across numeric perturbations, polarity inversions, and predicate renaming."""
+    # 1. Numeric perturbation invariant: if verify(A, L) == PASS, perturbing any figure in A.value flips to RETRY
+    valid_cases = [
+        (
+            "The Class C 6.75% Notes due 2030 have a principal of $50,000,000.",
+            "6.75%",
+            ["6.76%", "6.74%", "75%", "5.75%"],
+            "coupon",
+        ),
+        (
+            "Cure Period - 30 days after written notice.",
+            "30 days",
+            ["29 days", "31 days", "-30 days", "30 business days"],
+            "cure_period",
+        ),
+        (
+            "El precio acordado es de 12.500 euros pagaderos al cierre.",
+            "12500 EUR",
+            ["12501 EUR", "12499 EUR", "12.5 EUR", "12500 USD"],
+            "precio",
+        ),
+        (
+            "The Borrower shall maintain a coverage ratio of 1.25 to 1.00.",
+            "1.25x",
+            ["1.20x", "1.30x", "1.00x"],
+            "dscr",
+        ),
+    ]
+    for src_text, good_val, bad_vals, pred in valid_cases:
+        led = Ledger([Source(id="doc", text=src_text, tier="authoritative")])
+        v_good = verify(
+            [Assertion(subject="Deal", predicate=pred, value=good_val, source_id="doc", quote=src_text)],
+            led,
+        )
+        assert v_good.status == "PASS", f"Expected PASS for {good_val!r} on {src_text!r}"
+        for bad_val in bad_vals:
+            v_bad = verify(
+                [Assertion(subject="Deal", predicate=pred, value=bad_val, source_id="doc", quote=src_text)],
+                led,
+            )
+            assert v_bad.status == "RETRY", f"Perturbed value {bad_val!r} should RETRY on {src_text!r}"
+
+    # 2. Polarity / negation injection invariant: inverting polarity or truncating negation/exception flips PASS to RETRY
+    polarity_cases = [
+        (
+            "The Servicer may be terminated without cause.",
+            "In no event shall the Servicer be terminated without cause.",
+            "Servicer may be terminated without cause",
+        ),
+        (
+            "Optional redemption is permitted at 10% pool factor.",
+            "Optional redemption is not permitted at 10% pool factor.",
+            "Optional redemption is permitted",
+        ),
+    ]
+    for pos_src, neg_src, claim_val in polarity_cases:
+        v_pos = verify(
+            [Assertion(subject="Deal", predicate="provision", value=claim_val, source_id="s", quote=pos_src)],
+            Ledger([Source(id="s", text=pos_src, tier="authoritative")]),
+        )
+        assert v_pos.status == "PASS"
+        v_neg_full_quote = verify(
+            [Assertion(subject="Deal", predicate="provision", value=claim_val, source_id="s", quote=neg_src)],
+            Ledger([Source(id="s", text=neg_src, tier="authoritative")]),
+        )
+        assert v_neg_full_quote.status == "RETRY"
+
+    # 3. Predicate renaming invariance: renaming predicate across arbitrary synonyms preserves override/conflict verdicts
+    l_override = Ledger(
+        sources=[
+            Source(
+                id="indenture",
+                tier="authoritative",
+                text="Reserve Account replenishment is paid at Step 13, junior to Class B and Class C principal.",
+            ),
+            Source(
+                id="om",
+                tier="standard",
+                text="Reserve Account replenishment is paid senior to Class B and Class C principal.",
+            ),
+        ]
+    )
+    for syn_pred in ("priority", "waterfall_rank", "reserve_seniority", "subordination_level", "clause_check"):
+        v_syn = verify(
+            [
+                Assertion(
+                    subject="Reserve_Account",
+                    predicate=syn_pred,
+                    value="senior to Class B and Class C principal",
+                    source_id="om",
+                    quote="Reserve Account replenishment is paid senior to Class B and Class C principal.",
+                )
+            ],
+            l_override,
+            Policy(min_tier_rank=50),
+        )
+        assert v_syn.status == "RETRY"
+        assert any(i.code == "HIGHER_TIER_OVERRIDE" for i in v_syn.issues)

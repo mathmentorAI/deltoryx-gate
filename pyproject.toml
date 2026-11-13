@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claim-layer"
-version = "3.0.0"
+version = "3.1.0"
 description = "Deterministic computable verification for AI agent outputs"
 readme = "README.md"
 requires-python = ">=3.10"

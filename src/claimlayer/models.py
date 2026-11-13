@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import re
+import unicodedata
 from dataclasses import asdict, dataclass, field
-from typing import Any, Literal
+from types import MappingProxyType
+from typing import Any, Literal, Mapping
 
 Disposition = Literal["RETRY", "ESCALATE"]
 VerdictStatus = Literal["PASS", "RETRY", "ESCALATE"]
@@ -19,11 +22,46 @@ TIER_RANKS: dict[str, int] = {
     "secondary": 50,
     "annex": 50,
     "markup": 50,
-    "draft": 20,
     "informational": 20,
     "external": 20,
+    "draft": 10,
     "untrusted": 10,
 }
+
+_ENTITY_STOPWORDS = frozenset({"the", "a", "an", "el", "la", "los", "las"})
+_ENTITY_CORP_SUFFIXES = frozenset(
+    {
+        "corp",
+        "corporation",
+        "inc",
+        "incorporated",
+        "llc",
+        "ltd",
+        "limited",
+        "plc",
+        "co",
+        "company",
+        "sa",
+        "sl",
+        "gmbh",
+        "ag",
+    }
+)
+_INVARIANT_PLURALS = frozenset(
+    {
+        "bps",
+        "status",
+        "class",
+        "series",
+        "alias",
+        "basis",
+        "analysis",
+        "paris",
+        "texas",
+        "illinois",
+        "massachusetts",
+    }
+)
 
 
 def resolve_tier_rank(tier: str, explicit_rank: int | None = None) -> int:
@@ -31,13 +69,66 @@ def resolve_tier_rank(tier: str, explicit_rank: int | None = None) -> int:
     if explicit_rank is not None:
         return int(explicit_rank)
     key = (tier or "standard").strip().lower()
-    return TIER_RANKS.get(key, 50)
+    if key not in TIER_RANKS:
+        raise ValueError(
+            f"Unknown authority tier '{tier}'. Valid tiers: {sorted(TIER_RANKS.keys())}"
+        )
+    return TIER_RANKS[key]
 
 
 def normalize_key(raw: str) -> str:
-    """Canonicalize subject or predicate identifiers deterministically."""
-    cleaned = re.sub(r"[^a-z0-9áéíóúñü]+", "_", (raw or "").strip().lower())
+    """Canonicalize subject or predicate identifiers deterministically (Unicode-preserving)."""
+    norm = unicodedata.normalize("NFKC", (raw or "").strip().lower())
+    cleaned = re.sub(r"[^\w]+", "_", norm, flags=re.UNICODE)
     return cleaned.strip("_")
+
+
+def _singularize_token(tok: str) -> str:
+    if len(tok) <= 3 or tok in _INVARIANT_PLURALS or not tok.isalpha():
+        return tok
+    if tok.endswith("ies") and len(tok) > 4:
+        return tok[:-3] + "y"
+    if tok.endswith("ses") and len(tok) > 4:
+        return tok[:-2]
+    if tok.endswith("s") and not tok.endswith(("ss", "us", "is")):
+        return tok[:-1]
+    return tok
+
+
+def normalize_entity_key(raw: str) -> str:
+    """Canonicalize entity/subject names (stripping articles and corporate designators)."""
+    base = normalize_key(raw)
+    if not base:
+        return ""
+    tokens = [t for t in base.split("_") if t]
+    while len(tokens) > 1 and tokens[0] in _ENTITY_STOPWORDS:
+        tokens.pop(0)
+    while len(tokens) > 1 and tokens[-1] in _ENTITY_CORP_SUFFIXES:
+        tokens.pop()
+    singularized = [_singularize_token(t) for t in tokens]
+    return "_".join(singularized) or base
+
+
+def normalize_predicate_key(raw: str, aliases: Mapping[str, str] | None = None) -> str:
+    """Canonicalize predicate identifiers (handling singular/plural variants and explicit aliases)."""
+    base = normalize_key(raw)
+    if not base:
+        return ""
+    if aliases:
+        mapped = aliases.get(base) or aliases.get(raw)
+        if mapped:
+            base = normalize_key(mapped)
+    tokens = [_singularize_token(t) for t in base.split("_") if t]
+    return "_".join(tokens) or base
+
+
+def _validate_confidence(val: Any) -> float:
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        raise ValueError(f"confidence must be a finite float in [0.0, 1.0], got {val!r}")
+    fval = float(val)
+    if math.isnan(fval) or math.isinf(fval) or fval < 0.0 or fval > 1.0:
+        raise ValueError(f"confidence must be a finite float in [0.0, 1.0], got {val!r}")
+    return fval
 
 
 @dataclass(frozen=True)
@@ -52,11 +143,20 @@ class Source:
     valid_from: str | None = None
     valid_until: str | None = None
     supersedes: tuple[str, ...] | list[str] = field(default_factory=tuple)
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+    _sha256: str = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
+        # Validate tier immediately
+        _ = resolve_tier_rank(self.tier, self.authority_rank)
         if isinstance(self.supersedes, list):
             object.__setattr__(self, "supersedes", tuple(self.supersedes))
+        elif not isinstance(self.supersedes, tuple):
+            object.__setattr__(self, "supersedes", tuple(self.supersedes))
+        frozen_meta = MappingProxyType(dict(self.metadata or {}))
+        object.__setattr__(self, "metadata", frozen_meta)
+        digest = hashlib.sha256((self.text or "").encode("utf-8")).hexdigest()
+        object.__setattr__(self, "_sha256", digest)
 
     @property
     def rank(self) -> int:
@@ -64,7 +164,7 @@ class Source:
 
     @property
     def sha256(self) -> str:
-        return hashlib.sha256((self.text or "").encode("utf-8")).hexdigest()
+        return self._sha256
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -92,9 +192,16 @@ class FactRecord:
     quote: str = ""
     unit: str | None = None
     confidence: float = 1.0
+    condition: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "confidence", _validate_confidence(self.confidence))
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        if data.get("condition") is None:
+            data.pop("condition", None)
+        return data
 
 
 @dataclass(frozen=True)
@@ -109,6 +216,10 @@ class Assertion:
     id: str = ""
     unit: str | None = None
     confidence: float = 1.0
+    condition: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "confidence", _validate_confidence(self.confidence))
 
     def with_default_id(self, index: int) -> Assertion:
         if self.id:
@@ -122,10 +233,14 @@ class Assertion:
             quote=self.quote,
             unit=self.unit,
             confidence=self.confidence,
+            condition=self.condition,
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        if data.get("condition") is None:
+            data.pop("condition", None)
+        return data
 
 
 @dataclass(frozen=True)
@@ -139,19 +254,24 @@ class Policy:
     block_superseded: bool = True
     block_expired: bool = True
     min_support: float = 0.70
+    confidence_threshold: float | None = None
     conflict_escalation_threshold: float = 0.20
     required_predicates: tuple[str, ...] | list[str] = field(default_factory=tuple)
     required_source_ids: tuple[str, ...] | list[str] = field(default_factory=tuple)
     numeric_bounds: dict[str, tuple[float | None, float | None]] = field(default_factory=dict)
+    predicate_aliases: dict[str, str] = field(default_factory=dict)
+    as_of: str | None = None
 
     def __post_init__(self) -> None:
+        if self.confidence_threshold is not None:
+            object.__setattr__(self, "min_support", float(self.confidence_threshold))
         if isinstance(self.required_predicates, list):
             object.__setattr__(self, "required_predicates", tuple(self.required_predicates))
         if isinstance(self.required_source_ids, list):
             object.__setattr__(self, "required_source_ids", tuple(self.required_source_ids))
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "policy_id": self.policy_id,
             "require_exact_quote": self.require_exact_quote,
             "require_quantity_match": self.require_quantity_match,
@@ -166,6 +286,11 @@ class Policy:
                 k: [v[0], v[1]] for k, v in sorted(self.numeric_bounds.items())
             },
         }
+        if self.predicate_aliases:
+            payload["predicate_aliases"] = dict(sorted(self.predicate_aliases.items()))
+        if self.as_of is not None:
+            payload["as_of"] = self.as_of
+        return payload
 
 
 @dataclass(frozen=True)
@@ -212,7 +337,7 @@ class Issue:
 
 @dataclass(frozen=True)
 class VerificationReceipt:
-    """Zero-trust cryptographic Merkle proof over verified assertions, sources, and policy."""
+    """RFC 9162 domain-separated SHA-256 Merkle receipt (with optional HMAC authentication)."""
 
     scheme: str
     merkle_root: str
@@ -220,6 +345,9 @@ class VerificationReceipt:
     sources_digest: str
     signature: str
     leaf_hashes: tuple[str, ...]
+    ledger_digest: str = ""
+    leaf_count: int = 0
+    hmac_authenticated: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -227,8 +355,11 @@ class VerificationReceipt:
             "merkle_root": self.merkle_root,
             "policy_digest": self.policy_digest,
             "sources_digest": self.sources_digest,
+            "ledger_digest": self.ledger_digest,
             "signature": self.signature,
             "leaf_hashes": list(self.leaf_hashes),
+            "leaf_count": self.leaf_count or len(self.leaf_hashes),
+            "hmac_authenticated": self.hmac_authenticated,
         }
 
 
@@ -266,10 +397,21 @@ class Verdict:
     policy_id: str = "default"
     as_of: str | None = None
 
-    def verify_receipt(self) -> bool:
+    def verify_receipt(
+        self,
+        *,
+        ledger: Any | None = None,
+        policy: Policy | dict[str, Any] | None = None,
+        signing_key: str | bytes | None = None,
+    ) -> bool:
         from claimlayer.receipt import verify_receipt
 
-        return verify_receipt(self)
+        return verify_receipt(
+            self,
+            ledger=ledger,
+            policy=policy,
+            signing_key=signing_key,
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {

@@ -1,20 +1,26 @@
 #!/usr/bin/env python3
-"""Anthropic 'Metawork' Supervision Bottleneck Benchmark for ClaimLayer v3.
+"""Parameterized Routing & Latency Simulation for ClaimLayer v3.1 (200 Distinct Proposals).
 
-Simulates an enterprise stream of 200 autonomous agent work submissions across
-4 realistic categories:
-  1. Grounded & Policy-Compliant Work (110 tasks, 55%):
-     Valid quotes, exact quantities/units, active governing sources -> Expect PASS (0s human wait).
-  2. Fixable Agent Mistakes (60 tasks, 30%):
-     - Fabricated / paraphrased quotes (15)
-     - Hallucinated quantities or wrong currency/duration units (15)
-     - Citing superseded MSA clauses instead of signed amendments (15)
+Evaluates sub-millisecond verification throughput and deterministic routing accuracy across
+200 distinct synthetic agent proposals spanning 4 workload categories:
+  1. Grounded & Policy-Compliant Work (110 proposals, 55% of workload):
+     Valid quotes, exact Decimal quantities/units (including compound spelled-out numbers,
+     European formatting, BPS<->% conversions, and natural-language dates) -> PASS.
+  2. Self-Correctable Agent Mistakes (60 proposals, 30% of workload):
+     - Fabricated / paraphrased quotes or truncated negations (15)
+     - Hallucinated quantities, scale headers, or unit mismatches (15)
+     - Citing superseded MSA clauses or lower-tier drafts (15)
      - Omitting mandatory checklist predicates (15)
-     -> Expect RETRY directly to agent (0 human interruptions), followed by agent self-correction -> PASS.
-  3. Genuine Peer-Source Contradictions (15 tasks, 7.5%):
-     Two executed authoritative instruments state conflicting figures -> Expect ESCALATE with 15s ConflictDiff.
-  4. High-Stakes Policy Threshold Exceptions (15 tasks, 7.5%):
-     Grounded commitments exceeding auto-approval dollar caps -> Expect ESCALATE for executive sign-off.
+     -> RETRY directly to agent (0 human interruptions).
+  3. Genuine Peer-Source Contradictions (15 proposals, 7.5% of workload):
+     Two executed authoritative instruments state conflicting figures -> ESCALATE with ConflictDiff.
+  4. High-Stakes Policy Threshold Exceptions (15 proposals, 7.5% of workload):
+     Grounded commitments exceeding auto-approval dollar caps -> ESCALATE for executive sign-off.
+
+Note on Supervision Reduction Metric:
+  Under a full-manual-review baseline (where 100% of proposals require human inspection),
+  a workload with (55% PASS + 30% RETRY + 15% ESCALATE) routes 15% of proposals to a human
+  (an 85% reduction in human interruptions for that workload distribution).
 """
 
 from __future__ import annotations
@@ -252,7 +258,7 @@ def run_benchmark() -> int:
             false_auto_approvals += 1
         if verdict.requires_human:
             human_interruptions_with_claimlayer += 1
-        if verify_receipt(verdict):
+        if verify_receipt(verdict, ledger=ledger, policy=pol):
             valid_receipts += 1
 
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
@@ -261,23 +267,23 @@ def run_benchmark() -> int:
     human_reduction_pct = (1.0 - (human_interruptions_with_claimlayer / total)) * 100.0
 
     print("=" * 72)
-    print("CLAIMLAYER v3 — ANTHROPIC SUPERVISION BOTTLENECK BENCHMARK")
+    print("CLAIMLAYER v3.1 — PARAMETERIZED ROUTING & THROUGHPUT SIMULATION")
     print("=" * 72)
     print(f"Total Agent Proposals Evaluated      : {total}")
     print(f"Total Wall-Clock Time (0 LLM calls)  : {elapsed_ms:.2f} ms ({avg_latency_ms:.3f} ms/task)")
     print(f"Exact Routing Accuracy               : {correct}/{total} ({(correct/total)*100:.1f}%)")
     print(f"False Auto-Approvals (Safety Leaks)  : {false_auto_approvals}/{total} (0.0%)")
-    print(f"Merkle Receipts Verified Offline     : {valid_receipts}/{total} (100.0%)")
+    print(f"RFC 9162 Merkle Receipts Verified    : {valid_receipts}/{total} (100.0%)")
     print("-" * 72)
-    print(f"Manual HITL Without ClaimLayer       : {total}/{total} tasks wake a human (100.0%)")
+    print(f"Full Manual Review Baseline          : {total}/{total} tasks wake a human (100.0%)")
     print(
         f"With ClaimLayer Computable Gate      : {human_interruptions_with_claimlayer}/{total} tasks wake a human "
         f"({(human_interruptions_with_claimlayer/total)*100:.1f}%)"
     )
-    print(f"Human Supervision Bottleneck Cut By  : {human_reduction_pct:.1f}%")
+    print(f"Simulated Workload Interruption Cut  : {human_reduction_pct:.1f}% (for 55/30/15 workload mix)")
     print("  - 110 clean tasks auto-approved in <0.2ms (agent never stops)")
     print("  -  60 flawed tasks bounced directly to agent via RETRY (0 human time wasted)")
-    print("  -  30 genuine conflicts/caps escalated with 15-second side-by-side diffs")
+    print("  -  30 genuine conflicts/caps escalated with side-by-side diffs")
     print("=" * 72)
 
     assert correct == total, f"Expected {total}/{total}, got {correct}/{total}"

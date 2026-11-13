@@ -29,10 +29,10 @@ pip install -e .
 # Option B: Run directly from source with zero pip installs
 export PYTHONPATH="$PWD/src"
 
-# 1. Run formal invariant & sandbox E2E test suite (G1–G8, <0.3s)
+# 1. Run formal invariant, sandbox E2E & 60+ adversarial audit tests (<0.6s)
 pytest -v
 
-# 2. Run the 200-task supervision bottleneck benchmark (~17ms total, 85% fewer human interruptions)
+# 2. Run the 200-task parameterized routing & throughput simulation (~17ms total)
 python3 benchmarks/verification_bottleneck_bench.py
 
 # 3. Run the Harness² × Harvey LAB Case 1 securitization replay (<2ms, 0 API keys)
@@ -170,18 +170,20 @@ See **[`examples/harness2_securitization/`](./examples/harness2_securitization/)
 
 ---
 
-## 4. Formal Verification Guarantees (`G1`–`G8`)
+## 4. Formal Verification Guarantees (`G1`–`G8`) & Verification Boundary
 
 | ID | Invariant | What `claimlayer.verify()` Guarantees |
 | :--- | :--- | :--- |
 | **`G1`** | **Strict Determinism** | Identical `(assertions, ledger, policy, as_of)` inputs produce byte-identical verdicts and hashes. |
-| **`G2`** | **Verbatim Grounding** | Every cited `quote` exists verbatim (whitespace-normalized) inside `Source.text`. |
-| **`G3`** | **Quantity, Scale & Unit Integrity** | Normalizes `$500K` == `$500,000`, `thirty (30) days` == `30 days`, and rejects unit drift (`30 EUR` != `30 days`). |
-| **`G4`** | **Precedence & Temporal Validity** | Enforces `authoritative` > `standard` > `draft` tiers, `supersedes` chains, and `valid_from` / `valid_until` dates. |
-| **`G5`** | **Checklist Completeness** | Blocks completion until all `Policy.required_predicates` and `required_source_ids` are satisfied. |
-| **`G6`** | **Non-Redundant Conflict Routing** | Deduplicates per-source citations before Noisy-OR scoring; `RETRY` strictly preempts `ESCALATE` to protect human time. |
-| **`G7`** | **Zero-Trust Cryptographic Receipt** | Seals every verdict with an offline-verifiable SHA-256 Merkle root (`verify_receipt(verdict)`). |
-| **`G8`** | **Automated Divergence Coverage** | `build_comparison_policy()` auto-extracts divergent clauses across paired documents into `required_predicates`. |
+| **`G2`** | **Verbatim & Contextual Grounding** | Every cited `quote` exists verbatim (NFKC/hyphenation-normalized) inside `Source.text`, satisfies minimum context around figures, and does not truncate a leading negation (`In no event...`). |
+| **`G3`** | **Exact `Decimal` Quantity, Scale & Unit Integrity** | Exact `Decimal` arithmetic (`$50,000,000 != $50,000,049`), compound EN/ES word numbers (`twenty-five (25) days`), European formatting (`1.250.000 euros`), commensurable units (`150 bps == 1.50%`, `two weeks == 14 days`), table scale headers (`in thousands`), and strict unit separation (`30 business days != 30 calendar days`). |
+| **`G4`** | **Precedence & Temporal Validity** | Enforces `authoritative` (100) > `standard` (50) > `draft` (10) tiers, `supersedes` chains, `valid_from`/`valid_until` dates, and scans both indexed `FactRecord`s and unindexed source text for overrides. |
+| **`G5`** | **Checklist Completeness & Anti-Gaming** | Blocks completion until all `Policy.required_predicates` and `required_source_ids` are satisfied with non-vacuous values; normalizes plural/aliased predicates and entity corporate suffixes. |
+| **`G6`** | **Non-Redundant Conflict Routing** | Deduplicates evidence by content hash (`source.sha256`) before Noisy-OR scoring; `RETRY` strictly preempts `ESCALATE` to protect human time. |
+| **`G7`** | **RFC 9162 Merkle + HMAC Receipt** | Seals every verdict with a domain-separated RFC 9162 SHA-256 Merkle root (`0x00` leaf / `0x01` internal node), full `ledger_digest`, and optional HMAC-SHA256 signature (`signing_key` / `CLAIMLAYER_SIGNING_KEY`). |
+| **`G8`** | **Automated Divergence Coverage** | `build_comparison_policy()` auto-extracts divergent clauses (including Roman numerals, numbered clauses, Spanish headers, and secondary-only sections) into `required_predicates`. |
+
+> **Scope & Verification Boundary:** `claimlayer.verify()` is a deterministic verifier over structured `Assertion(subject, predicate, value, source_id, quote)` tuples against registered `Source` texts and `Policy` constraints. It does not perform open-ended natural-language understanding of arbitrary prose outside the structured assertions submitted to the gate.
 
 ---
 
@@ -191,8 +193,8 @@ See **[`examples/harness2_securitization/`](./examples/harness2_securitization/)
 ├── src/claimlayer/
 │   ├── models.py                         # Source, FactRecord, Assertion, Policy, Verdict, ConflictDiff
 │   ├── verifiers/                        # quote_quantity, precedence, conflict, coverage, diff
-│   ├── receipt.py                        # Offline SHA-256 Merkle proof (CLAIMLAYER-MERKLE-SHA256-v3)
-│   ├── ledger.py                         # Thread-safe in-memory + optional SQLite ledger
+│   ├── receipt.py                        # RFC 9162 SHA-256 Merkle + HMAC receipt (CLAIMLAYER-MERKLE-SHA256-v3)
+│   ├── ledger.py                         # Thread-safe in-memory + SQLite ledger with sealed policy support
 │   ├── verify.py                         # Pure deterministic verify() gate
 │   ├── mcp_server.py                     # Native JSON-RPC 2.0 MCP server (stdio & HTTP)
 │   └── cli.py                            # `claimlayer verify`, `claimlayer mcp`, `claimlayer demo`
@@ -204,8 +206,8 @@ See **[`examples/harness2_securitization/`](./examples/harness2_securitization/)
 ├── examples/
 │   └── harness2_securitization/          # Harness² × Harvey LAB Case 1 showcase & c7 surface
 ├── benchmarks/
-│   └── verification_bottleneck_bench.py  # 200-task supervision bottleneck compression benchmark
-└── tests/                                # Formal invariant & isolated Harness² sandbox tests (G1–G8)
+│   └── verification_bottleneck_bench.py  # 200-task parameterized routing & throughput simulation
+└── tests/                                # Invariant (G1–G8), Harness² sandbox, and 60+ adversarial audit tests
 ```
 
 ---

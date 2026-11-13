@@ -41,10 +41,11 @@ def verify(
     *,
     as_of: str | None = None,
     agent_id: str = "agent",
+    signing_key: str | bytes | None = None,
 ) -> Verdict:
     """Deterministically verify an agent's proposed assertions against a Ledger and Policy.
 
-    Routing semantics (designed to eliminate the 80% human supervision bottleneck):
+    Routing semantics:
       - ``PASS``:     All assertions grounded, active, non-conflicting, and within policy.
                       ``allowed_to_proceed=True``, ``requires_human=False``.
       - ``RETRY``:    At least one deterministic agent error (missing quote, wrong figure/unit,
@@ -54,6 +55,7 @@ def verify(
                       cap requires surgical 15-second human triage.
     """
     pol = _coerce_policy(policy)
+    effective_as_of = as_of if as_of is not None else pol.as_of
     typed_assertions = _coerce_assertions(assertions)
 
     all_issues: list[Issue] = []
@@ -64,32 +66,39 @@ def verify(
     all_issues.extend(verify_coverage(typed_assertions, pol))
 
     # 2. Per-assertion deterministic checks
-    for assertion in typed_assertions:
+    for idx, assertion in enumerate(typed_assertions):
+        score_key = assertion.id if assertion.id not in assertion_scores else f"{assertion.id}#{idx+1}"
         source = ledger.get_source(assertion.source_id)
 
         # 2a. Quote & quantity/unit/date grounding
         grounding_issues = verify_quote_and_quantities(assertion, source, pol)
         if grounding_issues:
             all_issues.extend(grounding_issues)
-            assertion_scores[assertion.id] = 0.0
+            assertion_scores[score_key] = 0.0
             continue
 
         assert source is not None
 
         # 2b. Authority tier, temporal validity, and supersession
         prec_issues = verify_precedence_and_validity(
-            assertion, source, ledger, pol, as_of=as_of
+            assertion, source, ledger, pol, as_of=effective_as_of
         )
         if prec_issues:
             all_issues.extend(prec_issues)
-            assertion_scores[assertion.id] = 0.0
+            assertion_scores[score_key] = 0.0
             continue
 
         # 2c. Peer conflicts, Noisy-OR support, and numeric bounds
         score, conf_issues, diffs = evaluate_conflicts_and_thresholds(
-            assertion, source, typed_assertions, ledger, pol, as_of=as_of
+            assertion,
+            source,
+            typed_assertions,
+            ledger,
+            pol,
+            as_of=effective_as_of,
+            assertion_index=idx,
         )
-        assertion_scores[assertion.id] = score
+        assertion_scores[score_key] = score
         all_issues.extend(conf_issues)
         all_conflicts.extend(diffs)
 
@@ -108,6 +117,9 @@ def verify(
         status = "PASS"
         confidence = min(assertion_scores.values()) if assertion_scores else 0.0
 
+    allowed_to_proceed = status == "PASS"
+    requires_human = status == "ESCALATE"
+
     receipt = build_receipt(
         assertions=typed_assertions,
         sources=ledger.list_sources(),
@@ -115,7 +127,15 @@ def verify(
         status=status,
         confidence=confidence,
         issue_codes=[i.code for i in all_issues],
-        as_of=as_of,
+        as_of=effective_as_of,
+        allowed_to_proceed=allowed_to_proceed,
+        requires_human=requires_human,
+        agent_id=agent_id,
+        issues=tuple(all_issues),
+        conflicts=tuple(all_conflicts),
+        assertion_scores=assertion_scores,
+        ledger=ledger,
+        signing_key=signing_key,
     )
 
     verdict_id = f"vrd-{receipt.signature[:12]}"
@@ -123,8 +143,8 @@ def verify(
     return Verdict(
         verdict_id=verdict_id,
         status=status,
-        allowed_to_proceed=(status == "PASS"),
-        requires_human=(status == "ESCALATE"),
+        allowed_to_proceed=allowed_to_proceed,
+        requires_human=requires_human,
         confidence=round(confidence, 6),
         issues=tuple(all_issues),
         conflicts=tuple(all_conflicts),
@@ -133,5 +153,5 @@ def verify(
         assertions=typed_assertions,
         agent_id=agent_id,
         policy_id=pol.policy_id,
-        as_of=as_of,
+        as_of=effective_as_of,
     )

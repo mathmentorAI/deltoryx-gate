@@ -303,19 +303,22 @@ Once a human clicks **Select Governing Truth** (`POST /api/v1/escalations/resolv
 
 | `Issue.code` | Verdict Route | Trigger Condition |
 | :--- | :--- | :--- |
-| `EMPTY_PROPOSAL` | `RETRY` | Agent submitted zero assertions. |
+| `EMPTY_PROPOSAL` | `RETRY` | Agent submitted zero assertions (`assertions == []`). |
 | `SOURCE_NOT_FOUND` | `RETRY` | `Assertion.source_id` does not exist in `Ledger`. |
-| `QUOTE_NOT_IN_SOURCE` | `RETRY` | `Assertion.quote` is not a normalized verbatim substring of `Source.text`. |
-| `QUANTITY_MISMATCH` | `RETRY` | Number, scale (`K`/`M`/`B`), or unit (`USD`/`EUR`/`%`/`days`) in `value` does not match `quote`. |
-| `DATE_MISMATCH` | `RETRY` | Date in `value` (`YYYY-MM-DD` or `Month DD, YYYY`) does not match `quote`. |
-| `SOURCE_NOT_YET_EFFECTIVE` | `RETRY` | `Source.valid_from > Policy.as_of`. |
-| `SOURCE_EXPIRED` | `RETRY` | `Source.valid_until < Policy.as_of`. |
-| `INSUFFICIENT_AUTHORITY_TIER` | `RETRY` | `Source.rank < Policy.min_tier_rank` (e.g., citing an email instead of a contract). |
-| `SOURCE_SUPERSEDED` | `RETRY` | Cited source was superseded by an amendment covering `(subject, predicate)`. |
-| `HIGHER_TIER_OVERRIDE` | `RETRY` | A higher-tier source in `Ledger` contradicts the proposed value. |
-| `SAME_TIER_CONTRADICTION` | `RETRY` | Cited source or already-resolved precedent contradicts `Assertion.value`. |
-| `MISSING_REQUIRED_PREDICATE` | `RETRY` | Proposal skipped a mandatory field/section in `Policy.required_predicates`. |
+| `EMPTY_QUOTE` | `RETRY` | `Policy.require_exact_quote=True` and `Assertion.quote` is empty. |
+| `QUOTE_NOT_IN_SOURCE` | `RETRY` | `Assertion.quote` is not a normalized verbatim substring of `Source.text`, lacks minimum context around a bare figure, or truncates a leading negation/exception clause (`In no event...`, `shall not...`). |
+| `QUANTITY_MISMATCH` | `RETRY` | Exact `Decimal` magnitude, sign, scale (`K`/`M`/`B`/`mil millones`/table scale header), or vacuous placeholder in `Assertion.value` does not match `Assertion.quote`. |
+| `UNIT_MISMATCH` | `RETRY` | Canonical unit (`USD`/`EUR`/`PERCENT`/`BPS`/`BUSINESS_DAYS`/`CALENDAR_DAYS`/`DAYS`) in `Assertion.value` is incompatible with `Assertion.quote`. |
+| `DATE_MISMATCH` | `RETRY` | Canonical date (`YYYY-MM-DD`, `Month DD, YYYY`, `DD de mes de YYYY`) in `Assertion.value` does not appear in `Assertion.quote`. |
+| `SOURCE_NOT_YET_EFFECTIVE` | `RETRY` | `Source.valid_from > as_of` (or invalid ISO `as_of` date). |
+| `SOURCE_EXPIRED` | `RETRY` | `Source.valid_until < as_of`. |
+| `INSUFFICIENT_AUTHORITY_TIER` | `RETRY` | `Source.rank < Policy.min_tier_rank` (e.g., citing a `draft` rank=10 email when `min_tier_rank=20` or `50`). |
+| `SOURCE_SUPERSEDED` | `RETRY` | Cited source was superseded by an active amendment (`supersedes=[...]`) covering `(subject, predicate)`. |
+| `HIGHER_TIER_OVERRIDE` | `RETRY` | A higher-tier active source in `Ledger` (via indexed `FactRecord` or unindexed clause text) states a different value for `(subject, predicate)`. |
+| `CONTRADICTS_HUMAN_RESOLUTION` | `RETRY` | Proposal contradicts an active `ResolutionRecord` previously signed off by a human reviewer. |
+| `INTERNAL_SELF_CONTRADICTION` | `RETRY` | Two assertions in the same proposal state incompatible values for the same normalized `(subject, predicate, condition)`. |
+| `MISSING_REQUIRED_PREDICATE` | `RETRY` | Proposal skipped a mandatory field/section in `Policy.required_predicates` (or submitted a vacuous placeholder value). |
 | `MISSING_REQUIRED_SOURCE` | `RETRY` | Proposal failed to cite a mandatory governing document in `Policy.required_source_ids`. |
-| `PEER_SOURCE_CONFLICT` | `ESCALATE` | Two active sources of equal highest authority state incompatible values. |
-| `LOW_CONSOLIDATED_CONFIDENCE` | `ESCALATE` | Deduplicated Noisy-OR source confidence falls below `Policy.confidence_threshold`. |
-| `NUMERIC_BOUND_EXCEEDED` | `ESCALATE` / `RETRY` | Proposed quantity violates `Policy.numeric_bounds` (`action` configurable). |
+| `UNRESOLVED_PEER_CONFLICT` | `ESCALATE` | Two active sources of equal highest authority state incompatible values and no human resolution exists yet. |
+| `LOW_EVIDENCE_SUPPORT` | `ESCALATE` | Content-hash-deduplicated Noisy-OR evidence support falls below `Policy.min_support` (`confidence_threshold`). |
+| `POLICY_THRESHOLD_EXCEEDED` | `ESCALATE` / `RETRY` | Proposed quantity violates `Policy.numeric_bounds` (disposition controlled by `Policy.threshold_disposition`). |

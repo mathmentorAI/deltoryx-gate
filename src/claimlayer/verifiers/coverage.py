@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from claimlayer.models import Assertion, Issue, Policy, normalize_key
+from claimlayer.models import Assertion, Issue, Policy, normalize_key, normalize_predicate_key
 
 
 def verify_coverage(assertions: tuple[Assertion, ...], policy: Policy) -> list[Issue]:
@@ -20,9 +20,16 @@ def verify_coverage(assertions: tuple[Assertion, ...], policy: Policy) -> list[I
         )
         return issues
 
-    present_predicates = {normalize_key(a.predicate) for a in assertions}
+    present_raw = {normalize_key(a.predicate) for a in assertions if a.value and a.value.strip()}
+    present_canon = {
+        normalize_predicate_key(a.predicate, policy.predicate_aliases)
+        for a in assertions
+        if a.value and a.value.strip()
+    }
     for req_pred in policy.required_predicates:
-        if normalize_key(req_pred) not in present_predicates:
+        req_raw = normalize_key(req_pred)
+        req_canon = normalize_predicate_key(req_pred, policy.predicate_aliases)
+        if req_raw not in present_raw and req_canon not in present_canon:
             issues.append(
                 Issue(
                     code="MISSING_REQUIRED_PREDICATE",

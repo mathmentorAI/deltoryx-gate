@@ -21,7 +21,7 @@ from claimlayer.verifiers.diff import (
 )
 from claimlayer.verify import verify
 
-__version__ = "3.0.0"
+__version__ = "3.1.0"
 
 __all__ = [
     "Assertion",

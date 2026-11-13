@@ -19,6 +19,12 @@ Agent Proposal + Exact Citations
 
 ![ClaimLayer: Deterministic Verification Harness for AI Agents](./docs/assets/claimlayer_architecture.png)
 
+### Video Walkthrough
+
+[![Watch the ClaimLayer Walkthrough](https://img.youtube.com/vi/F6bApAPaLI8/hqdefault.jpg)](https://youtu.be/F6bApAPaLI8)
+
+▶ **[Watch the ClaimLayer walkthrough on YouTube](https://youtu.be/F6bApAPaLI8)**
+
 ---
 
 ## 1. Clone & Verify in 60 Seconds

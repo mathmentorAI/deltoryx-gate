@@ -17,7 +17,7 @@ Agent Proposal + Exact Citations
 
 > **What Deltoryx Gate is (and isn't):** Deltoryx Gate is **not** a general agent orchestrator or open-ended prose judge. It is the **domain-grounded verification harness**: you declare a domain's semantic contract (`Vocabulary`, conditions, scopes, clause relations, and `AcceptancePolicy`), and Deltoryx Gate enforces that your agent cannot authorize an action unless both the evidence and the policy allow it.
 
-![ClaimLayer: Deterministic Verification Harness for AI Agents](./docs/assets/claimlayer_architecture.png)
+![Deltoryx Gate: Technical Architecture & Formal Verification Harness](./docs/assets/deltoryx_gate_architecture.jpg)
 
 ### Video Walkthrough
 

@@ -401,3 +401,19 @@ def test_phase4_securitization_domain_scope_amendment_and_conditional_call():
     assert passed.resolved_values["cure_period"]["value"] == "15"
     assert passed.resolved_values["coupon_rate"]["value"] == "5.25"
     assert passed.resolved_values["coupon_rate"]["unit"] == "percent"
+
+
+def test_deltoryx_gate_package_alias_compatibility():
+    import deltoryx_gate
+    from deltoryx_gate.v4 import (
+        B2B_CONTRACTS_VOCABULARY as DG_B2B,
+        EvidenceLayer as DG_Layer,
+        SECURITIZATION_VOCABULARY as DG_SEC,
+        authorize_operation as dg_auth,
+    )
+
+    assert deltoryx_gate.verify_receipt is verify_receipt
+    assert DG_Layer is EvidenceLayer
+    assert DG_B2B is B2B_CONTRACTS_VOCABULARY
+    assert DG_SEC is SECURITIZATION_VOCABULARY
+    assert dg_auth is authorize_operation

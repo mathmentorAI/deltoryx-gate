@@ -1,10 +1,10 @@
-# ClaimLayer · Deterministic Verification & Authorization Harness for AI Agents
+# Deltoryx Gate (`deltoryx-gate`) · Deterministic Verification & Authorization Harness for AI Agents
 
-**The deterministic verification, abstention, and authorization harness for AI agents operating in a bounded domain.**
+**The deterministic verification, abstention, and authorization harness for AI agents operating in a bounded domain.** *(Formerly ClaimLayer — Python module `deltoryx_gate`, backwards-compatible with `claimlayer`.)*
 
 AI agents reason and propose actions fast, yet teams still spend most of their time manually cross-checking citations, numbers, exceptions, and amendments—because a single dropped proviso or ungrounded figure can trigger a bad authorization.
 
-**ClaimLayer** is a zero-dependency Python library (pure stdlib) that serves as the **epistemic and policy base layer** for domain agents: the agent proposes structured claims tied to exact source spans, and ClaimLayer deterministically governs what enters the ledger, detects its own gaps, and decides whether an operation can proceed:
+**Deltoryx Gate** is a zero-dependency Python library (pure stdlib) that serves as the **epistemic and policy base layer** for domain agents: the agent proposes structured claims tied to exact source spans, and Deltoryx Gate deterministically governs what enters the ledger, detects its own gaps, and decides whether an operation can proceed:
 
 ```text
 Agent Proposal + Exact Citations
@@ -15,7 +15,7 @@ Agent Proposal + Exact Citations
         └── ESCALATE ──► Abstains & escalates ONLY on genuine conflicts, pending conditions, or policy caps
 ```
 
-> **What ClaimLayer is (and isn't):** ClaimLayer is **not** a general agent orchestrator or open-ended prose judge. It is the **domain-grounded verification harness**: you declare a domain's semantic contract (`Vocabulary`, conditions, scopes, clause relations, and `AcceptancePolicy`), and ClaimLayer enforces that your agent cannot authorize an action unless both the evidence and the policy allow it.
+> **What Deltoryx Gate is (and isn't):** Deltoryx Gate is **not** a general agent orchestrator or open-ended prose judge. It is the **domain-grounded verification harness**: you declare a domain's semantic contract (`Vocabulary`, conditions, scopes, clause relations, and `AcceptancePolicy`), and Deltoryx Gate enforces that your agent cannot authorize an action unless both the evidence and the policy allow it.
 
 ![ClaimLayer: Deterministic Verification Harness for AI Agents](./docs/assets/claimlayer_architecture.png)
 
@@ -180,14 +180,14 @@ See **[`examples/harness2_securitization/`](./examples/harness2_securitization/)
 - **Turn 2 (`RETRY`, 0 human wait):** Catches **authority inversion** (`HIGHER_TIER_OVERRIDE`) when the agent treats the marketing Offering Memorandum (`6.50%`) as governing over the Executed Master Trust Indenture (`6.75%`).
 - **Turn 3 (`PASS`, `<2 ms` total):** Verifies all 4 divergent sections against the controlling Indenture and seals an offline-verifiable `CLAIMLAYER-MERKLE-SHA256-v3` cryptographic receipt.
 
-### Why Pair Adaptive Harnesses (`Harness²`) with ClaimLayer
+### Why Pair Adaptive Harnesses (`Harness²`) with Deltoryx Gate
 
-`Harness²` optimizes **how an agent generates and retrieves**; `ClaimLayer` scales **verification** at the same pace while keeping compliance rules untouchable by the agent:
+`Harness²` optimizes **how an agent generates and retrieves**; **Deltoryx Gate** scales **verification** at the same pace while keeping compliance rules untouchable by the agent:
 
 | Layer | Role | Mutable by `Harness²`? |
 | :--- | :--- | :--- |
 | **`Harness²`** *(adaptive)* | Optimizes prompts, retrieval, scripts, and tool use (`Propose → Probe → Compose`) | Yes |
-| **`ClaimLayer v4`** *(normative)* | Enforces typed `Vocabulary`, fidelity checks, precedence, `PASS`/`RETRY`/`ESCALATE`, and signed receipts | **No** (operator-frozen) |
+| **`Deltoryx Gate v4`** *(normative)* | Enforces typed `Vocabulary`, fidelity checks, precedence, `PASS`/`RETRY`/`ESCALATE`, and signed receipts | **No** (operator-frozen) |
 
 This separation lets teams scale adaptive agents in regulated workflows (e.g., **EU AI Act / RIA** high-risk use cases or regulated finance) without letting prompt/harness optimization weaken acceptance criteria. See **[`docs/regulated_agents_harness2.md`](./docs/regulated_agents_harness2.md)** for the full architecture and regulatory boundaries.
 

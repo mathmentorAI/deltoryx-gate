@@ -13,7 +13,12 @@ from .authorization import (
     authorize_operation,
     resolve_scope_and_precedence,
 )
-from .domains import B2B_CONTRACTS_VOCABULARY, B2B_DEFAULT_ACCEPTANCE_POLICY
+from .domains import (
+    B2B_CONTRACTS_VOCABULARY,
+    B2B_DEFAULT_ACCEPTANCE_POLICY,
+    SECURITIZATION_ACCEPTANCE_POLICY,
+    SECURITIZATION_VOCABULARY,
+)
 from .engine import ENGINE_VERSION, TIER_ANNEX, TIER_EXTERNAL, TIER_PRIMARY, EvidenceLayer
 from .epistemics import DEFAULT_PROFILE, EXPLICIT, EpistemicProfile
 from .fidelity import (
@@ -21,11 +26,12 @@ from .fidelity import (
     FidelityFinding,
     check_clause_boundary_completeness,
     evaluate_dual_readers,
+    render_canonical_claim,
     verify_extraction_fidelity,
 )
 from .models import AcceptancePolicy, EvidenceUnit
 from .paths import TransitiveRule
-from .reader import LLMProposalReader, ProposalReader, READER_PROMPT
+from .reader import LLMProposalReader, ProposalReader, READER_PROMPT, STRICT_READER_PROMPT
 from .vocabulary import CONDITION_STATUSES, STANDARD_UNITS, FieldSpec, PredicateSpec, Unit, UnitRegistry, UnmappedProposal, Vocabulary
 from .autovocab import build_vocabulary, propose_vocabulary, with_entities
 from .triage import LANES, draft_vocabulary, segment_text, triage, verify_draft
@@ -35,10 +41,10 @@ from ..semantic.adapters import OpenAICompatibleModel
 __all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'Vocabulary', 'PredicateSpec', 'FieldSpec', 'Unit', 'UnitRegistry',
            'STANDARD_UNITS', 'CONDITION_STATUSES', 'UnmappedProposal', 'EpistemicProfile', 'DEFAULT_PROFILE', 'EXPLICIT',
            'AcceptancePolicy', 'EvidenceUnit', 'TransitiveRule', 'LLMProposalReader', 'ProposalReader',
-           'READER_PROMPT', 'SourceDocument', 'EvidenceRef', 'StructuredQuery', 'OpenAICompatibleModel',
+           'READER_PROMPT', 'STRICT_READER_PROMPT', 'SourceDocument', 'EvidenceRef', 'StructuredQuery', 'OpenAICompatibleModel',
            'TIER_PRIMARY', 'TIER_ANNEX', 'TIER_EXTERNAL', 'propose_vocabulary', 'build_vocabulary', 'with_entities',
            'verify_draft', 'triage', 'segment_text', 'LANES', 'draft_vocabulary',
            'AuthorizationIssue', 'AuthorizationVerdict', 'ClauseRelation', 'authorize_operation',
            'resolve_scope_and_precedence', 'FieldEvidence', 'FidelityFinding', 'check_clause_boundary_completeness',
-           'evaluate_dual_readers', 'verify_extraction_fidelity', 'B2B_CONTRACTS_VOCABULARY',
-           'B2B_DEFAULT_ACCEPTANCE_POLICY']
+           'evaluate_dual_readers', 'render_canonical_claim', 'verify_extraction_fidelity', 'B2B_CONTRACTS_VOCABULARY',
+           'B2B_DEFAULT_ACCEPTANCE_POLICY', 'SECURITIZATION_VOCABULARY', 'SECURITIZATION_ACCEPTANCE_POLICY']

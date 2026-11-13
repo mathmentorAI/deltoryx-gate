@@ -14,8 +14,9 @@ from ..semantic.models import digest
 
 from .spans import locate_quote
 
-PROPOSAL_FIELDS = {'entity', 'predicate', 'value', 'unit', 'polarity', 'assertion_kind', 'conditions', 'scope',
-                   'valid_from', 'valid_until', 'basis', 'evidence', 'quote'}
+PROPOSAL_FIELDS = {'entity', 'predicate', 'value', 'unit', 'polarity', 'assertion_kind', 'conditions',
+                   'condition_status', 'field_evidence', 'scope', 'valid_from', 'valid_until',
+                   'basis', 'evidence', 'quote'}
 
 READER_PROMPT = '''You read one source document and PROPOSE structured evidence units. You do not decide
 whether anything is true, supported or contradicted: deterministic software does that later.
@@ -52,6 +53,13 @@ Contract:
 12. Do not output confidence, authority, verdicts, IDs or commentary. Respect max_proposals.'''
 
 
+STRICT_READER_PROMPT = READER_PROMPT + '''
+13. Always include "condition_status": one of "unconditional", "conditional", "unknown_condition", or
+    "unrepresentable_condition". Never omit "condition_status" and never mark a restricted clause as "unconditional".
+14. Include "field_evidence": an object mapping "entity", "value", and (when conditional) "conditions" to exact
+    verbatim substrings of the cited fragment supporting each field.'''
+
+
 class ProposalReader(Protocol):
     @property
     def identity(self) -> Mapping[str, Any]: ...
@@ -64,6 +72,7 @@ class LLMProposalReader:
     """structural_reliability must come from an evaluation of this reader; None keeps units unassessed."""
     model: OpenAICompatibleModel
     prompt_version: str = 'v4-proposals-3'
+    prompt: str = READER_PROMPT
     fragment_chars: int = 1800
     window_fragments: int = 5
     max_proposals: int = 40
@@ -77,7 +86,7 @@ class LLMProposalReader:
 
     @property
     def identity(self):
-        return {**self.model.identity, 'prompt_version': self.prompt_version, 'prompt_digest': digest(READER_PROMPT),
+        return {**self.model.identity, 'prompt_version': self.prompt_version, 'prompt_digest': digest(self.prompt),
                 'fragment_chars': self.fragment_chars, 'window_fragments': self.window_fragments,
                 'max_proposals': self.max_proposals, 'structural_reliability': self.structural_reliability}
 
@@ -106,7 +115,7 @@ class LLMProposalReader:
                        'vocabulary': request['vocabulary'], 'admissible_bases': bases,
                        'max_proposals': self.max_proposals}
             try:
-                result = self.model.complete(READER_PROMPT, payload)
+                result = self.model.complete(self.prompt, payload)
             except Exception as exc:
                 diagnostics = copy.deepcopy(getattr(exc, 'diagnostics', None))
                 truncated = any(a.get('finish_reason') == 'length' for a in (diagnostics or {}).get('attempts', []))
@@ -135,7 +144,7 @@ class LLMProposalReader:
                         or len(set(ids)) != len(ids) or any(i not in references for i in ids)):
                     rejected.append({'proposal': raw, 'reason': 'unknown_or_foreign_evidence_id'})
                     continue
-                proposal = {k: v for k, v in raw.items() if k not in {'basis', 'evidence', 'quote'}}
+                proposal = {k: v for k, v in raw.items() if k not in {'basis', 'evidence', 'quote', 'field_evidence'}}
                 evidence = [copy.deepcopy(references[i]) for i in ids]
                 located = None
                 for i in ids:  # narrow the evidence to the quoted words when code can find them verbatim
@@ -145,7 +154,26 @@ class LLMProposalReader:
                         start, end = ref['start'] + span[0], ref['start'] + span[1]
                         located = {**ref, 'start': start, 'end': end, 'quote': text[start:end]}
                         break
-                items.append({'proposal': proposal, 'basis': raw['basis'],
-                              'evidence': [located] if located else evidence, 'quote_located': located is not None})
+                resolved_fe = {}
+                if isinstance(raw.get('field_evidence'), dict):
+                    for f_name, f_quote in raw['field_evidence'].items():
+                        if not isinstance(f_quote, str) or not f_quote.strip():
+                            continue
+                        for i in ids:
+                            ref = references[i]
+                            span = locate_quote(ref['quote'], f_quote)
+                            if span is None:
+                                idx = ref['quote'].find(f_quote)
+                                if idx != -1:
+                                    span = (idx, idx + len(f_quote))
+                            if span is not None:
+                                st, en = ref['start'] + span[0], ref['start'] + span[1]
+                                resolved_fe[f_name] = {**ref, 'start': st, 'end': en, 'quote': text[st:en]}
+                                break
+                item_payload = {'proposal': proposal, 'basis': raw['basis'],
+                                'evidence': [located] if located else evidence, 'quote_located': located is not None}
+                if resolved_fe:
+                    item_payload['field_evidence'] = resolved_fe
+                items.append(item_payload)
         return {'items': items, 'rejected': rejected, 'calls': calls, 'errors': errors, 'fragments': len(fragments),
                 'windows': sum(1 for c in calls if 'split' not in c) + len(errors)}

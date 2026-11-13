@@ -106,3 +106,27 @@ Ejemplo sin red: `PYTHONPATH=src python examples/v4_quickstart.py`. Tests: `test
 - Suite completa en el equipo del usuario (Python 3.10.12, pytest 9.1.1): **317 aprobados, 1 fallo previo y ajeno a v4** (`test_semantic_harness_gate.py` importa el módulo externo `parse_doc`, que no está en esa ruta). En el contenedor de desarrollo (Python 3.13): 312 aprobados sin esos dos ficheros.
 - El benchmark de contratos se ejecutó en ambos entornos con resultados idénticos (A: 17/20/20; B: 7/5/11). Los artefactos de `benchmarks/library_contracts_v4_results` son los del equipo del usuario.
 - En una carpeta que no permite borrar archivos, SQLite no puede gestionar su diario: ejecutar con `--out` a un directorio local y copiar después (`python benchmarks/library_contracts_v4/run.py --out /tmp/lc`). Los tests usan directorios temporales y no tienen este problema.
+
+## Hito v4: Contrato de lector estricto, evaluación en 3 capas y segundo dominio (Titulización)
+
+Sobre la arquitectura v4 se ha implementado el siguiente bloque:
+
+1. **Contrato de lector estricto y fidelidad (`src/claimlayer/v4/reader.py`, `src/claimlayer/v4/fidelity.py`)**:
+   - `STRICT_READER_PROMPT` (opt-in mediante `LLMProposalReader(model, prompt=STRICT_READER_PROMPT)`) exige `condition_status` explícito y citas `field_evidence` por campo, resueltas a spans exactos (con fallback exacto para tokens cortos como nombres de entidad o cantidades).
+   - `verify_extraction_fidelity()` añade `DIRECTION_OF_CHANGE_MISMATCH` (paridad de signo ante aumentos/reducciones) y `ENTITY_NOT_IN_FIELD_EVIDENCE` (grounding de la entidad en su span), además de `render_canonical_claim(unit)`.
+2. **Benchmark de 3 capas con soporte `--dry-run` y `--live` (`benchmarks/b2b_live_eval.py`)**:
+   - Separa `DEV_CASES` (6 casos de calibración) y `TEST_CASES` (6 casos ciegos) midiendo por separado: Capa 1 (`gold_reasoning`), Capa 2 (`dual_reader_extraction` con `evaluate_dual_readers`) y Capa 3 (`risk_coverage` calibrando `tau`/`delta` en `dev` y midiendo `selective_risk` vs `automation_coverage` en `test`).
+   - En `--dry-run` (dobles deterministas, sin llamadas a APIs externas): Capa 1 obtiene `6/6` (`1.0`) en `dev` y `6/6` (`1.0`) en `test`; en Capa 3 (`test` ciego), `automation_coverage = 0.5`, `selective_risk = 0.0` (`3` aceptados, `3` abstenidos, `0` falsos `PASS`), bloqueando el caso de error correlacionado mediante `UNCAPTURED_CONDITION` y `POLARITY_MISMATCH`. El modo `--live` queda listo para ejecutarse con dos `OpenAICompatibleModel` reales (`--endpoint-a`, `--model-a`, `--api-key-a`, `--endpoint-b`, `--model-b`, `--api-key-b`).
+3. **Frontera de confianza (`tests/test_v4_milestone_phases.py`)**:
+   - Verificado que `FieldEvidence` manipulado y `unread_documents` bloquean `authorize_operation`, que `AuthorizationVerdict` es inmutable (`FrozenInstanceError`), y que `verify_receipt(..., allow_unkeyed=False)` rechaza veredictos sin firma HMAC, con clave incorrecta o manipulados.
+4. **Segundo dominio acotado: Titulización (`src/claimlayer/v4/domains/securitization.py`)**:
+   - Define `SECURITIZATION_VOCABULARY` (8 predicados: `coupon_rate`, `clean_up_call_threshold`, `cure_period`, `waterfall_priority`, `reporting_frequency`, `note_principal`, `delinquency_trigger`, `event_of_default`; `scope_keys=("tranche", "clause_id", "reporting_period", "event_id")`; `require_explicit_condition_status=True`) y `SECURITIZATION_ACCEPTANCE_POLICY`, reutilizando sin modificaciones el motor de fidelidad y autorización.
+
+### Verificación reproducible
+
+```bash
+PYTHONPATH=claim-layer/src:claim-layer:src .venv/bin/pytest claim-layer/tests/ tests/test_api_and_triage.py -q
+# -> 266 passed, 1 skipped
+
+PYTHONPATH=claim-layer/src:claim-layer .venv/bin/python claim-layer/benchmarks/b2b_live_eval.py --dry-run
+```

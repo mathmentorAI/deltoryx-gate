@@ -268,7 +268,7 @@ def test_scope_precedence_exceptions_amendments_and_pending_conditions():
 def test_authorize_operation_blocks_on_gaps_and_policy_limits():
     doc = _doc(
         "msa_clean",
-        "Standard payment terms are 30 days. Aggregate liability cap is 500000 USD.",
+        "Acme standard payment terms are 30 days. Acme aggregate liability cap is 500000 USD.",
     )
     layer = EvidenceLayer(vocabulary=B2B_CONTRACTS_VOCABULARY, policy=B2B_DEFAULT_ACCEPTANCE_POLICY)
     layer.ingest(doc)
@@ -283,7 +283,7 @@ def test_authorize_operation_blocks_on_gaps_and_policy_limits():
                     "assertion_kind": "requirement",
                     "condition_status": "unconditional",
                 },
-                "evidence": [_ref(doc, "Standard payment terms are 30 days.")],
+                "evidence": [_ref(doc, "Acme standard payment terms are 30 days.")],
             },
             {
                 "proposal": {
@@ -294,18 +294,18 @@ def test_authorize_operation_blocks_on_gaps_and_policy_limits():
                     "assertion_kind": "requirement",
                     "condition_status": "unconditional",
                 },
-                "evidence": [_ref(doc, "Aggregate liability cap is 500000 USD.")],
+                "evidence": [_ref(doc, "Acme aggregate liability cap is 500000 USD.")],
             },
         ],
         attestor="legal_ops",
     )
     fe = {
         res["unit_ids"][0]: [
-            FieldEvidence("entity", _ref(doc, "Standard payment terms")),
+            FieldEvidence("entity", _ref(doc, "Acme")),
             FieldEvidence("value", _ref(doc, "30 days")),
         ],
         res["unit_ids"][1]: [
-            FieldEvidence("entity", _ref(doc, "Aggregate liability cap")),
+            FieldEvidence("entity", _ref(doc, "Acme")),
             FieldEvidence("value", _ref(doc, "500000 USD")),
         ],
     }

@@ -36,6 +36,9 @@ _BOUND_MARKER_MAP: dict[str, re.Pattern[str]] = {
     "le": re.compile(r"\b(?:at\s+most|not\s+more\s+than|up\s+to|maximum\s+of|or\s+less|como\s+m[aá]ximo|hasta)\b", re.IGNORECASE),
 }
 
+_INCREASE_MARKER_RE = re.compile(r"\b(?:increase[ds]?|growth|grew|rose|risen|higher|upward|aument[oó]|subi[oó])\b", re.IGNORECASE)
+_DECREASE_MARKER_RE = re.compile(r"\b(?:decrease[ds]?|decline[ds]?|drop(?:ped)?|fell|fallen|lower|downward|reduc(?:ed|tion)|disminuy[oó]|baj[oó])\b", re.IGNORECASE)
+
 
 @dataclass(frozen=True)
 class FieldEvidence:
@@ -226,6 +229,34 @@ def verify_extraction_fidelity(
                 )
                 break
 
+    # 3b. Direction-of-change sign parity for signed numeric values
+    if isinstance(val, dict) and "value" in val:
+        try:
+            num_val = float(val["value"])
+        except (TypeError, ValueError):
+            num_val = None
+        if num_val is not None:
+            has_dec = bool(_DECREASE_MARKER_RE.search(combined_sentence))
+            has_inc = bool(_INCREASE_MARKER_RE.search(combined_sentence))
+            if has_dec and not has_inc and num_val > 0 and "decrease" not in prop.get("predicate", "").lower():
+                findings.append(
+                    FidelityFinding(
+                        code="DIRECTION_OF_CHANGE_MISMATCH",
+                        message="Sentence states a decrease/reduction, but proposed numeric value is positive.",
+                        field="value",
+                        detail={"value": val["value"], "sentence": combined_sentence},
+                    )
+                )
+            elif has_inc and not has_dec and num_val < 0:
+                findings.append(
+                    FidelityFinding(
+                        code="DIRECTION_OF_CHANGE_MISMATCH",
+                        message="Sentence states an increase/growth, but proposed numeric value is negative.",
+                        field="value",
+                        detail={"value": val["value"], "sentence": combined_sentence},
+                    )
+                )
+
     # 4. Per-field evidence binding checks
     by_field = {fe.field: fe for fe in (field_evidence or ())}
     for req_field in require_field_evidence:
@@ -249,7 +280,17 @@ def verify_extraction_fidelity(
                 )
             )
             continue
-        if fe.field == "value" and not _value_markers_present(prop.get("value"), ref.quote):
+        if fe.field == "entity" and prop.get("entity"):
+            ent_tokens = [t for t in re.findall(r"[a-z0-9]+", str(prop["entity"]).lower()) if len(t) >= 2]
+            if ent_tokens and not all(t in ref.quote.lower() for t in ent_tokens):
+                findings.append(
+                    FidelityFinding(
+                        code="ENTITY_NOT_IN_FIELD_EVIDENCE",
+                        message=f"Declared entity '{prop['entity']}' is not grounded in its FieldEvidence span.",
+                        field="entity",
+                    )
+                )
+        elif fe.field == "value" and not _value_markers_present(prop.get("value"), ref.quote):
             findings.append(
                 FidelityFinding(
                     code="VALUE_NOT_IN_FIELD_EVIDENCE",
@@ -322,3 +363,23 @@ def evaluate_dual_readers(cases: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         # Fraction of agreements that are actually correct (never assume agreement == truth)
         "agreement_reliability": round(both_correct / agree, 4) if agree else 0.0,
     }
+
+
+def render_canonical_claim(unit: EvidenceUnit) -> str:
+    """Render a deterministic human-readable proposition for round-trip fidelity verification."""
+    p = unit.proposition
+    val = p["value"]
+    if isinstance(val, dict) and "operator" in val:
+        val_txt = f"{val['operator']} {val['value']} {val['unit']}"
+    elif isinstance(val, dict) and "value" in val and "unit" in val:
+        val_txt = f"{val['value']} {val['unit']}"
+    else:
+        val_txt = str(val)
+    cstatus = p.get("condition_status", "conditional" if p.get("conditions") else "unconditional")
+    cond_txt = ""
+    if p.get("conditions"):
+        parts = [f"{c['field']} {c['operator']} {c['value']}" for c in p["conditions"]]
+        cond_txt = f" IF ({' AND '.join(parts)})"
+    scope_txt = f" IN {p['scope']}" if p.get("scope") else ""
+    pol_txt = "NOT " if p.get("polarity") == "negated" else ""
+    return f"[{p['assertion_kind']} | {cstatus}] {p['entity']}.{p['predicate']} = {pol_txt}{val_txt}{cond_txt}{scope_txt}"

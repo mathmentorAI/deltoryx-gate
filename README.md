@@ -21,9 +21,9 @@ Agent Proposal + Exact Citations
 
 ### Video Walkthrough
 
-[![Watch the ClaimLayer Walkthrough](https://img.youtube.com/vi/F6bApAPaLI8/hqdefault.jpg)](https://youtu.be/F6bApAPaLI8)
+[![Watch the Deltoryx Gate Walkthrough](https://img.youtube.com/vi/F6bApAPaLI8/hqdefault.jpg)](https://youtu.be/F6bApAPaLI8)
 
-▶ **[Watch the ClaimLayer walkthrough on YouTube](https://youtu.be/F6bApAPaLI8)**
+▶ **[Watch the Deltoryx Gate walkthrough on YouTube](https://youtu.be/F6bApAPaLI8)**
 
 ---
 

@@ -172,6 +172,17 @@ See **[`examples/harness2_securitization/`](./examples/harness2_securitization/)
 - **Turn 2 (`RETRY`, 0 human wait):** Catches **authority inversion** (`HIGHER_TIER_OVERRIDE`) when the agent treats the marketing Offering Memorandum (`6.50%`) as governing over the Executed Master Trust Indenture (`6.75%`).
 - **Turn 3 (`PASS`, `<2 ms` total):** Verifies all 4 divergent sections against the controlling Indenture and seals an offline-verifiable `CLAIMLAYER-MERKLE-SHA256-v3` cryptographic receipt.
 
+### Why Pair Adaptive Harnesses (`Harness²`) with ClaimLayer
+
+`Harness²` optimizes **how an agent generates and retrieves**; `ClaimLayer` scales **verification** at the same pace while keeping compliance rules untouchable by the agent:
+
+| Layer | Role | Mutable by `Harness²`? |
+| :--- | :--- | :--- |
+| **`Harness²`** *(adaptive)* | Optimizes prompts, retrieval, scripts, and tool use (`Propose → Probe → Compose`) | Yes |
+| **`ClaimLayer v4`** *(normative)* | Enforces typed `Vocabulary`, fidelity checks, precedence, `PASS`/`RETRY`/`ESCALATE`, and signed receipts | **No** (operator-frozen) |
+
+This separation lets teams scale adaptive agents in regulated workflows (e.g., **EU AI Act / RIA** high-risk use cases or regulated finance) without letting prompt/harness optimization weaken acceptance criteria. See **[`docs/regulated_agents_harness2.md`](./docs/regulated_agents_harness2.md)** for the full architecture and regulatory boundaries.
+
 ---
 
 ## 4. Formal Verification Guarantees (`G1`–`G8`) & Verification Boundary

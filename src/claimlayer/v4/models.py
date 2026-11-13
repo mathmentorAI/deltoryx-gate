@@ -11,14 +11,18 @@ from ..semantic.models import EvidenceRef, KINDS, canonical, digest
 ORIGINS = frozenset({'reader', 'application', 'rule_derived'})
 PROPOSITION_FIELDS = ('entity', 'predicate', 'value', 'unit', 'polarity', 'assertion_kind',
                       'conditions', 'scope', 'valid_from', 'valid_until')
+OPTIONAL_PROPOSITION_FIELDS = frozenset({'condition_status'})
 
 
 def context_key(p, *, include_event=True) -> str:
-    """Comparable context: subject, predicate, assertion kind, scope (event) and condition set."""
+    """Comparable context: subject, predicate, assertion kind, scope (event), condition set and condition_status."""
     scope = p['scope'] if include_event else {k: v for k, v in p['scope'].items() if k != 'event_id'}
     # Entity identity ignores case, spacing, '_' and '-' (label_key): 'ACME CORP' and 'Acme Corp' are one subject.
-    return canonical({'entity': label_key(p['entity']), 'predicate': p['predicate'], 'assertion_kind': p['assertion_kind'],
-                      'scope': scope, 'conditions': p['conditions']})
+    payload = {'entity': label_key(p['entity']), 'predicate': p['predicate'], 'assertion_kind': p['assertion_kind'],
+               'scope': scope, 'conditions': p['conditions']}
+    if 'condition_status' in p:
+        payload['condition_status'] = p['condition_status']
+    return canonical(payload)
 
 
 @dataclass(frozen=True)
@@ -42,7 +46,8 @@ class EvidenceUnit:
     proposal: dict = field(default_factory=dict)
 
     def __post_init__(self):
-        if set(self.proposition) != set(PROPOSITION_FIELDS):
+        prop_keys = set(self.proposition)
+        if not set(PROPOSITION_FIELDS) <= prop_keys or not prop_keys <= (set(PROPOSITION_FIELDS) | OPTIONAL_PROPOSITION_FIELDS):
             raise ValueError('Evidence units need a complete canonical proposition')
         if self.proposition['assertion_kind'] not in KINDS:
             raise ValueError('Unknown assertion kind')

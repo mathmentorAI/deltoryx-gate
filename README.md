@@ -1,17 +1,21 @@
-# ClaimLayer · Computable Verification for AI Agents
+# ClaimLayer · Deterministic Verification & Authorization Harness for AI Agents
 
-**Eliminate the 80% human supervision bottleneck ("metawork") without sacrificing safety or auditability.**
+**The deterministic verification, abstention, and authorization harness for AI agents operating in a bounded domain.**
 
-AI agents now draft legal analyses, reconcile financials, and propose operational actions at 100× human speed—yet spend up to **80% of wall-clock time idle**, waiting for overwhelmed humans to manually cross-check every citation, number, and amendment against source documents.
+AI agents reason and propose actions fast, yet teams still spend most of their time manually cross-checking citations, numbers, exceptions, and amendments—because a single dropped proviso or ungrounded figure can trigger a bad authorization.
 
-**ClaimLayer** is a zero-dependency Python library (~2,900 LoC, pure stdlib) that sits between your AI agent and task completion like a **deterministic `<1 ms` type-checker**, replacing manual post-hoc reading and probabilistic *LLM-as-a-Judge* rollouts with **computable verification (`verify()`)**:
+**ClaimLayer** is a zero-dependency Python library (pure stdlib) that serves as the **epistemic and policy base layer** for domain agents: the agent proposes structured claims tied to exact source spans, and ClaimLayer deterministically governs what enters the ledger, detects its own gaps, and decides whether an operation can proceed:
 
 ```text
-Agent Proposal + Citations ──► ClaimLayer.verify() (<1 ms, 0 LLM calls, 0 external deps)
-                                  ├── PASS     ──► Auto-approved + SHA-256 Merkle receipt (Agent continues immediately)
-                                  ├── RETRY    ──► Exact error bounced to Agent (Self-corrects with 0 human time)
-                                  └── ESCALATE ──► Surgical 15-second side-by-side diff ONLY for genuine conflicts
+Agent Proposal + Exact Citations
+  ──► [1. Epistemic Integrity]   (Schema, condition_status, span fidelity, read completeness, pending conditions)
+  ──► [2. Authorization Policy]    (Precedence, exceptions, Q_g support/margin, numeric bounds, coverage)
+        ├── PASS     ──► Authorized to proceed + SHA-256 Merkle receipt (0 human wait)
+        ├── RETRY    ──► Actionable gap / grounding error bounced to Agent (Self-corrects automatically)
+        └── ESCALATE ──► Abstains & escalates ONLY on genuine conflicts, pending conditions, or policy caps
 ```
+
+> **What ClaimLayer is (and isn't):** ClaimLayer is **not** a general agent orchestrator or open-ended prose judge. It is the **domain-grounded verification harness**: you declare a domain's semantic contract (`Vocabulary`, conditions, scopes, clause relations, and `AcceptancePolicy`), and ClaimLayer enforces that your agent cannot authorize an action unless both the evidence and the policy allow it.
 
 ---
 
@@ -218,12 +222,19 @@ See **[`examples/harness2_securitization/`](./examples/harness2_securitization/)
 - Prior v2.1 retrieval/evidence experiments (Study A & Study B) are archived under Git tag [`v2.1-study-a-archive`](https://github.com/mathmentorAI/claim-layer/tree/v2.1-study-a-archive).
 
 
-### v3.2.1 and experimental v4
+### v3.2.1 and v4 Bounded-Domain Harness
+
+- **v4 Bounded-Domain Architecture (`src/claimlayer/v4/`)**:
+  - **Semantic domain contract (`vocabulary.py`, `domains/b2b_contracts.py`)**: declares typed predicates, units, `scope_keys`, conditions, and explicit `condition_status` (`unconditional`, `conditional`, `unknown_condition`, `unrepresentable_condition`) so missing fields never silently collapse into unconditional claims.
+  - **Extraction fidelity controls (`fidelity.py`)**: per-field span bindings (`FieldEvidence`), clause-boundary completeness checks (`unless`/`except`/`provided that`/`subject to`), independent constraint checks, and dual-reader correlated-error diagnostics (`evaluate_dual_readers`).
+  - **Scope, exception & clause precedence + two-stage gate (`authorization.py`)**: resolves `ClauseRelation` (`amends_clause`, `exception_to`, `supersedes_clause`), scope/condition specificity, and `authorize_operation()` so read errors, fidelity failures, or pending/unknown conditions block authorization (`RETRY` / `ESCALATE`).
+  - **3-layer evaluation (`benchmarks/b2b_contracts_v4_eval.py`)**: evaluates typed reasoning, extraction fidelity, and end-to-end abstention (selective risk vs. automation coverage) separately.
 
 See [the implementation and evaluation report](docs/v3_2_1_evaluation.md) for the
-external evaluation, unresolved cases, and reproducible commands. The external
-suite is not distributed in this repository. Passing structured v4 contracts does
-not establish natural-language extraction accuracy.
+external v3.2.1 evaluation, unresolved cases, and reproducible commands. The external
+suite is not distributed in this repository. Passing structured v4 contracts or
+synthetic fidelity checks does not by itself establish end-to-end LLM extraction
+accuracy on live unlabelled documents.
 
 Unkeyed receipts are rejected by default unless verified against a trusted ledger.
 Use a protected signing key for authenticated offline verification. Explicit

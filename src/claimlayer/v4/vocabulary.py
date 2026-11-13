@@ -20,6 +20,7 @@ from ..semantic.models import KINDS, canonical, digest, instant, require_string
 VALUE_TYPES = frozenset({'quantity', 'number', 'bound', 'boolean', 'enum', 'set', 'string', 'entity', 'date', 'record'})
 BOUND_OPERATORS = frozenset({'lt', 'le', 'gt', 'ge'})
 CONDITION_OPERATORS = frozenset({'eq', 'ne', 'lt', 'le', 'gt', 'ge'})
+CONDITION_STATUSES = frozenset({'unconditional', 'conditional', 'unknown_condition', 'unrepresentable_condition'})
 
 
 class UnmappedProposal(ValueError):
@@ -355,6 +356,7 @@ class Vocabulary:
     entities: tuple[tuple[str, tuple[str, ...]], ...] = ()
     closed_entities: bool = False
     scope_keys: tuple[str, ...] = ('event_id',)
+    require_explicit_condition_status: bool = False
 
     def __post_init__(self):
         require_string(self.name, 'vocabulary name')
@@ -534,7 +536,7 @@ class Vocabulary:
     def proposition(self, proposal: Mapping[str, Any]):
         """Normalize a proposal to the canonical proposition, or raise UnmappedProposal."""
         allowed = {'entity', 'predicate', 'value', 'unit', 'polarity', 'assertion_kind', 'conditions',
-                   'scope', 'valid_from', 'valid_until'}
+                   'condition_status', 'scope', 'valid_from', 'valid_until'}
         extra = set(proposal) - allowed
         if extra:
             raise UnmappedProposal('undeclared_proposal_field', '', sorted(extra))
@@ -550,6 +552,16 @@ class Vocabulary:
         if 'value' not in proposal:
             raise UnmappedProposal('value_required', 'value')
         value, unit = self.value(predicate.value, proposal['value'], proposal.get('unit'), 'value')
+        norm_conditions = list(self.conditions(predicate, proposal.get('conditions')))
+        cond_status = proposal.get('condition_status')
+        if self.require_explicit_condition_status or cond_status is not None:
+            if cond_status not in CONDITION_STATUSES:
+                raise UnmappedProposal('condition_status_required' if cond_status is None else 'unknown_condition_status',
+                                       'condition_status', cond_status)
+            if cond_status == 'conditional' and not norm_conditions:
+                raise UnmappedProposal('conditional_requires_conditions', 'conditions', cond_status)
+            if cond_status == 'unconditional' and norm_conditions:
+                raise UnmappedProposal('unconditional_forbids_conditions', 'conditions', norm_conditions)
         valid_from, valid_until = proposal.get('valid_from'), proposal.get('valid_until')
         try:
             start, end = instant(valid_from), instant(valid_until)
@@ -557,8 +569,11 @@ class Vocabulary:
             raise UnmappedProposal('invalid_validity_instant', 'valid_from/valid_until') from None
         if start and end and start > end:
             raise UnmappedProposal('inverted_validity_interval', 'valid_from/valid_until')
-        return {'entity': self.entity(proposal.get('entity')), 'predicate': predicate.name,
-                'value': value, 'unit': unit, 'polarity': polarity, 'assertion_kind': kind,
-                'conditions': list(self.conditions(predicate, proposal.get('conditions'))),
-                'scope': self.scope(proposal.get('scope')),
-                'valid_from': valid_from, 'valid_until': valid_until}
+        out = {'entity': self.entity(proposal.get('entity')), 'predicate': predicate.name,
+               'value': value, 'unit': unit, 'polarity': polarity, 'assertion_kind': kind,
+               'conditions': norm_conditions,
+               'scope': self.scope(proposal.get('scope')),
+               'valid_from': valid_from, 'valid_until': valid_until}
+        if self.require_explicit_condition_status or cond_status is not None:
+            out['condition_status'] = cond_status
+        return out

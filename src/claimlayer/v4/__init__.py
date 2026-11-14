@@ -19,6 +19,10 @@ from .authorization import (
     resolve_scope_and_precedence,
     verify_authorization_verdict,
 )
+from .correspondence import (
+    compute_response_digest,
+    verify_response_graph_correspondence,
+)
 from .domain_profile import (
     DeclaredRule,
     DomainProfile,
@@ -61,16 +65,35 @@ from .fidelity import (
 from .justification import (
     CLAIM_KINDS,
     EPISTEMIC_KIND_RANK,
+    MANDATORY_OBLIGATION_FAMILIES,
+    OBLIGATION_GENERATOR_VERSION,
     VERIFIER_FAMILIES,
     ClaimNode,
     InferenceStep,
     JustificationGraph,
     VerificationObligation,
     effective_epistemic_kind,
+    generate_mandatory_obligations,
+    infer_conclusion_semantic_domain,
 )
 from .models import AcceptancePolicy, EvidenceUnit
 from .paths import TransitiveRule
 from .reader import LLMProposalReader, ProposalReader, READER_PROMPT, STRICT_READER_PROMPT
+from .repair import (
+    LLMGraphProposalAdapter,
+    LLMRepairAgent,
+    RepairAttemptRecord,
+    RepairBudget,
+    RepairCycleResult,
+    RepairOrchestrator,
+    RequiredRepair,
+    ReviewIssue,
+    ReviewResult,
+    RuleGuidedRepairAdapter,
+    ScriptedRepairAgent,
+    review_response,
+    verify_review_freshness,
+)
 from .verifiers import (
     DEFAULT_VERIFIER_REGISTRY,
     VERIFIER_GUARANTEE_KINDS,
@@ -115,4 +138,11 @@ __all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'UnitEvaluation', 'evaluate_unit_a
            'TemporalVerifier', 'VerifierContext', 'VerifierRegistry', 'VerifierResult',
            'FieldEvidence', 'FidelityFinding', 'check_clause_boundary_completeness',
            'evaluate_dual_readers', 'render_canonical_claim', 'verify_extraction_fidelity', 'B2B_CONTRACTS_VOCABULARY',
-           'B2B_DEFAULT_ACCEPTANCE_POLICY', 'SECURITIZATION_VOCABULARY', 'SECURITIZATION_ACCEPTANCE_POLICY']
+           'B2B_DEFAULT_ACCEPTANCE_POLICY', 'SECURITIZATION_VOCABULARY', 'SECURITIZATION_ACCEPTANCE_POLICY',
+           'compute_response_digest', 'verify_response_graph_correspondence',
+           'MANDATORY_OBLIGATION_FAMILIES', 'OBLIGATION_GENERATOR_VERSION',
+           'generate_mandatory_obligations', 'infer_conclusion_semantic_domain',
+           'LLMGraphProposalAdapter', 'LLMRepairAgent', 'RepairAttemptRecord', 'RepairBudget',
+           'RepairCycleResult', 'RepairOrchestrator', 'RequiredRepair', 'ReviewIssue',
+           'ReviewResult', 'RuleGuidedRepairAdapter', 'ScriptedRepairAgent',
+           'review_response', 'verify_review_freshness']

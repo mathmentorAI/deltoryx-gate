@@ -15,15 +15,22 @@ import time
 from typing import Any, Iterable, Mapping, Sequence
 
 from ..semantic.models import EvidenceRef, SourceDocument, canonical, digest
+from .correspondence import (
+    compute_response_digest,
+    verify_response_graph_correspondence,
+)
 from .domain_profile import DomainProfile
 from .engine import EvidenceLayer, evaluate_unit_admissibility
 from .fidelity import check_clause_boundary_completeness, verify_extraction_fidelity
 from .justification import (
+    OBLIGATION_GENERATOR_VERSION,
     ClaimNode,
     InferenceStep,
     JustificationGraph,
     VerificationObligation,
     effective_epistemic_kind,
+    generate_mandatory_obligations,
+    infer_conclusion_semantic_domain,
 )
 from .models import AcceptancePolicy, EvidenceUnit
 from .verifiers import (
@@ -167,6 +174,17 @@ class ResponseAssessment:
     cache_metrics: dict[str, int] = field(default_factory=dict)
     supporting_lineage_count: int = 0
     contradicting_lineage_count: int = 0
+    response_digest: str | None = None
+    question: str | None = None
+    candidate_response: str | None = None
+    representation_mode: str = "graph_only"
+    response_correspondence_verified: bool = False
+    obligation_generator_version: str = OBLIGATION_GENERATOR_VERSION
+    proposed_obligations: tuple[dict[str, Any], ...] = ()
+    mandatory_obligations: tuple[dict[str, Any], ...] = ()
+    semantic_domain_info: dict[str, Any] = field(default_factory=dict)
+    correspondence_report: dict[str, Any] = field(default_factory=dict)
+    critical_coverage: float = 1.0
 
     def to_summary_dict(self) -> dict[str, Any]:
         return {
@@ -178,6 +196,7 @@ class ResponseAssessment:
             "conflict_index": round(self.conflict_index, 6),
             "uncertainty_index": round(self.uncertainty_index, 6),
             "verification_coverage": round(self.verification_coverage, 6),
+            "critical_coverage": round(self.critical_coverage, 6),
             "critical_unverified_steps": list(self.critical_unverified_steps),
             "supporting_evidence": list(self.supporting_evidence),
             "contradicting_evidence": list(self.contradicting_evidence),
@@ -192,6 +211,16 @@ class ResponseAssessment:
             "domain_profile_fingerprint": self.domain_profile_fingerprint,
             "assessment_digest": self.assessment_digest,
             "cache_metrics": dict(self.cache_metrics),
+            "response_digest": self.response_digest,
+            "question": self.question,
+            "candidate_response": self.candidate_response,
+            "representation_mode": self.representation_mode,
+            "response_correspondence_verified": self.response_correspondence_verified,
+            "obligation_generator_version": self.obligation_generator_version,
+            "proposed_obligations": list(self.proposed_obligations),
+            "mandatory_obligations": list(self.mandatory_obligations),
+            "semantic_domain_info": dict(self.semantic_domain_info),
+            "correspondence_report": dict(self.correspondence_report),
         }
 
 
@@ -620,6 +649,19 @@ def _evaluate_leaf_claim(
     return tuple(checks), leaf_derivations, False, unverified_attestor, eff_kind
 
 
+def _obligation_record(ob: VerificationObligation, step_id: str) -> dict[str, Any]:
+    """Serialize an obligation with origin and criticality metadata."""
+    return {
+        "obligation_id": ob.obligation_id,
+        "step_id": step_id,
+        "family": ob.family,
+        "origin": ob.origin,
+        "critical": ob.critical,
+        "mandatory_check": ob.parameters.get("mandatory_check"),
+        "parameters": canonical(dict(ob.parameters)),
+    }
+
+
 def evaluate_response(
     response: JustificationGraph | Mapping[str, Any],
     evidence: EvidenceLayer | Mapping[str, SourceDocument] | Sequence[SourceDocument] | Mapping[str, str] | None = None,
@@ -630,6 +672,9 @@ def evaluate_response(
     as_of: str | None = None,
     clause_relations: Sequence[Any] = (),
     verifier_registry: VerifierRegistry | None = None,
+    question: str | Mapping[str, Any] | None = None,
+    candidate_response: str | None = None,
+    representation_mode: str | None = None,
 ) -> ResponseAssessment:
     """Evaluate a generated response / JustificationGraph without requiring an authorization policy."""
     t_start = time.monotonic()
@@ -638,6 +683,25 @@ def evaluate_response(
     active_budget = budget or VerificationBudget()
     registry = verifier_registry or DEFAULT_VERIFIER_REGISTRY
     documents, layer = _normalize_evidence_inputs(evidence)
+
+    if isinstance(question, Mapping):
+        q_str: str | None = str(question.get("text") or question.get("question") or "").strip() or None
+    elif question is not None:
+        q_str = str(question)
+    else:
+        q_str = None
+
+    allowed_modes = ("graph_only", "supplied_graph_with_response", "adapter_extracted_graph")
+    if representation_mode is None:
+        rep_mode = "graph_only" if candidate_response is None else "supplied_graph_with_response"
+    else:
+        if representation_mode not in allowed_modes:
+            raise ValueError(
+                f"Unsupported representation_mode {representation_mode!r}; expected one of {allowed_modes}"
+            )
+        rep_mode = representation_mode
+
+    resp_digest = compute_response_digest(candidate_response, question)
 
     graph = JustificationGraph.from_response(response, vocabulary=profile.vocabulary)
     structural_errors = graph.validate_structure()
@@ -664,6 +728,7 @@ def evaluate_response(
             conflict_index=1.0,
             uncertainty_index=0.0,
             verification_coverage=1.0,
+            critical_coverage=1.0,
             critical_unverified_steps=(),
             supporting_evidence=(),
             contradicting_evidence=(),
@@ -676,8 +741,20 @@ def evaluate_response(
             domain_profile_id=profile.profile_id,
             domain_profile_version=profile.version,
             domain_profile_fingerprint=profile.fingerprint(),
-            assessment_digest=digest({"conclusion_id": conc.claim_id, "errors": structural_errors}),
+            assessment_digest=digest({
+                "conclusion_id": conc.claim_id,
+                "errors": structural_errors,
+                "response_digest": resp_digest,
+                "representation_mode": rep_mode,
+                "obligation_generator_version": OBLIGATION_GENERATOR_VERSION,
+            }),
             cache_metrics={"cache_hits": 0, "cache_misses": 1, "recomputed_nodes": 1, "reused_nodes": 0, "budget_deferred_steps": 0},
+            response_digest=resp_digest,
+            question=q_str,
+            candidate_response=candidate_response,
+            representation_mode=rep_mode,
+            response_correspondence_verified=False,
+            obligation_generator_version=OBLIGATION_GENERATOR_VERSION,
         )
 
     profile_fp = profile.fingerprint()
@@ -687,6 +764,47 @@ def evaluate_response(
     # Invalidate changed source revisions cleanly if cache is active
     if cache is not None and documents:
         cache.invalidate_changed_sources({did: doc.revision for did, doc in documents.items()})
+
+    semantic_domain_info = infer_conclusion_semantic_domain(
+        graph,
+        question=question,
+        candidate_text=candidate_response,
+        domain_profile=profile,
+        as_of=as_of,
+    )
+    preliminary_corr: dict[str, Any]
+    if candidate_response is not None:
+        preliminary_corr = verify_response_graph_correspondence(
+            candidate_response,
+            graph,
+            question=question,
+            documents=documents,
+            unit_registry=profile.vocabulary.units if profile.vocabulary is not None else None,
+            has_material_conflict=False,
+        )
+    else:
+        preliminary_corr = {
+            "response_checked": False,
+            "correspondence_ok": False,
+            "issues": (),
+        }
+    base_mandatory_obs = generate_mandatory_obligations(
+        graph,
+        question=question,
+        candidate_text=candidate_response,
+        documents=documents,
+        domain_profile=profile,
+        as_of=as_of,
+        has_material_conflict=False,
+    )
+    non_conflict_mandatory_obs = tuple(
+        ob for ob in base_mandatory_obs if ob.parameters.get("mandatory_check") != "conflict_disclosure"
+    )
+    evaluated_mandatory_ids: set[str] = set()
+    proposed_obligations_records: list[dict[str, Any]] = []
+    mandatory_obligations_records: list[dict[str, Any]] = []
+    critical_check_keys: set[tuple[str, str]] = set()
+    conc_extra_steps: set[str] = set()
 
     # Compute node depth from leaves
     node_depth: dict[str, int] = {}
@@ -714,6 +832,8 @@ def evaluate_response(
     deferred_steps = 0
     executed_steps = 0
     semantic_calls_used = 0
+    mandatory_cache_hits = 0
+    mandatory_cache_misses = 0
 
     def _budget_time_exceeded() -> bool:
         if active_budget.max_latency_ms is None:
@@ -778,6 +898,7 @@ def evaluate_response(
             node_effective_kind[cid] = eff_kind
             for chk in leaf_checks:
                 all_assumptions.extend(chk.assumptions)
+                critical_check_keys.add((chk.step_id, chk.obligation_id))
                 if chk.status == "unknown":
                     pending_obligations.append({
                         "obligation_id": chk.obligation_id,
@@ -785,6 +906,7 @@ def evaluate_response(
                         "family": chk.family,
                         "reasons": list(chk.reasons),
                         "critical": True,
+                        "origin": "engine_mandatory",
                     })
             continue
 
@@ -799,7 +921,16 @@ def evaluate_response(
         for step in inc_steps:
             all_assumptions.extend(step.assumptions)
             step_depth = 1 + max((node_depth.get(pid, 0) for pid in step.premises), default=0)
-
+            is_conclusion_step = cid == graph.conclusion_id
+            effective_step_obligations: list[VerificationObligation] = list(step.obligations)
+            for ob in step.obligations:
+                if ob.origin == "engine_mandatory":
+                    mandatory_obligations_records.append(_obligation_record(ob, step.step_id))
+                    evaluated_mandatory_ids.add(ob.obligation_id)
+                else:
+                    proposed_obligations_records.append(_obligation_record(ob, step.step_id))
+            # Keep probabilistic open_semantics steps isolated so PROBABILISTIC_ONLY_CRITICAL_STEP stays intact;
+            # engine-imposed conclusion mandatory obligations are evaluated on dedicated mandatory::conclusion below.
             prem_digests = [node_effective_digest[pid] for pid in step.premises]
             step_cache_key = digest({
                 "kind": "step",
@@ -809,6 +940,14 @@ def evaluate_response(
                 "as_of": as_of,
                 "profile_fp": profile_fp,
                 "verifier_versions": verifier_versions,
+                "obligation_generator_version": OBLIGATION_GENERATOR_VERSION,
+                "mandatory_obs": [
+                    digest(o.to_dict())
+                    for o in effective_step_obligations
+                    if o.origin == "engine_mandatory"
+                ],
+                "rep_mode": rep_mode if is_conclusion_step else "graph_only",
+                "resp_digest": resp_digest if is_conclusion_step else None,
             })
 
             cached_step = cache.get_step(step_cache_key) if cache is not None else None
@@ -840,7 +979,7 @@ def evaluate_response(
                             verifier_id="budget_guard",
                             verifier_version="1.0.0",
                         )
-                        for ob in step.obligations
+                        for ob in effective_step_obligations
                     ]
                     step_lineages = []
                     step_refuted = False
@@ -850,8 +989,8 @@ def evaluate_response(
                     executed_steps += 1
 
                     # Separate cheap deterministic obligations from expensive open_semantics
-                    det_obs = [o for o in step.obligations if o.family != "open_semantics"]
-                    sem_obs = [o for o in step.obligations if o.family == "open_semantics"]
+                    det_obs = [o for o in effective_step_obligations if o.family != "open_semantics"]
+                    sem_obs = [o for o in effective_step_obligations if o.family == "open_semantics"]
 
                     premises_nodes = tuple(graph.claims[pid] for pid in step.premises)
                     det_ctx = VerifierContext(
@@ -864,6 +1003,9 @@ def evaluate_response(
                         clause_relations=tuple(clause_relations),
                         as_of=as_of,
                         allow_semantic_call=False,
+                        question=question,
+                        candidate_response=candidate_response if is_conclusion_step else None,
+                        correspondence_facts=preliminary_corr if is_conclusion_step else {},
                     )
 
                     step_results = []
@@ -893,6 +1035,9 @@ def evaluate_response(
                             clause_relations=tuple(clause_relations),
                             as_of=as_of,
                             allow_semantic_call=can_call_sem,
+                            question=question,
+                            candidate_response=candidate_response if is_conclusion_step else None,
+                            correspondence_facts=preliminary_corr if is_conclusion_step else {},
                         )
                         step_results.append(registry.verify_obligation(ob, sem_ctx))
 
@@ -966,8 +1111,13 @@ def evaluate_response(
             has_step_pending = False
             for r in step_results:
                 all_assumptions.extend(r.assumptions)
-                ob_match = next((o for o in step.obligations if o.obligation_id == r.obligation_id), None)
-                is_crit = bool(step.critical and (ob_match.critical if ob_match else True))
+                ob_match = next((o for o in effective_step_obligations if o.obligation_id == r.obligation_id), None)
+                is_crit = bool(
+                    (ob_match.critical if ob_match else True)
+                    and (step.critical or (ob_match is not None and ob_match.origin == "engine_mandatory"))
+                )
+                if is_crit:
+                    critical_check_keys.add((r.step_id, r.obligation_id))
                 if r.status == "unknown":
                     pending_obligations.append({
                         "obligation_id": r.obligation_id,
@@ -975,6 +1125,7 @@ def evaluate_response(
                         "family": r.family,
                         "reasons": list(r.reasons),
                         "critical": is_crit,
+                        "origin": ob_match.origin if ob_match else "engine_mandatory",
                     })
                     if is_crit:
                         has_step_pending = True
@@ -1020,12 +1171,185 @@ def evaluate_response(
                     "support": o_sup,
                 })
 
+    has_material_conflict = bool(contradicting_records)
+    correspondence_report: dict[str, Any]
+    if candidate_response is not None:
+        correspondence_report = verify_response_graph_correspondence(
+            candidate_response,
+            graph,
+            question=question,
+            documents=documents,
+            unit_registry=profile.vocabulary.units if profile.vocabulary is not None else None,
+            has_material_conflict=has_material_conflict,
+        )
+    else:
+        correspondence_report = {
+            "response_checked": False,
+            "correspondence_ok": False,
+            "issues": (),
+        }
+
+    final_mandatory_obs = generate_mandatory_obligations(
+        graph,
+        question=question,
+        candidate_text=candidate_response,
+        documents=documents,
+        domain_profile=profile,
+        as_of=as_of,
+        has_material_conflict=has_material_conflict,
+    )
+    remaining_mandatory = [ob for ob in final_mandatory_obs if ob.obligation_id not in evaluated_mandatory_ids]
+    existing_conc_steps = graph.incoming_steps(conc_id)
+    if remaining_mandatory:
+        target_step_id = "mandatory::conclusion"
+        conc_extra_steps.add(target_step_id)
+        merged_premises = tuple(dict.fromkeys(pid for st in existing_conc_steps for pid in st.premises))
+        merged_params: dict[str, Any] = {}
+        primary_op = "mandatory_conclusion_verification"
+        if existing_conc_steps:
+            primary_op = existing_conc_steps[0].operation
+            for st in existing_conc_steps:
+                for pk, pv in st.parameters.items():
+                    merged_params.setdefault(pk, pv)
+        synthetic_step = InferenceStep(
+            step_id=target_step_id,
+            operation=primary_op,
+            premises=merged_premises,
+            conclusion_id=conc_id,
+            obligations=tuple(remaining_mandatory),
+            parameters=merged_params,
+            critical=True,
+        )
+        mandatory_cache_key = digest({
+            "kind": "mandatory_conclusion",
+            "conclusion": conc_node.content_digest(),
+            "premise_eff_digests": [node_effective_digest[pid] for pid in merged_premises if pid in node_effective_digest],
+            "doc_revs": {did: doc.revision for did, doc in documents.items()},
+            "as_of": as_of,
+            "profile_fp": profile_fp,
+            "verifier_versions": verifier_versions,
+            "obligation_generator_version": OBLIGATION_GENERATOR_VERSION,
+            "mandatory_obs": [digest(o.to_dict()) for o in remaining_mandatory],
+            "rep_mode": rep_mode,
+            "resp_digest": resp_digest,
+            "has_material_conflict": has_material_conflict,
+        })
+        cached_mand = cache.get_step(mandatory_cache_key) if cache is not None else None
+        if cached_mand is not None:
+            mandatory_cache_hits += 1
+            mand_results = list(cached_mand.results)
+            for mob in remaining_mandatory:
+                mandatory_obligations_records.append(_obligation_record(mob, target_step_id))
+                evaluated_mandatory_ids.add(mob.obligation_id)
+        else:
+            mandatory_cache_misses += 1
+            post_ctx = VerifierContext(
+                step=synthetic_step,
+                conclusion=conc_node,
+                premises=tuple(graph.claims[pid] for pid in synthetic_step.premises),
+                domain_profile=profile,
+                documents=documents,
+                layer=layer,
+                clause_relations=tuple(clause_relations),
+                as_of=as_of,
+                allow_semantic_call=False,
+                question=question,
+                candidate_response=candidate_response,
+                correspondence_facts=correspondence_report,
+            )
+            mand_results = []
+            for mob in remaining_mandatory:
+                mandatory_obligations_records.append(_obligation_record(mob, target_step_id))
+                evaluated_mandatory_ids.add(mob.obligation_id)
+                mand_results.append(registry.verify_obligation(mob, post_ctx))
+            if cache is not None:
+                m_deps: set[str] = {conc_id} | set(conc_ancestors)
+                for cid_m in list(m_deps):
+                    if cid_m in graph.claims:
+                        m_deps |= set(graph.claims[cid_m].doc_ids())
+                m_eff_dig = digest({"key": mandatory_cache_key, "results": [r.to_dict() for r in mand_results]})
+                cache.register_step(
+                    mandatory_cache_key,
+                    _CachedStepEntry(
+                        cache_key=mandatory_cache_key,
+                        effective_node_digest=m_eff_dig,
+                        results=tuple(mand_results),
+                        lineages=(),
+                        source_deps=frozenset(m_deps),
+                        refuted=any(r.status == "refuted" for r in mand_results),
+                    ),
+                )
+
+        mob_by_id = {mob.obligation_id: mob for mob in remaining_mandatory}
+        for m_res in mand_results:
+            mob = mob_by_id.get(m_res.obligation_id)
+            is_mob_crit = bool(mob.critical) if mob is not None else True
+            is_conflict_ob = bool(mob is not None and mob.parameters.get("mandatory_check") == "conflict_disclosure")
+            all_checks.append(m_res)
+            all_assumptions.extend(m_res.assumptions)
+            if is_mob_crit:
+                critical_check_keys.add((m_res.step_id, m_res.obligation_id))
+            if m_res.status == "refuted":
+                node_refuted[conc_id] = True
+                conc_derivations = []
+            elif m_res.status == "unknown":
+                pending_obligations.append({
+                    "obligation_id": m_res.obligation_id,
+                    "step_id": m_res.step_id,
+                    "family": m_res.family,
+                    "reasons": list(m_res.reasons),
+                    "critical": is_mob_crit,
+                    "origin": "engine_mandatory",
+                })
+                if is_mob_crit and m_res.step_id not in critical_unverified:
+                    critical_unverified.append(m_res.step_id)
+                if not is_conflict_ob:
+                    conc_derivations = []
+
+    corr_issues = tuple(correspondence_report.get("issues", ()))
+    if candidate_response is not None:
+        corr_step_id = "mandatory::response_correspondence"
+        conc_extra_steps.add(corr_step_id)
+        if corr_issues:
+            for idx, issue in enumerate(corr_issues):
+                code = str(issue.get("code") or f"CORRESPONDENCE_ISSUE_{idx}")
+                ob_id = f"mandatory::correspondence::{code.lower()}::{idx}"
+                chk = VerifierResult(
+                    obligation_id=ob_id,
+                    step_id=corr_step_id,
+                    family="explicit_logic",
+                    status="refuted",
+                    guarantee_kind="deterministic_formal",
+                    evidence=dict(issue),
+                    reasons=(code,),
+                    verifier_id="response_correspondence_verifier",
+                    verifier_version="1.0.0",
+                )
+                all_checks.append(chk)
+                critical_check_keys.add((chk.step_id, chk.obligation_id))
+            node_refuted[conc_id] = True
+            conc_derivations = []
+        else:
+            chk = VerifierResult(
+                obligation_id="mandatory::response_correspondence",
+                step_id=corr_step_id,
+                family="explicit_logic",
+                status="verified",
+                guarantee_kind="deterministic_formal",
+                evidence={"response_digest": resp_digest, "representation_mode": rep_mode},
+                reasons=("RESPONSE_GRAPH_CORRESPONDENCE_VERIFIED",),
+                verifier_id="response_correspondence_verifier",
+                verifier_version="1.0.0",
+            )
+            all_checks.append(chk)
+            critical_check_keys.add((chk.step_id, chk.obligation_id))
+
     raw_support, sup_lineages = _fuse_correlated_derivations(conc_derivations)
     raw_opposition, opp_lineages = _fuse_correlated_derivations(contradicting_derivations)
 
     # Check if any critical check to conclusion was formally refuted
     conc_scope_nodes = conc_ancestors | {conc_id}
-    conc_steps = {s.step_id for s in graph.steps if s.conclusion_id in conc_scope_nodes}
+    conc_steps = {s.step_id for s in graph.steps if s.conclusion_id in conc_scope_nodes} | conc_extra_steps
     has_formal_refutation = bool(
         node_refuted.get(conc_id, False)
         or any(
@@ -1033,14 +1357,31 @@ def evaluate_response(
             for c in all_checks
         )
     )
+    response_correspondence_verified = bool(
+        candidate_response is not None
+        and correspondence_report.get("correspondence_ok")
+        and not corr_issues
+        and not has_formal_refutation
+    )
 
-    # Compute verification coverage over all non-not_applicable checks
+    # Compute verification coverage over all non-not_applicable checks and critical/mandatory subset
     applicable_checks = [c for c in all_checks if c.status != "not_applicable"]
     completed_determinate = [c for c in applicable_checks if c.status in ("verified", "refuted")]
     if applicable_checks:
-        coverage = round(len(completed_determinate) / len(applicable_checks), 6)
+        all_coverage = round(len(completed_determinate) / len(applicable_checks), 6)
     else:
-        coverage = 1.0
+        all_coverage = 1.0
+
+    critical_applicable = [
+        c for c in applicable_checks if (c.step_id, c.obligation_id) in critical_check_keys
+    ]
+    if critical_applicable:
+        critical_determinate = [c for c in critical_applicable if c.status in ("verified", "refuted")]
+        critical_coverage = round(len(critical_determinate) / len(critical_applicable), 6)
+    else:
+        critical_coverage = 1.0
+
+    coverage = min(all_coverage, critical_coverage)
 
     # Compute orthodox orthogonal Support / Conflict / Uncertainty decomposition
     if has_formal_refutation:
@@ -1124,6 +1465,8 @@ def evaluate_response(
         "recomputed_nodes": recomputed_nodes,
         "reused_nodes": reused_nodes,
         "budget_deferred_steps": deferred_steps,
+        "mandatory_cache_hits": mandatory_cache_hits,
+        "mandatory_cache_misses": mandatory_cache_misses,
     }
 
     summary_for_digest = {
@@ -1134,8 +1477,13 @@ def evaluate_response(
         "conflict_index": conflict_idx,
         "uncertainty_index": uncertainty_idx,
         "verification_coverage": coverage,
+        "critical_coverage": critical_coverage,
         "critical_unverified_steps": critical_unverified,
         "profile_fp": profile_fp,
+        "response_digest": resp_digest,
+        "representation_mode": rep_mode,
+        "obligation_generator_version": OBLIGATION_GENERATOR_VERSION,
+        "mandatory_obligations": mandatory_obligations_records,
     }
 
     return ResponseAssessment(
@@ -1147,6 +1495,7 @@ def evaluate_response(
         conflict_index=conflict_idx,
         uncertainty_index=uncertainty_idx,
         verification_coverage=coverage,
+        critical_coverage=critical_coverage,
         critical_unverified_steps=tuple(critical_unverified),
         supporting_evidence=tuple(supporting_records),
         contradicting_evidence=tuple(contradicting_records),
@@ -1163,4 +1512,14 @@ def evaluate_response(
         cache_metrics=cache_metrics,
         supporting_lineage_count=sup_lineages,
         contradicting_lineage_count=opp_lineages,
+        response_digest=resp_digest,
+        question=q_str,
+        candidate_response=candidate_response,
+        representation_mode=rep_mode,
+        response_correspondence_verified=response_correspondence_verified,
+        obligation_generator_version=OBLIGATION_GENERATOR_VERSION,
+        proposed_obligations=tuple(proposed_obligations_records),
+        mandatory_obligations=tuple(mandatory_obligations_records),
+        semantic_domain_info=semantic_domain_info,
+        correspondence_report=correspondence_report,
     )

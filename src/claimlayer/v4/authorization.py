@@ -1023,6 +1023,35 @@ def authorize(
             )
         )
 
+    # 6b. Exploratory / approximate / source-conditional / subtotal gate
+    exploratory_reasons = {
+        r
+        for chk in assessment.completed_checks
+        for r in chk.reasons
+        if r in {
+            "TEMPORAL_APPROXIMATION_WITHIN_DERIVED_BOUNDS",
+            "AGGREGATION_SUBTOTAL_VERIFIED",
+            "SOURCE_CONDITIONAL_ATTRIBUTION_VERIFIED",
+        }
+    }
+    if assessment.conclusion.approximate or exploratory_reasons:
+        issues.append(
+            AuthorizationIssue(
+                code="EXPLORATORY_QUALIFIED_CONCLUSION_NOT_OPERATIONAL",
+                stage="authorization_policy",
+                disposition="ESCALATE",
+                predicate=assessment.conclusion.predicate or None,
+                message=(
+                    "Conclusion is verified only as an approximate, partial-subtotal, or source-conditional "
+                    "narrative explanation; autonomous operational execution requires exact corroborated evidence."
+                ),
+                detail={
+                    "approximate": bool(assessment.conclusion.approximate),
+                    "exploratory_reasons": sorted(exploratory_reasons),
+                },
+            )
+        )
+
     # 7. Ledger unread/read_error state check if bound to an EvidenceLayer
     state: dict[str, Any] | None = None
     layer_docs: dict[str, SourceDocument] = {}

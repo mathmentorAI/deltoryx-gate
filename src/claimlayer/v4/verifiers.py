@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from calendar import monthrange
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import re
 from typing import Any, Callable, Mapping, Protocol, Sequence
@@ -108,6 +108,9 @@ class VerifierContext:
     clause_relations: tuple[Any, ...] = ()
     as_of: str | None = None
     allow_semantic_call: bool = True
+    question: str | Mapping[str, Any] | None = None
+    candidate_response: str | None = None
+    correspondence_facts: Mapping[str, Any] = field(default_factory=dict)
 
 
 class Verifier(Protocol):
@@ -632,6 +635,8 @@ class QuantityVerifier:
 
         # For explicit conversion or same-dimension comparison/addition/aggregation checks
         op = context.step.operation.lower()
+        is_mandatory_qty = params.get("mandatory_check") == "quantity_precision_and_units"
+        temporal_age_mode = bool(params.get("temporal_age_mode", False))
         additive_or_conversion = {
             "unit_conversion",
             "quantities",
@@ -657,8 +662,8 @@ class QuantityVerifier:
             "agg_min",
             "agg_max",
         }
-        if op not in additive_or_conversion:
-            # Multiplicative/ratio ops still validate that declared units are valid.
+        if op not in additive_or_conversion or (is_mandatory_qty and temporal_age_mode):
+            # Multiplicative/ratio ops and date-based age computations still validate that declared units are valid.
             return VerifierResult(
                 obligation_id=obligation.obligation_id,
                 step_id=context.step.step_id,
@@ -698,6 +703,19 @@ class QuantityVerifier:
                 guarantee_kind=self.guarantee_kind,
                 evidence={"premise_dimension": prem_dim, "conclusion_dimension": conc_dim},
                 reasons=("UNIT_DIMENSION_MISMATCH",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        if is_mandatory_qty and conc.approximate and params.get("rounding_tolerance") is None and params.get("tolerance") is None and conc.approx_tolerance is None:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="unknown",
+                guarantee_kind=self.guarantee_kind,
+                evidence={"dimension": prem_dim or conc_dim, "unit": conc_uname},
+                reasons=("UNSPECIFIED_QUANTITY_ROUNDING_OR_TOLERANCE",),
                 verifier_id=self.verifier_id,
                 verifier_version=self.version,
             )
@@ -744,20 +762,76 @@ class QuantityVerifier:
 # Family 3: temporal
 # ---------------------------------------------------------------------------
 
+def _safe_date_shift_year(d: date, years_delta: int) -> date:
+    """Shift calendar date by years_delta safely handling Feb 29."""
+    target_year = d.year + years_delta
+    try:
+        return d.replace(year=target_year)
+    except ValueError:
+        return date(target_year, d.month, 28)
+
+
 class TemporalVerifier:
     """Dates, Allen interval relations, derived ages and durations with granularity uncertainty."""
 
     family = "temporal"
     verifier_id = "deterministic_temporal_interval"
-    version = "1.0.0"
+    version = "1.1.0"
     guarantee_kind = "deterministic_formal"
 
     def _extract_start_end_bounds(
         self, obligation: VerificationObligation, context: VerifierContext
-    ) -> tuple[tuple[date, date, str] | None, tuple[date, date, str] | None]:
+    ) -> tuple[tuple[date, date, str] | None, tuple[date, date, str] | None, int | None, tuple[date, date, str] | None]:
         params = {**context.step.parameters, **obligation.parameters}
+        anchor_age_raw = params.get("anchor_age")
+        anchor_age: int | None = None
+        if anchor_age_raw is not None:
+            dec_a = _to_decimal(anchor_age_raw)
+            if dec_a is not None and dec_a >= 0 and dec_a == int(dec_a):
+                anchor_age = int(dec_a)
+
+        anchor_date_raw = params.get("anchor_date")
         start_raw = params.get("start_date") or params.get("birth_date")
         end_raw = params.get("end_date") or params.get("reference_date") or context.as_of
+
+        # Attempt to discover anchor_age + anchor_date from premises if explicit params omitted
+        if anchor_age is None and start_raw is None:
+            for p in context.premises:
+                pk = label_key(p.predicate).replace(" ", "_") if p.predicate else ""
+                if pk in {"age", "age_at_anchor", "anchor_age", "edad"} or (
+                    p.unit and label_key(p.unit) in {"year", "years", "año", "años"} and p.valid_from
+                ):
+                    dec_p = _to_decimal(p.value)
+                    if dec_p is not None and dec_p >= 0 and dec_p == int(dec_p):
+                        anchor_age = int(dec_p)
+                        if anchor_date_raw is None:
+                            anchor_date_raw = p.valid_from or p.valid_until
+                        break
+
+        if anchor_age is not None and anchor_date_raw is None:
+            for p in context.premises:
+                b = _parse_date_bounds(p.value if isinstance(p.value, str) else str(p.value) if isinstance(p.value, int) and 1500 <= p.value <= 2150 else p.valid_from)
+                if b is not None and str(p.value) != str(end_raw):
+                    anchor_date_raw = p.value if isinstance(p.value, str) else str(p.value) if isinstance(p.value, int) else p.valid_from
+                    break
+
+        if anchor_age is not None:
+            anchor_b = _parse_date_bounds(anchor_date_raw)
+            if end_raw is None and len(context.premises) >= 2:
+                for p in reversed(context.premises):
+                    if p.predicate not in {"age", "age_at_anchor", "anchor_age", "edad"}:
+                        cand_e = p.value if isinstance(p.value, str) else str(p.value) if isinstance(p.value, int) and 1500 <= p.value <= 2150 else p.valid_from
+                        if cand_e and str(cand_e) != str(anchor_date_raw):
+                            end_raw = cand_e
+                            break
+            end_b = _parse_date_bounds(str(end_raw) if isinstance(end_raw, int) else end_raw)
+            if anchor_b is not None:
+                a0_min, a0_max, a_prec = anchor_b
+                # On a0_min, completed age == anchor_age requires birth after (a0_min - (anchor_age+1) years)
+                birth_min = _safe_date_shift_year(a0_min, -(anchor_age + 1)) + timedelta(days=1)
+                # On a0_max, completed age >= anchor_age allows birth up to (a0_max - anchor_age years)
+                birth_max = _safe_date_shift_year(a0_max, -anchor_age)
+                return (birth_min, birth_max, f"anchor_{a_prec}"), end_b, anchor_age, anchor_b
 
         if start_raw is None and len(context.premises) >= 1:
             p0 = context.premises[0]
@@ -766,7 +840,7 @@ class TemporalVerifier:
             p1 = context.premises[1]
             end_raw = p1.value if isinstance(p1.value, str) else p1.valid_from
 
-        return _parse_date_bounds(start_raw), _parse_date_bounds(end_raw)
+        return _parse_date_bounds(start_raw), _parse_date_bounds(end_raw), None, None
 
     def verify(self, obligation: VerificationObligation, context: VerifierContext) -> VerifierResult:
         params = {**context.step.parameters, **obligation.parameters}
@@ -775,8 +849,8 @@ class TemporalVerifier:
         if op in {"precedes", "meets", "overlaps", "during", "contains", "temporal_order"}:
             return self._verify_allen_relation(obligation, context, op, params)
 
-        # Derived age or duration (e.g. age from birth_date and reference_date/as_of)
-        if op in {"age", "temporal_age", "duration", "temporal_duration", "temporal"}:
+        # Derived age or duration (including mandatory::age_and_duration checks even when step uses op="add")
+        if op in {"age", "temporal_age", "duration", "temporal_duration", "temporal"} or params.get("mandatory_check") == "temporal_precision":
             return self._verify_age_or_duration(obligation, context, op, params)
 
         return VerifierResult(
@@ -797,7 +871,7 @@ class TemporalVerifier:
         op: str,
         params: Mapping[str, Any],
     ) -> VerifierResult:
-        start_b, end_b = self._extract_start_end_bounds(obligation, context)
+        start_b, end_b, anchor_age, anchor_b = self._extract_start_end_bounds(obligation, context)
         if start_b is None or end_b is None:
             return VerifierResult(
                 obligation_id=obligation.obligation_id,
@@ -812,6 +886,18 @@ class TemporalVerifier:
 
         s_min, s_max, s_prec = start_b
         e_min, e_max, e_prec = end_b
+        if anchor_b is not None and anchor_b[0] > e_max:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="refuted",
+                guarantee_kind=self.guarantee_kind,
+                evidence={"anchor_bounds": [anchor_b[0].isoformat(), anchor_b[1].isoformat()], "end_bounds": [e_min.isoformat(), e_max.isoformat()]},
+                reasons=("ANCHOR_DATE_AFTER_REFERENCE_DATE",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
         if s_min > e_max:
             return VerifierResult(
                 obligation_id=obligation.obligation_id,
@@ -825,21 +911,25 @@ class TemporalVerifier:
                 verifier_version=self.version,
             )
 
-        unit_hint = str(params.get("duration_unit") or context.conclusion.unit or "years").lower()
+        unit_hint = str(params.get("duration_unit") or params.get("metric") or context.conclusion.unit or "years").lower()
         assumptions = list(context.step.assumptions)
         if s_prec != "day" or e_prec != "day":
             assumptions.append(f"coarse_date_granularity:{s_prec}->{e_prec}")
 
-        if op in {"age", "temporal_age"} or unit_hint in {"year", "years"}:
-            # Smallest possible age/years: latest start paired with earliest reference date
-            # Largest possible age/years: earliest start paired with latest reference date
-            lo_val = Decimal(_completed_years(s_max, e_min))
-            hi_val = Decimal(_completed_years(s_min, e_max))
-            metric = "years"
-        elif unit_hint in {"month", "months"}:
+        if unit_hint in {"month", "months", "mes", "meses"} and op not in {"age", "temporal_age"}:
             lo_val = Decimal(_completed_months(s_max, e_min))
             hi_val = Decimal(_completed_months(s_min, e_max))
             metric = "months"
+        elif unit_hint in {"day", "days", "día", "días", "dia", "dias"} and op not in {"age", "temporal_age"}:
+            lo_days = (e_min - s_max).days
+            hi_days = (e_max - s_min).days
+            lo_val = Decimal(max(0, lo_days))
+            hi_val = Decimal(max(0, hi_days))
+            metric = "days"
+        elif op in {"age", "temporal_age"} or params.get("mandatory_check") == "temporal_precision" or unit_hint in {"year", "years", "año", "años"}:
+            lo_val = Decimal(_completed_years(s_max, e_min))
+            hi_val = Decimal(_completed_years(s_min, e_max))
+            metric = "years"
         else:
             lo_days = (e_min - s_max).days
             hi_days = (e_max - s_min).days
@@ -861,71 +951,168 @@ class TemporalVerifier:
                 verifier_version=self.version,
             )
 
-        p_lo, p_hi = conc_interval
+        raw_lo, raw_hi = conc_interval
         approx_tol = _to_decimal(
             params.get("approx_tolerance")
             if params.get("approx_tolerance") is not None
             else conc.approx_tolerance
         )
-        is_approx = bool(conc.approximate or approx_tol is not None or params.get("approximate", False))
-        if approx_tol is not None:
-            p_lo -= approx_tol
-            p_hi += approx_tol
-            assumptions.append(f"declared_approx_tolerance:{str(approx_tol)}")
-        elif is_approx and p_lo == p_hi:
-            # Declared qualitative approximation without explicit numeric margin gets +/- 1 unit.
-            p_lo -= Decimal(1)
-            p_hi += Decimal(1)
-            assumptions.append(f"declared_approximation_margin:1_{metric}")
 
-        ev_data = {
+        # Incorporate natural-language response precision state when correspondence check runs
+        corr = context.correspondence_facts or {}
+        resp_approx_contradicted = bool(corr.get("contradictory_precision_qualification", False))
+        resp_approx_present = corr.get("response_approximated_or_ranged")
+        is_approx = bool(conc.approximate or approx_tol is not None or params.get("approximate", False))
+        if corr.get("response_checked") and not resp_approx_present:
+            # Even if graph claimed `approximate=True`, an unqualified exact statement in text fails exactness check
+            is_approx = False
+        elif corr.get("response_checked") and resp_approx_present and not resp_approx_contradicted:
+            is_approx = True
+
+        # Check explicit numeric/interval discrepancy BEFORE applying any approximation tolerance:
+        # "Aproximadamente 110" NEVER passes when the true derived interval is [105, 107]!
+        ev_base = {
             "computed_interval": [str(lo_val), str(hi_val)],
-            "proposed_interval": [str(p_lo), str(p_hi)],
+            "proposed_interval": [str(raw_lo), str(raw_hi)],
             "metric": metric,
             "start_precision": s_prec,
             "end_precision": e_prec,
         }
+        if anchor_age is not None and anchor_b is not None:
+            ev_base["anchor_age"] = anchor_age
+            ev_base["anchor_bounds"] = [anchor_b[0].isoformat(), anchor_b[1].isoformat()]
 
-        # Case 1: Proposed interval completely covers the possible ground interval [lo_val, hi_val]
-        if p_lo <= lo_val and hi_val <= p_hi:
-            return VerifierResult(
-                obligation_id=obligation.obligation_id,
-                step_id=context.step.step_id,
-                family=self.family,
-                status="verified",
-                guarantee_kind=self.guarantee_kind,
-                evidence=ev_data,
-                assumptions=tuple(dict.fromkeys(assumptions)),
-                reasons=("TEMPORAL_DERIVATION_VERIFIED",),
-                verifier_id=self.verifier_id,
-                verifier_version=self.version,
-            )
-
-        # Case 2: Disjoint intervals -> provably false regardless of unresolved date precision
-        if p_hi < lo_val or p_lo > hi_val:
+        if resp_approx_contradicted:
             return VerifierResult(
                 obligation_id=obligation.obligation_id,
                 step_id=context.step.step_id,
                 family=self.family,
                 status="refuted",
                 guarantee_kind=self.guarantee_kind,
-                evidence=ev_data,
+                evidence=ev_base,
+                assumptions=tuple(dict.fromkeys(assumptions)),
+                reasons=("CONTRADICTORY_PRECISION_QUALIFICATION",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        if raw_hi < lo_val or raw_lo > hi_val:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="refuted",
+                guarantee_kind=self.guarantee_kind,
+                evidence=ev_base,
                 assumptions=tuple(dict.fromkeys(assumptions)),
                 reasons=("TEMPORAL_DERIVATION_CONTRADICTED",),
                 verifier_id=self.verifier_id,
                 verifier_version=self.version,
             )
 
-        # Case 3: Partial overlap due to coarse date granularity (e.g. born 1980, ref 2025-06 => [44, 45])
+        # Effective interval when explicit approx_tolerance is declared vs derived granularity interval
+        if approx_tol is not None and raw_lo == raw_hi:
+            p_lo = raw_lo - approx_tol
+            p_hi = raw_hi + approx_tol
+            assumptions.append(f"declared_approx_tolerance:{str(approx_tol)}")
+            ev_data = {**ev_base, "effective_interval": [str(p_lo), str(p_hi)]}
+            if p_lo <= lo_val and hi_val <= p_hi:
+                return VerifierResult(
+                    obligation_id=obligation.obligation_id,
+                    step_id=context.step.step_id,
+                    family=self.family,
+                    status="verified",
+                    guarantee_kind=self.guarantee_kind,
+                    evidence=ev_data,
+                    assumptions=tuple(dict.fromkeys(assumptions)),
+                    reasons=("TEMPORAL_DERIVATION_VERIFIED",),
+                    verifier_id=self.verifier_id,
+                    verifier_version=self.version,
+                )
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="unknown",
+                guarantee_kind=self.guarantee_kind,
+                evidence=ev_data,
+                assumptions=tuple(dict.fromkeys(assumptions)),
+                reasons=("APPROXIMATION_HIDES_WIDE_UNCERTAINTY",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        # Case 1: Exact dates (lo_val == hi_val) or explicit interval [raw_lo, raw_hi] covering [lo_val, hi_val]
+        if raw_lo <= lo_val and hi_val <= raw_hi:
+            if corr.get("response_checked") and corr.get("response_claims_exact_unqualified") and lo_val < hi_val:
+                return VerifierResult(
+                    obligation_id=obligation.obligation_id,
+                    step_id=context.step.step_id,
+                    family=self.family,
+                    status="unknown",
+                    guarantee_kind=self.guarantee_kind,
+                    evidence=ev_base,
+                    assumptions=tuple(dict.fromkeys(assumptions)),
+                    reasons=("TEMPORAL_PRECISION_INSUFFICIENT_FOR_EXACT_VALUE", "UNJUSTIFIED_TEMPORAL_PRECISION"),
+                    verifier_id=self.verifier_id,
+                    verifier_version=self.version,
+                )
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="verified",
+                guarantee_kind=self.guarantee_kind,
+                evidence=ev_base,
+                assumptions=tuple(dict.fromkeys(assumptions)),
+                reasons=("TEMPORAL_DERIVATION_VERIFIED",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        # Case 2: Qualified approximation around nominal point inside derived bounds [lo_val, hi_val]
+        # Bounded by the uncertainty derived from the source date granularities (no blanket universal +/-1!).
+        derived_span = hi_val - lo_val
+        coarse_endpoints = (1 if s_prec != "day" else 0) + (1 if e_prec != "day" else 0)
+        max_granularity_span = Decimal(max(1, coarse_endpoints)) if (anchor_b is None) else Decimal(max(2, coarse_endpoints + 1))
+        if is_approx and raw_lo == raw_hi and lo_val <= raw_lo <= hi_val:
+            if derived_span <= max_granularity_span:
+                assumptions.append(f"derived_temporal_interval:[{lo_val},{hi_val}]")
+                return VerifierResult(
+                    obligation_id=obligation.obligation_id,
+                    step_id=context.step.step_id,
+                    family=self.family,
+                    status="verified",
+                    guarantee_kind=self.guarantee_kind,
+                    evidence={**ev_base, "derived_span": str(derived_span), "max_granularity_span": str(max_granularity_span)},
+                    assumptions=tuple(dict.fromkeys(assumptions)),
+                    reasons=("TEMPORAL_APPROXIMATION_WITHIN_DERIVED_BOUNDS",),
+                    verifier_id=self.verifier_id,
+                    verifier_version=self.version,
+                )
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="unknown",
+                guarantee_kind=self.guarantee_kind,
+                evidence={**ev_base, "derived_span": str(derived_span), "max_granularity_span": str(max_granularity_span)},
+                assumptions=tuple(dict.fromkeys(assumptions)),
+                reasons=("APPROXIMATION_HIDES_WIDE_UNCERTAINTY",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        # Case 3: Unqualified point estimate with insufficient date precision (e.g. "Tiene 106 años" without full dates)
         return VerifierResult(
             obligation_id=obligation.obligation_id,
             step_id=context.step.step_id,
             family=self.family,
             status="unknown",
             guarantee_kind=self.guarantee_kind,
-            evidence=ev_data,
+            evidence=ev_base,
             assumptions=tuple(dict.fromkeys(assumptions)),
-            reasons=("TEMPORAL_PRECISION_INSUFFICIENT_FOR_EXACT_VALUE",),
+            reasons=("TEMPORAL_PRECISION_INSUFFICIENT_FOR_EXACT_VALUE", "UNJUSTIFIED_TEMPORAL_PRECISION"),
             verifier_id=self.verifier_id,
             verifier_version=self.version,
         )
@@ -1297,7 +1484,22 @@ class AggregationVerifier:
                 seen_signatures[sig] = node
                 dedup_nodes.append(node)
 
-        # 2. Population completeness check
+        # 2. Population completeness check (subtotal vs total handling for mandatory checks)
+        is_mandatory_agg = params.get("mandatory_check") == "aggregation_completeness"
+        corr = context.correspondence_facts or {}
+        qualified_subtotal = bool(
+            (isinstance(context.conclusion.scope, Mapping) and context.conclusion.scope.get("is_subtotal"))
+            or corr.get("qualified_as_subtotal")
+        )
+        presents_as_unqualified_total = bool(
+            corr.get("response_checked") and corr.get("presents_subtotal_as_total")
+        )
+        allow_subtotal = (
+            (is_mandatory_agg or bool(corr.get("response_checked")))
+            and qualified_subtotal
+            and not presents_as_unqualified_total
+        )
+        subtotal_mode = False
         expected_ids = params.get("expected_population_ids")
         pop_complete = bool(params.get("population_complete", False))
         if expected_ids is not None:
@@ -1308,25 +1510,55 @@ class AggregationVerifier:
             }
             if not expected_set <= observed_set:
                 missing = sorted(expected_set - observed_set)
+                if allow_subtotal:
+                    subtotal_mode = True
+                    assumptions.append("partial_population_subtotal_only")
+                else:
+                    reasons = (
+                        ("UNVERIFIED_POPULATION_COMPLETENESS", "SUBTOTAL_PRESENTED_AS_TOTAL")
+                        if is_mandatory_agg
+                        else ("UNVERIFIED_POPULATION_COMPLETENESS",)
+                    )
+                    return VerifierResult(
+                        obligation_id=obligation.obligation_id,
+                        step_id=context.step.step_id,
+                        family=self.family,
+                        status="unknown",
+                        guarantee_kind=self.guarantee_kind,
+                        evidence={"missing_population_members": missing, "is_subtotal": qualified_subtotal},
+                        reasons=reasons,
+                        verifier_id=self.verifier_id,
+                        verifier_version=self.version,
+                    )
+        elif not pop_complete:
+            if allow_subtotal:
+                subtotal_mode = True
+                assumptions.append("partial_population_subtotal_only")
+            else:
+                reasons = (
+                    ("UNVERIFIED_POPULATION_COMPLETENESS", "SUBTOTAL_PRESENTED_AS_TOTAL")
+                    if is_mandatory_agg
+                    else ("UNVERIFIED_POPULATION_COMPLETENESS",)
+                )
                 return VerifierResult(
                     obligation_id=obligation.obligation_id,
                     step_id=context.step.step_id,
                     family=self.family,
                     status="unknown",
                     guarantee_kind=self.guarantee_kind,
-                    evidence={"missing_population_members": missing},
-                    reasons=("UNVERIFIED_POPULATION_COMPLETENESS",),
+                    evidence={"is_subtotal": qualified_subtotal},
+                    reasons=reasons,
                     verifier_id=self.verifier_id,
                     verifier_version=self.version,
                 )
-        elif not pop_complete:
+        elif presents_as_unqualified_total and not pop_complete:
             return VerifierResult(
                 obligation_id=obligation.obligation_id,
                 step_id=context.step.step_id,
                 family=self.family,
                 status="unknown",
                 guarantee_kind=self.guarantee_kind,
-                reasons=("UNVERIFIED_POPULATION_COMPLETENESS",),
+                reasons=("SUBTOTAL_PRESENTED_AS_TOTAL",),
                 verifier_id=self.verifier_id,
                 verifier_version=self.version,
             )
@@ -1456,20 +1688,23 @@ class AggregationVerifier:
 
         tol = _to_decimal(params.get("rounding_tolerance", params.get("tolerance", "0"))) or Decimal(0)
         if abs(expected - conc_base) <= tol:
+            ev_ok: dict[str, Any] = {
+                "op": op_short,
+                "expected": str(expected),
+                "proposed": str(conc_base),
+                "dedup_count": len(dedup_nodes),
+            }
+            if subtotal_mode:
+                ev_ok["subtotal_only"] = True
             return VerifierResult(
                 obligation_id=obligation.obligation_id,
                 step_id=context.step.step_id,
                 family=self.family,
                 status="verified",
                 guarantee_kind=self.guarantee_kind,
-                evidence={
-                    "op": op_short,
-                    "expected": str(expected),
-                    "proposed": str(conc_base),
-                    "dedup_count": len(dedup_nodes),
-                },
+                evidence=ev_ok,
                 assumptions=tuple(dict.fromkeys(assumptions)),
-                reasons=("AGGREGATION_VERIFIED",),
+                reasons=("AGGREGATION_SUBTOTAL_VERIFIED" if subtotal_mode else "AGGREGATION_VERIFIED",),
                 verifier_id=self.verifier_id,
                 verifier_version=self.version,
             )
@@ -1525,6 +1760,8 @@ class ExplicitLogicVerifier:
 
     def verify(self, obligation: VerificationObligation, context: VerifierContext) -> VerifierResult:
         params = {**context.step.parameters, **obligation.parameters}
+        if params.get("mandatory_check") == "condition_preservation":
+            return self._verify_condition_preservation(obligation, context, params)
         rule_id = context.step.rule_id or params.get("rule_id")
         rule_version = context.step.rule_version or params.get("rule_version")
         if not rule_id:
@@ -1651,6 +1888,82 @@ class ExplicitLogicVerifier:
             guarantee_kind=self.guarantee_kind,
             evidence={"rule_id": rule.rule_id, "rule_version": rule.version},
             reasons=("EXPLICIT_RULE_VERIFIED",),
+            verifier_id=self.verifier_id,
+            verifier_version=self.version,
+        )
+
+    def _verify_condition_preservation(
+        self,
+        obligation: VerificationObligation,
+        context: VerifierContext,
+        params: Mapping[str, Any],
+    ) -> VerifierResult:
+        req_conds = list(params.get("required_conditions") or ())
+        if not req_conds:
+            for p in context.premises:
+                for cond in p.conditions:
+                    req_conds.append(dict(cond))
+                if not p.conditions and p.condition_status != "unconditional":
+                    req_conds.append({"claim_id": p.claim_id, "condition_status": p.condition_status})
+
+        if not req_conds:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="not_applicable",
+                guarantee_kind=self.guarantee_kind,
+                reasons=("NO_REQUIRED_CONDITIONS",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        conc = context.conclusion
+        conc_cond_canon = {canonical(dict(c)) for c in conc.conditions}
+        missing: list[dict[str, Any]] = []
+        for rc in req_conds:
+            if canonical(rc) not in conc_cond_canon:
+                # Also match by field/predicate if premise stored structured condition and conclusion kept same condition field
+                rc_field = rc.get("field")
+                if not (rc_field and any(c.get("field") == rc_field for c in conc.conditions)):
+                    missing.append(rc)
+
+        if conc.condition_status != "conditional" or missing:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="refuted",
+                guarantee_kind=self.guarantee_kind,
+                evidence={"missing_conditions": missing, "conclusion_condition_status": conc.condition_status},
+                reasons=("DROPPED_REQUIRED_CONDITION",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        corr = context.correspondence_facts or {}
+        if corr.get("response_checked") and corr.get("condition_dropped_in_response"):
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="refuted",
+                guarantee_kind=self.guarantee_kind,
+                evidence={"missing_conditions": req_conds, "in_response": True},
+                reasons=("CONDITION_DROPPED_IN_RESPONSE", "DROPPED_REQUIRED_CONDITION"),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        return VerifierResult(
+            obligation_id=obligation.obligation_id,
+            step_id=context.step.step_id,
+            family=self.family,
+            status="verified",
+            guarantee_kind=self.guarantee_kind,
+            evidence={"preserved_conditions": len(req_conds)},
+            assumptions=("conclusion_subject_to_preserved_conditions",),
+            reasons=("CONDITIONS_PRESERVED_VERIFIED",),
             verifier_id=self.verifier_id,
             verifier_version=self.version,
         )
@@ -1833,6 +2146,15 @@ class DocumentAuthorityVerifier:
     guarantee_kind = "deterministic_formal"
 
     def verify(self, obligation: VerificationObligation, context: VerifierContext) -> VerifierResult:
+        params = {**context.step.parameters, **obligation.parameters}
+        mandatory_kind = params.get("mandatory_check")
+        if mandatory_kind == "source_conditional_attribution":
+            return self._verify_source_attribution(obligation, context)
+        if mandatory_kind == "material_conflict_disclosure":
+            return self._verify_conflict_disclosure(obligation, context)
+        if mandatory_kind == "semantic_type_uncertainty":
+            return self._verify_semantic_type_uncertainty(obligation, context, params)
+
         nodes_to_check = list(context.premises) or [context.conclusion]
         policy = context.domain_profile.policy
         as_of_b = _parse_date_bounds(context.as_of) if context.as_of else None
@@ -1977,6 +2299,147 @@ class DocumentAuthorityVerifier:
             status="verified",
             guarantee_kind=self.guarantee_kind,
             reasons=("DOCUMENT_AUTHORITY_VERIFIED",),
+            verifier_id=self.verifier_id,
+            verifier_version=self.version,
+        )
+
+    def _verify_source_attribution(
+        self,
+        obligation: VerificationObligation,
+        context: VerifierContext,
+    ) -> VerifierResult:
+        nodes = list(context.premises) or [context.conclusion]
+        doc_ids: set[str] = set()
+        for n in nodes:
+            doc_ids.update(n.doc_ids())
+        cited_docs = [context.documents[did] for did in sorted(doc_ids) if did in context.documents]
+        external_verified = bool(
+            isinstance(context.conclusion.scope, Mapping) and context.conclusion.scope.get("externally_verified")
+        ) or (
+            bool(cited_docs)
+            and all(d.attribution in {"audited_record", "official_registry"} for d in cited_docs)
+        )
+        if external_verified:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="verified",
+                guarantee_kind=self.guarantee_kind,
+                reasons=("EXTERNAL_TRUTH_CORROBORATED",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        corr = context.correspondence_facts or {}
+        if corr.get("response_checked"):
+            if corr.get("contradictory_source_attribution"):
+                return VerifierResult(
+                    obligation_id=obligation.obligation_id,
+                    step_id=context.step.step_id,
+                    family=self.family,
+                    status="refuted",
+                    guarantee_kind=self.guarantee_kind,
+                    reasons=("CONTRADICTORY_SOURCE_ATTRIBUTION",),
+                    verifier_id=self.verifier_id,
+                    verifier_version=self.version,
+                )
+            if not corr.get("source_qualified"):
+                return VerifierResult(
+                    obligation_id=obligation.obligation_id,
+                    step_id=context.step.step_id,
+                    family=self.family,
+                    status="unknown",
+                    guarantee_kind=self.guarantee_kind,
+                    evidence={"cited_document_ids": sorted(doc_ids)},
+                    reasons=("SOURCE_CONDITIONAL_CONCLUSION",),
+                    verifier_id=self.verifier_id,
+                    verifier_version=self.version,
+                )
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="verified",
+                guarantee_kind=self.guarantee_kind,
+                evidence={"cited_document_ids": sorted(doc_ids)},
+                assumptions=("conclusion_conditional_on_cited_sources_unverified_externally",),
+                reasons=("SOURCE_CONDITIONAL_ATTRIBUTION_VERIFIED",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        # Pure graph_only inspection: if conclusion explicitly asserts external truth uncorroborated, block
+        if isinstance(context.conclusion.scope, Mapping) and context.conclusion.scope.get("asserts_external_truth"):
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="unknown",
+                guarantee_kind=self.guarantee_kind,
+                evidence={"cited_document_ids": sorted(doc_ids)},
+                reasons=("SOURCE_CONDITIONAL_CONCLUSION",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        return VerifierResult(
+            obligation_id=obligation.obligation_id,
+            step_id=context.step.step_id,
+            family=self.family,
+            status="verified",
+            guarantee_kind=self.guarantee_kind,
+            evidence={"cited_document_ids": sorted(doc_ids)},
+            assumptions=("conclusion_conditional_on_cited_sources_unverified_externally",),
+            reasons=("DOCUMENT_LINKAGE_ATTRIBUTED",),
+            verifier_id=self.verifier_id,
+            verifier_version=self.version,
+        )
+
+    def _verify_conflict_disclosure(
+        self,
+        obligation: VerificationObligation,
+        context: VerifierContext,
+    ) -> VerifierResult:
+        corr = context.correspondence_facts or {}
+        if corr.get("response_checked") and not corr.get("conflict_disclosed"):
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="unknown",
+                guarantee_kind=self.guarantee_kind,
+                reasons=("UNDISCLOSED_MATERIAL_CONFLICT",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+        return VerifierResult(
+            obligation_id=obligation.obligation_id,
+            step_id=context.step.step_id,
+            family=self.family,
+            status="unknown" if not corr.get("conflict_disclosed") else "verified",
+            guarantee_kind=self.guarantee_kind,
+            reasons=("MATERIAL_CONFLICT_UNRESOLVED",) if not corr.get("conflict_disclosed") else ("MATERIAL_CONFLICT_DISCLOSED",),
+            verifier_id=self.verifier_id,
+            verifier_version=self.version,
+        )
+
+    def _verify_semantic_type_uncertainty(
+        self,
+        obligation: VerificationObligation,
+        context: VerifierContext,
+        params: Mapping[str, Any],
+    ) -> VerifierResult:
+        discovered = list(params.get("discovered_domains") or ())
+        evidence = {"discovered_domains": discovered} if discovered else {}
+        return VerifierResult(
+            obligation_id=obligation.obligation_id,
+            step_id=context.step.step_id,
+            family=self.family,
+            status="unknown",
+            guarantee_kind=self.guarantee_kind,
+            evidence=evidence,
+            reasons=("AMBIGUOUS_OR_GENERIC_SEMANTIC_TYPE",),
             verifier_id=self.verifier_id,
             verifier_version=self.version,
         )

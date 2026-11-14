@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import math
+import re
 from typing import Any, Mapping, Sequence
 
 from ..semantic.models import EvidenceRef, canonical, digest
 from .fidelity import FieldEvidence
-from .vocabulary import UnmappedProposal, Vocabulary, label_key
+from .vocabulary import UnmappedProposal, Vocabulary, label_key, normalize_date
 
 CLAIM_KINDS: tuple[str, ...] = (
     "extraction",
@@ -34,6 +35,17 @@ EPISTEMIC_KIND_RANK: dict[str, int] = {
     "recommendation": 1,
 }
 _RANK_TO_CLAIM_KIND: dict[int, str] = {v: k for k, v in EPISTEMIC_KIND_RANK.items()}
+
+OBLIGATION_GENERATOR_VERSION = "1.0.0"
+
+MANDATORY_OBLIGATION_FAMILIES: dict[str, str] = {
+    "age_and_duration": "temporal",
+    "quantities": "quantities",
+    "documental_attribution": "document_authority",
+    "conditions_and_exceptions": "explicit_logic",
+    "aggregations": "aggregation",
+    "material_conflict": "document_authority",
+}
 
 VERIFIER_FAMILIES: tuple[str, ...] = (
     "arithmetic",
@@ -177,6 +189,7 @@ class VerificationObligation:
     description: str = ""
     critical: bool = True
     parameters: dict[str, Any] = field(default_factory=dict)
+    origin: str = "proposed"  # 'proposed' | 'engine_mandatory'
 
     def __post_init__(self) -> None:
         if not isinstance(self.obligation_id, str) or not self.obligation_id.strip():
@@ -185,22 +198,30 @@ class VerificationObligation:
             raise ValueError(
                 f"Unknown verifier family {self.family!r}; expected one of {VERIFIER_FAMILIES}."
             )
+        if self.origin not in ("proposed", "engine_mandatory"):
+            raise ValueError(f"Unsupported obligation origin {self.origin!r}.")
         clean_params = dict(self.parameters or {})
         canonical(clean_params)
         object.__setattr__(self, "parameters", clean_params)
         object.__setattr__(self, "critical", bool(self.critical))
 
     def canonical_payload(self) -> dict[str, Any]:
-        return {
+        payload = {
             "obligation_id": self.obligation_id,
             "family": self.family,
             "description": self.description,
             "critical": self.critical,
             "parameters": self.parameters,
         }
+        if self.origin != "proposed":
+            payload["origin"] = self.origin
+        return payload
 
     def to_dict(self) -> dict[str, Any]:
-        return self.canonical_payload()
+        return {
+            **self.canonical_payload(),
+            "origin": self.origin,
+        }
 
     @classmethod
     def from_dict(cls, data: VerificationObligation | Mapping[str, Any]) -> "VerificationObligation":
@@ -212,6 +233,7 @@ class VerificationObligation:
             description=str(data.get("description", "")),
             critical=bool(data.get("critical", True)),
             parameters=dict(data.get("parameters") or {}),
+            origin=str(data.get("origin", "proposed")),
         )
 
 
@@ -683,3 +705,441 @@ class JustificationGraph:
             raw_steps = response.get("inference_steps", ())
         steps = tuple(InferenceStep.from_dict(s) for s in (raw_steps or ()))
         return cls(claims=claims_map, steps=steps, conclusion_id=str(conclusion_id))
+
+
+_GENERIC_LABELS = frozenset({
+    "number",
+    "value",
+    "result",
+    "scalar",
+    "generic",
+    "raw_number",
+    "output",
+    "answer",
+})
+_TEMPORAL_PREDICATES = frozenset({
+    "age",
+    "edad",
+    "birth_date",
+    "fecha_nacimiento",
+    "duration",
+    "duracion",
+    "elapsed_time",
+    "tenure",
+    "service_years",
+    "age_at_anchor",
+    "age_in_year",
+    "anchor_age",
+    "temporal_age",
+    "temporal_duration",
+})
+_AGGREGATION_PREDICATES = frozenset({
+    "total",
+    "sum",
+    "aggregate",
+    "total_amount",
+    "total_fee",
+    "total_cost",
+    "count",
+    "average",
+    "mean",
+    "subtotal",
+})
+_TEMPORAL_OPS = frozenset({
+    "temporal_age",
+    "age",
+    "temporal_duration",
+    "duration",
+    "temporal_order",
+    "temporal",
+    "precedes",
+    "meets",
+    "overlaps",
+})
+_AGGREGATION_OPS = frozenset({
+    "aggregation",
+    "agg_sum",
+    "agg_count",
+    "agg_average",
+    "agg_mean",
+    "agg_min",
+    "agg_max",
+    "count",
+    "average",
+    "mean",
+    "min",
+    "max",
+})
+_AGE_DURATION_TEXT_RE = re.compile(
+    r"\b(how old|age|edad|cu[aá]ntos a[nñ]os|a[nñ]os tiene|tiene.*\d+\s*a[nñ]os|"
+    r"born|naci[oó]|birthday|cumplea[nñ]os|duration|duraci[oó]n|cu[aá]nto tiempo)\b",
+    re.IGNORECASE,
+)
+_AGGREGATION_TEXT_RE = re.compile(
+    r"\b(total|subtotal|sum|suma|sumatoria|average|promedio|media|m[ií]nimo|m[aá]ximo|"
+    r"cu[aá]nt(?:os|as)\s+(?:elementos|registros|facturas|[ií]tems|art[ií]culos|eventos|pagos|partidas)|"
+    r"how many\s+(?:items|invoices|records|entries|events|payments)|"
+    r"all invoices|todas las facturas|todas las partidas)\b",
+    re.IGNORECASE,
+)
+_ISO_DATE_IN_TEXT_RE = re.compile(r"\b\d{4}-\d{2}(?:-\d{2})?\b")
+_YEAR_IN_TEXT_RE = re.compile(r"\b(?:1[5-9]\d{2}|20\d{2}|21\d{2})\b")
+_DURATION_COMPUTABLE_UNITS = frozenset({"year", "years", "año", "años", "month", "months", "mes", "meses"})
+
+
+def _is_date_string(value: Any) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+    txt = value.strip()
+    if not re.match(r"^\d{4}", txt):
+        return False
+    try:
+        normalize_date(txt)
+        return True
+    except ValueError:
+        return False
+
+
+def _extract_date_from_text(text: str | None) -> str | None:
+    if not text:
+        return None
+    m_iso = _ISO_DATE_IN_TEXT_RE.findall(text)
+    if m_iso:
+        return m_iso[-1]
+    m_yr = _YEAR_IN_TEXT_RE.findall(text)
+    if m_yr:
+        return m_yr[-1]
+    return None
+
+
+def infer_conclusion_semantic_domain(
+    graph: JustificationGraph,
+    *,
+    question: str | Mapping[str, Any] | None = None,
+    candidate_text: str | None = None,
+    domain_profile: Any = None,
+    as_of: str | None = None,
+) -> dict[str, Any]:
+    """Deterministically infer the conclusion semantic domain(s) and detect generic-label evasion."""
+    conc = graph.claims[graph.conclusion_id]
+    conc_pred_key = label_key(conc.predicate).replace(" ", "_") if conc.predicate else ""
+    q_text = (
+        question
+        if isinstance(question, str)
+        else (str(question.get("text") or question.get("question") or "") if isinstance(question, Mapping) else "")
+    )
+    c_text = candidate_text or conc.text or ""
+    anc_ids = graph.ancestor_claims(graph.conclusion_id)
+    anc_nodes = [graph.claims[aid] for aid in sorted(anc_ids) if aid in graph.claims]
+    inc_steps = graph.incoming_steps(graph.conclusion_id)
+
+    generic_label = conc_pred_key in _GENERIC_LABELS or label_key(conc.metadata.get("field_type", "")) in {"number", "scalar"}
+
+    # Temporal / age & duration discovery (never relies on specific entity names)
+    has_temporal_op = any(
+        label_key(st.operation).replace(" ", "_") in _TEMPORAL_OPS for st in inc_steps
+    )
+    has_temporal_pred = conc_pred_key in _TEMPORAL_PREDICATES or any(
+        label_key(n.predicate).replace(" ", "_") in _TEMPORAL_PREDICATES for n in anc_nodes
+    )
+    has_date_premises = any(
+        _is_date_string(n.value) or bool(n.valid_from) or bool(n.valid_until)
+        for n in anc_nodes
+    )
+    has_duration_unit = bool(
+        (conc.unit and label_key(conc.unit) in _DURATION_COMPUTABLE_UNITS)
+        or any(n.unit and label_key(n.unit) in _DURATION_COMPUTABLE_UNITS for n in anc_nodes)
+    )
+    has_temporal_question = bool(_AGE_DURATION_TEXT_RE.search(q_text) or _AGE_DURATION_TEXT_RE.search(c_text))
+    has_temporal_params = any(
+        any(k in st.parameters for k in ("start_date", "birth_date", "reference_date", "end_date", "anchor_age", "anchor_date"))
+        for st in inc_steps
+    )
+
+    is_age_or_duration = bool(
+        has_temporal_op
+        or has_temporal_pred
+        or has_temporal_params
+        or (has_date_premises and (has_duration_unit or has_temporal_question))
+        or (has_temporal_question and (isinstance(conc.value, (int, float)) or isinstance(conc.value, Mapping) or has_date_premises))
+    )
+
+    # Quantity discovery
+    has_quantity_units = bool(conc.unit or any(n.unit for n in anc_nodes))
+    vocab = getattr(domain_profile, "vocabulary", None)
+    conc_pred_spec = None
+    if vocab is not None and conc.predicate:
+        conc_pred_spec = next((p for p in vocab.predicates if p.name == conc.predicate), None)
+    has_quantity_spec = bool(conc_pred_spec is not None and conc_pred_spec.value.type == "quantity")
+    has_rounding_params = any(
+        any(k in st.parameters for k in ("decimals", "rounding_tolerance", "tolerance"))
+        for st in graph.steps
+    )
+    is_quantity = bool(has_quantity_units or has_quantity_spec or has_rounding_params)
+
+    # Aggregation discovery (inspect conclusion's incoming steps & context, never unrelated upstream ops)
+    is_comparison_conc = any(
+        label_key(st.operation).replace(" ", "_") in {"lt", "le", "gt", "ge", "eq", "ne", "between"}
+        for st in inc_steps
+    )
+    has_agg_op = any(
+        label_key(st.operation).replace(" ", "_") in _AGGREGATION_OPS
+        or "expected_population_ids" in st.parameters
+        or "population_complete" in st.parameters
+        for st in inc_steps
+    )
+    direct_premises = [graph.claims[pid] for st in inc_steps for pid in st.premises if pid in graph.claims]
+    has_event_premises = any(n.event_id is not None for n in direct_premises)
+    has_agg_pred = conc_pred_key in _AGGREGATION_PREDICATES or "total" in conc_pred_key or "subtotal" in conc_pred_key
+    has_nl_agg_context = bool(
+        (q_text or c_text)
+        and (_AGGREGATION_TEXT_RE.search(q_text) or _AGGREGATION_TEXT_RE.search(c_text))
+    )
+    is_aggregation = bool(
+        not is_comparison_conc
+        and not (is_age_or_duration and not has_agg_op and not has_event_premises)
+        and (
+            has_agg_op
+            or (has_nl_agg_context and (len(anc_nodes) >= 2 or has_agg_pred))
+            or (has_agg_pred and (len(direct_premises) >= 3 or has_event_premises))
+        )
+    )
+
+    # Conditions / exceptions present on any ancestor premise
+    has_conditions = any(
+        bool(n.conditions) or n.condition_status in ("conditional", "unknown_condition", "unrepresentable_condition")
+        for n in anc_nodes
+    )
+
+    # Extract temporal anchor parameters when available so temporal obligations cannot be bypassed by `op="add"`
+    inferred_temporal_params: dict[str, Any] = {}
+    if is_age_or_duration:
+        anchor_age_node = next(
+            (
+                n for n in anc_nodes
+                if label_key(n.predicate).replace(" ", "_") in {"age", "age_at_anchor", "anchor_age", "edad"}
+                or (n.unit and label_key(n.unit) in _DURATION_COMPUTABLE_UNITS and n.valid_from)
+            ),
+            None,
+        )
+        birth_node = next(
+            (n for n in anc_nodes if label_key(n.predicate).replace(" ", "_") in {"birth_date", "fecha_nacimiento"} or _is_date_string(n.value)),
+            None,
+        )
+        year_premises = [
+            n for n in anc_nodes
+            if (isinstance(n.value, int) and 1500 <= n.value <= 2150 and label_key(n.predicate) in {"year", "anchor_year", "reference_year", "target_year", "date"})
+            or (_is_date_string(n.value) and n is not birth_node)
+        ]
+
+        for st in inc_steps:
+            for k in ("start_date", "birth_date", "end_date", "reference_date", "anchor_age", "anchor_date"):
+                if k in st.parameters and k not in inferred_temporal_params:
+                    inferred_temporal_params[k] = st.parameters[k]
+
+        if anchor_age_node is not None and "anchor_age" not in inferred_temporal_params:
+            if isinstance(anchor_age_node.value, (int, float)):
+                inferred_temporal_params["anchor_age"] = anchor_age_node.value
+            if anchor_age_node.valid_from and "anchor_date" not in inferred_temporal_params:
+                inferred_temporal_params["anchor_date"] = anchor_age_node.valid_from
+        elif birth_node is not None and "start_date" not in inferred_temporal_params and "birth_date" not in inferred_temporal_params:
+            inferred_temporal_params["start_date"] = birth_node.value if _is_date_string(birth_node.value) else birth_node.valid_from
+
+        if "anchor_age" in inferred_temporal_params and "anchor_date" not in inferred_temporal_params and year_premises:
+            yp = year_premises[0]
+            inferred_temporal_params["anchor_date"] = str(yp.value)
+
+        if "reference_date" not in inferred_temporal_params and "end_date" not in inferred_temporal_params:
+            if as_of:
+                inferred_temporal_params["reference_date"] = as_of
+            elif len(year_premises) >= 2:
+                inferred_temporal_params["reference_date"] = str(year_premises[-1].value)
+            elif len(year_premises) == 1 and "anchor_age" not in inferred_temporal_params:
+                # Only one year premise and no anchor_age: could be reference year if birth_node existed
+                inferred_temporal_params["reference_date"] = str(year_premises[0].value)
+            else:
+                q_date = _extract_date_from_text(q_text)
+                if q_date:
+                    inferred_temporal_params["reference_date"] = q_date
+
+    discovered_domains: list[str] = []
+    if is_age_or_duration:
+        discovered_domains.append("age_and_duration")
+    if is_quantity:
+        discovered_domains.append("quantities")
+    if is_aggregation:
+        discovered_domains.append("aggregations")
+    if has_conditions:
+        discovered_domains.append("conditions_and_exceptions")
+
+    # Register uncertainty if predicate is explicitly generic ("number", "value", etc.)
+    # and domain could not be cleanly verified via Vocabulary FieldSpec
+    uncertain_semantic_type = bool(
+        generic_label and conc_pred_spec is None
+    )
+
+    return {
+        "discovered_domains": tuple(discovered_domains),
+        "generic_label_detected": generic_label,
+        "semantic_type_uncertain": uncertain_semantic_type,
+        "is_age_or_duration": is_age_or_duration,
+        "is_quantity": is_quantity,
+        "is_aggregation": is_aggregation,
+        "has_conditions": has_conditions,
+        "temporal_params": inferred_temporal_params,
+    }
+
+
+def generate_mandatory_obligations(
+    graph: JustificationGraph,
+    *,
+    question: str | Mapping[str, Any] | None = None,
+    candidate_text: str | None = None,
+    documents: Mapping[str, Any] | None = None,
+    domain_profile: Any = None,
+    as_of: str | None = None,
+    has_material_conflict: bool = False,
+) -> tuple[VerificationObligation, ...]:
+    """Generate versioned, non-removable verification obligations imposed by the engine."""
+    sem = infer_conclusion_semantic_domain(
+        graph,
+        question=question,
+        candidate_text=candidate_text,
+        domain_profile=domain_profile,
+        as_of=as_of,
+    )
+    conc_id = graph.conclusion_id
+    anc_ids = graph.ancestor_claims(conc_id)
+    anc_nodes = [graph.claims[aid] for aid in sorted(anc_ids) if aid in graph.claims]
+    inc_steps = graph.incoming_steps(conc_id)
+    has_cited_sources = bool(
+        graph.claims[conc_id].evidence
+        or graph.claims[conc_id].evidence_unit_ids
+        or any(n.evidence or n.evidence_unit_ids for n in anc_nodes)
+        or (documents and len(documents) > 0)
+    )
+
+    obligations: list[VerificationObligation] = []
+
+    # 1. Age and duration temporal precision
+    if sem["is_age_or_duration"]:
+        t_params = dict(sem["temporal_params"])
+        t_params["mandatory_check"] = "temporal_precision"
+        if not any(label_key(st.operation).replace(" ", "_") in _TEMPORAL_OPS for st in inc_steps):
+            t_params.setdefault("temporal_op", "age")
+        obligations.append(
+            VerificationObligation(
+                obligation_id="mandatory::age_and_duration",
+                family="temporal",
+                description="Verify temporal date precision, intervals, and valid derived range.",
+                critical=True,
+                parameters=t_params,
+                origin="engine_mandatory",
+            )
+        )
+
+    # 2. Quantities: unit compatibility, precision, rounding
+    if sem["is_quantity"]:
+        obligations.append(
+            VerificationObligation(
+                obligation_id="mandatory::quantities",
+                family="quantities",
+                description="Verify unit compatibility, registry validity, and explicit rounding/precision.",
+                critical=True,
+                parameters={
+                    "mandatory_check": "quantity_precision_and_units",
+                    "temporal_age_mode": sem["is_age_or_duration"],
+                },
+                origin="engine_mandatory",
+            )
+        )
+
+    # 3. Documental attribution (non-corroborated narrative sources -> explicit source qualification)
+    if has_cited_sources:
+        obligations.append(
+            VerificationObligation(
+                obligation_id="mandatory::documental_attribution",
+                family="document_authority",
+                description="Verify external corroboration or explicit source-dependent qualification.",
+                critical=True,
+                parameters={"mandatory_check": "source_conditional_attribution"},
+                origin="engine_mandatory",
+            )
+        )
+
+    # 4. Conditions and exceptions preservation
+    if sem["has_conditions"]:
+        req_conds: list[dict[str, Any]] = []
+        for n in anc_nodes:
+            for cond in n.conditions:
+                req_conds.append(dict(cond))
+            if not n.conditions and n.condition_status != "unconditional":
+                req_conds.append({"claim_id": n.claim_id, "condition_status": n.condition_status})
+        obligations.append(
+            VerificationObligation(
+                obligation_id="mandatory::conditions_and_exceptions",
+                family="explicit_logic",
+                description="Verify all required conditions and exceptions from premises are preserved.",
+                critical=True,
+                parameters={
+                    "mandatory_check": "condition_preservation",
+                    "ancestor_claim_ids": sorted(anc_ids),
+                    "required_conditions": req_conds,
+                },
+                origin="engine_mandatory",
+            )
+        )
+
+    # 5. Aggregations (subtotal / incomplete population check)
+    if sem["is_aggregation"]:
+        agg_op = "sum"
+        agg_params: dict[str, Any] = {"mandatory_check": "aggregation_completeness"}
+        for st in inc_steps:
+            op_k = label_key(st.operation).replace(" ", "_")
+            if op_k in _AGGREGATION_OPS:
+                agg_op = st.operation
+                for pk, pv in st.parameters.items():
+                    agg_params.setdefault(pk, pv)
+                break
+        agg_params.setdefault("aggregation_op", agg_op)
+        obligations.append(
+            VerificationObligation(
+                obligation_id="mandatory::aggregations",
+                family="aggregation",
+                description="Verify unit commensurability, event deduplication, and population completeness.",
+                critical=True,
+                parameters=agg_params,
+                origin="engine_mandatory",
+            )
+        )
+
+    # 6. Material conflict disclosure
+    if has_material_conflict:
+        obligations.append(
+            VerificationObligation(
+                obligation_id="mandatory::material_conflict",
+                family="document_authority",
+                description="Verify unresolved material conflicts are not presented unambiguously.",
+                critical=True,
+                parameters={"mandatory_check": "material_conflict_disclosure"},
+                origin="engine_mandatory",
+            )
+        )
+
+    # 7. Ambiguous or unrecovered generic semantic label uncertainty
+    if sem["semantic_type_uncertain"]:
+        obligations.append(
+            VerificationObligation(
+                obligation_id="mandatory::semantic_type_uncertainty",
+                family="document_authority",
+                description="Record uncertainty when conclusion uses generic label lacking semantic typing.",
+                critical=(len(sem["discovered_domains"]) == 0),
+                parameters={
+                    "mandatory_check": "semantic_type_uncertainty",
+                    "discovered_domains": list(sem["discovered_domains"]),
+                },
+                origin="engine_mandatory",
+            )
+        )
+
+    return tuple(obligations)

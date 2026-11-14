@@ -10,6 +10,7 @@ from .authorization import (
     AuthorizationIssue,
     AuthorizationVerdict,
     ClauseRelation,
+    authorize,
     authorize_operation,
     compute_execution_idempotency_key,
     execute_authorized_operation,
@@ -17,6 +18,14 @@ from .authorization import (
     reconcile_authorized_execution,
     resolve_scope_and_precedence,
     verify_authorization_verdict,
+)
+from .domain_profile import (
+    DeclaredRule,
+    DomainProfile,
+    EmpiricalCalibration,
+    PolicyConfiguration,
+    RelationCompositionRule,
+    SemanticEvaluatorConfig,
 )
 from .domains import (
     B2B_CONTRACTS_VOCABULARY,
@@ -34,6 +43,13 @@ from .engine import (
     evaluate_unit_admissibility,
 )
 from .epistemics import DEFAULT_PROFILE, EXPLICIT, EpistemicProfile
+from .evaluation import (
+    EVALUATION_ASSESSMENTS,
+    ResponseAssessment,
+    VerificationBudget,
+    VerificationCache,
+    evaluate_response,
+)
 from .fidelity import (
     FieldEvidence,
     FidelityFinding,
@@ -42,9 +58,36 @@ from .fidelity import (
     render_canonical_claim,
     verify_extraction_fidelity,
 )
+from .justification import (
+    CLAIM_KINDS,
+    EPISTEMIC_KIND_RANK,
+    VERIFIER_FAMILIES,
+    ClaimNode,
+    InferenceStep,
+    JustificationGraph,
+    VerificationObligation,
+    effective_epistemic_kind,
+)
 from .models import AcceptancePolicy, EvidenceUnit
 from .paths import TransitiveRule
 from .reader import LLMProposalReader, ProposalReader, READER_PROMPT, STRICT_READER_PROMPT
+from .verifiers import (
+    DEFAULT_VERIFIER_REGISTRY,
+    VERIFIER_GUARANTEE_KINDS,
+    VERIFIER_STATUSES,
+    AggregationVerifier,
+    ArithmeticVerifier,
+    ComparisonVerifier,
+    DocumentAuthorityVerifier,
+    ExplicitLogicVerifier,
+    OpenSemanticsVerifier,
+    QuantityVerifier,
+    RelationVerifier,
+    TemporalVerifier,
+    VerifierContext,
+    VerifierRegistry,
+    VerifierResult,
+)
 from .vocabulary import CONDITION_STATUSES, STANDARD_UNITS, FieldSpec, PredicateSpec, Unit, UnitRegistry, UnmappedProposal, Vocabulary
 from .autovocab import build_vocabulary, propose_vocabulary, with_entities
 from .triage import LANES, draft_vocabulary, segment_text, triage, verify_draft
@@ -58,9 +101,18 @@ __all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'UnitEvaluation', 'evaluate_unit_a
            'READER_PROMPT', 'STRICT_READER_PROMPT', 'SourceDocument', 'EvidenceRef', 'StructuredQuery', 'OpenAICompatibleModel',
            'TIER_PRIMARY', 'TIER_ANNEX', 'TIER_EXTERNAL', 'propose_vocabulary', 'build_vocabulary', 'with_entities',
            'verify_draft', 'triage', 'segment_text', 'LANES', 'draft_vocabulary',
-           'AuthorizationIssue', 'AuthorizationVerdict', 'ClauseRelation', 'authorize_operation',
+           'AuthorizationIssue', 'AuthorizationVerdict', 'ClauseRelation', 'authorize', 'authorize_operation',
            'compute_execution_idempotency_key', 'execute_authorized_operation', 'get_execution_state',
            'reconcile_authorized_execution', 'resolve_scope_and_precedence', 'verify_authorization_verdict',
+           'DeclaredRule', 'DomainProfile', 'EmpiricalCalibration', 'PolicyConfiguration',
+           'RelationCompositionRule', 'SemanticEvaluatorConfig',
+           'EVALUATION_ASSESSMENTS', 'ResponseAssessment', 'VerificationBudget', 'VerificationCache', 'evaluate_response',
+           'CLAIM_KINDS', 'EPISTEMIC_KIND_RANK', 'VERIFIER_FAMILIES', 'ClaimNode', 'InferenceStep',
+           'JustificationGraph', 'VerificationObligation', 'effective_epistemic_kind',
+           'DEFAULT_VERIFIER_REGISTRY', 'VERIFIER_GUARANTEE_KINDS', 'VERIFIER_STATUSES',
+           'AggregationVerifier', 'ArithmeticVerifier', 'ComparisonVerifier', 'DocumentAuthorityVerifier',
+           'ExplicitLogicVerifier', 'OpenSemanticsVerifier', 'QuantityVerifier', 'RelationVerifier',
+           'TemporalVerifier', 'VerifierContext', 'VerifierRegistry', 'VerifierResult',
            'FieldEvidence', 'FidelityFinding', 'check_clause_boundary_completeness',
            'evaluate_dual_readers', 'render_canonical_claim', 'verify_extraction_fidelity', 'B2B_CONTRACTS_VOCABULARY',
            'B2B_DEFAULT_ACCEPTANCE_POLICY', 'SECURITIZATION_VOCABULARY', 'SECURITIZATION_ACCEPTANCE_POLICY']

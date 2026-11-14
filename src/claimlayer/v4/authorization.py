@@ -20,6 +20,7 @@ import re
 from typing import Any, Mapping, Sequence
 
 from ..semantic.models import SourceDocument, canonical, digest, instant
+from .domain_profile import DomainProfile, PolicyConfiguration
 from .engine import (
     EvidenceLayer,
     UnitEvaluation,
@@ -28,6 +29,7 @@ from .engine import (
     evaluate_unit_admissibility,
 )
 from .epistemics import DEFAULT_PROFILE, EpistemicProfile
+from .evaluation import ResponseAssessment
 from .fidelity import FieldEvidence
 from .models import AcceptancePolicy, EvidenceUnit
 from .vocabulary import UnmappedProposal, Vocabulary, label_key, value_relation
@@ -840,6 +842,316 @@ def authorize_operation(
         },
         operation_id=operation_id,
         payload_digest=effective_payload_digest,
+        snapshot_digest=snapshot_digest,
+        decision_snapshot=decision_snapshot,
+        signature=signature,
+    )
+
+
+def authorize(
+    assessment: ResponseAssessment,
+    operation: str | Mapping[str, Any] = "default_operation",
+    policy: AcceptancePolicy | PolicyConfiguration | DomainProfile | None = None,
+    *,
+    layer: EvidenceLayer | None = None,
+    payload: Mapping[str, Any] | None = None,
+    signing_key: str | bytes | None = None,
+) -> AuthorizationVerdict:
+    """Decoupled authorization gate consuming a ResponseAssessment under a policy.
+
+    Evaluations (`evaluate_response`) always run independently of policy; this gate
+    decides whether an assessment justifies executing a concrete operational action
+    (`PASS` / `RETRY` / `ESCALATE`). High weights can never bypass refuted checks,
+    non-factual epistemic classes (`hypothesis`, `prediction`, `recommendation`),
+    probabilistic-only critical steps, or incomplete verification coverage.
+    """
+    if not isinstance(assessment, ResponseAssessment):
+        raise TypeError("assessment must be a ResponseAssessment.")
+
+    if policy is None:
+        pol_cfg = PolicyConfiguration()
+    elif isinstance(policy, DomainProfile):
+        pol_cfg = policy.policy
+    elif isinstance(policy, PolicyConfiguration):
+        pol_cfg = policy
+    elif isinstance(policy, AcceptancePolicy):
+        pol_cfg = PolicyConfiguration(tau=policy.tau, delta=policy.delta)
+    else:
+        raise TypeError("policy must be None, AcceptancePolicy, PolicyConfiguration, or DomainProfile.")
+
+    op_id = (
+        str(operation)
+        if isinstance(operation, str)
+        else str(operation.get("operation_id") or operation.get("name") or "default_operation")
+    )
+
+    issues: list[AuthorizationIssue] = []
+
+    # 1. Hard formal refutation gate (never overridable by weights)
+    refuted_checks = [c for c in assessment.completed_checks if c.status == "refuted"]
+    if assessment.assessment == "refuted" or refuted_checks:
+        issues.append(
+            AuthorizationIssue(
+                code="FORMAL_CHECK_REFUTED",
+                stage="epistemic_integrity",
+                disposition="RETRY",
+                predicate=assessment.conclusion.predicate or None,
+                message="One or more formal checks or premise extractions were refuted.",
+                detail={
+                    "reasons": [r for c in refuted_checks for r in c.reasons],
+                    "assessment": assessment.assessment,
+                },
+            )
+        )
+
+    # 2. Epistemic claim class check (hypotheses/predictions/recommendations cannot authorize)
+    if assessment.effective_epistemic_kind not in pol_cfg.allowed_claim_kinds_for_authorization:
+        issues.append(
+            AuthorizationIssue(
+                code="NON_FACTUAL_EPISTEMIC_KIND_FOR_OPERATION",
+                stage="authorization_policy",
+                disposition="ESCALATE",
+                predicate=assessment.conclusion.predicate or None,
+                message=(
+                    f"Effective epistemic kind '{assessment.effective_epistemic_kind}' is not "
+                    f"permitted for operational authorization ({pol_cfg.allowed_claim_kinds_for_authorization})."
+                ),
+                detail={"effective_epistemic_kind": assessment.effective_epistemic_kind},
+            )
+        )
+
+    # 3. Critical unverified steps / pending obligations
+    if pol_cfg.block_critical_unverified_in_authorization and assessment.critical_unverified_steps:
+        issues.append(
+            AuthorizationIssue(
+                code="CRITICAL_UNVERIFIED_INFERENCE_STEPS",
+                stage="epistemic_integrity",
+                disposition="ESCALATE",
+                predicate=assessment.conclusion.predicate or None,
+                message=(
+                    f"Critical inference steps remain unverified: {list(assessment.critical_unverified_steps)}."
+                ),
+                detail={"critical_unverified_steps": list(assessment.critical_unverified_steps)},
+            )
+        )
+
+    # 4. Critical steps relying solely on open_semantics probabilistic models
+    if pol_cfg.require_deterministic_critical_steps:
+        checks_by_step: dict[str, list[Any]] = {}
+        for chk in assessment.completed_checks:
+            checks_by_step.setdefault(chk.step_id, []).append(chk)
+        prob_only_steps: list[str] = []
+        for st_info in assessment.inference_steps:
+            sid = str(st_info.get("step_id", ""))
+            st_checks = checks_by_step.get(sid, [])
+            verified_checks = [c for c in st_checks if c.status == "verified"]
+            if verified_checks and all(c.guarantee_kind == "probabilistic_model" for c in verified_checks):
+                prob_only_steps.append(sid)
+        if prob_only_steps:
+            issues.append(
+                AuthorizationIssue(
+                    code="PROBABILISTIC_ONLY_CRITICAL_STEP",
+                    stage="epistemic_integrity",
+                    disposition="ESCALATE",
+                    predicate=assessment.conclusion.predicate or None,
+                    message=(
+                        f"Inference steps {prob_only_steps} rely solely on probabilistic_model checks "
+                        "without deterministic verification."
+                    ),
+                    detail={"probabilistic_only_steps": prob_only_steps},
+                )
+            )
+
+    # 5. Coverage requirement
+    if assessment.verification_coverage < pol_cfg.min_verification_coverage:
+        issues.append(
+            AuthorizationIssue(
+                code="INSUFFICIENT_VERIFICATION_COVERAGE",
+                stage="epistemic_integrity",
+                disposition="ESCALATE",
+                predicate=assessment.conclusion.predicate or None,
+                message=(
+                    f"Verification coverage {assessment.verification_coverage:.3f} is below "
+                    f"required {pol_cfg.min_verification_coverage:.3f}."
+                ),
+                detail={
+                    "verification_coverage": assessment.verification_coverage,
+                    "required_coverage": pol_cfg.min_verification_coverage,
+                },
+            )
+        )
+
+    # 6. Conflict and support thresholds
+    if assessment.assessment == "contested" or assessment.conflict_index > pol_cfg.max_conflict_index:
+        issues.append(
+            AuthorizationIssue(
+                code="HIGH_EVIDENCE_CONFLICT",
+                stage="authorization_policy",
+                disposition="ESCALATE",
+                predicate=assessment.conclusion.predicate or None,
+                message=(
+                    f"Conflict index {assessment.conflict_index:.3f} exceeds max allowed "
+                    f"{pol_cfg.max_conflict_index:.3f}."
+                ),
+                detail={"conflict_index": assessment.conflict_index, "max_conflict_index": pol_cfg.max_conflict_index},
+            )
+        )
+
+    margin = assessment.evidence_support_index - assessment.conflict_index
+    if (
+        assessment.evidence_support_index < pol_cfg.tau
+        or assessment.uncertainty_index > pol_cfg.max_uncertainty_index
+        or margin < pol_cfg.delta
+    ):
+        issues.append(
+            AuthorizationIssue(
+                code="INSUFFICIENT_EVIDENCE_SUPPORT",
+                stage="authorization_policy",
+                disposition="ESCALATE",
+                predicate=assessment.conclusion.predicate or None,
+                message=(
+                    f"Support={assessment.evidence_support_index:.3f} (tau={pol_cfg.tau}), "
+                    f"margin={margin:.3f} (delta={pol_cfg.delta}), "
+                    f"uncertainty={assessment.uncertainty_index:.3f} (max={pol_cfg.max_uncertainty_index})."
+                ),
+                detail={
+                    "evidence_support_index": assessment.evidence_support_index,
+                    "conflict_index": assessment.conflict_index,
+                    "uncertainty_index": assessment.uncertainty_index,
+                    "margin": round(margin, 6),
+                },
+            )
+        )
+
+    # 7. Ledger unread/read_error state check if bound to an EvidenceLayer
+    state: dict[str, Any] | None = None
+    layer_docs: dict[str, SourceDocument] = {}
+    all_units: tuple[EvidenceUnit, ...] = ()
+    if layer is not None:
+        state = layer.snapshot()
+        layer_docs = state["documents"]
+        all_units = state["units"]
+        if state["unread_documents"]:
+            issues.append(
+                AuthorizationIssue(
+                    code="UNREAD_DOCUMENTS_IN_LEDGER",
+                    stage="epistemic_integrity",
+                    disposition="RETRY",
+                    message=f"Ledger contains unread documents: {state['unread_documents']}.",
+                    detail={"unread_documents": list(state["unread_documents"])},
+                )
+            )
+        if state["read_errors"]:
+            issues.append(
+                AuthorizationIssue(
+                    code="READ_ERRORS_IN_LEDGER",
+                    stage="epistemic_integrity",
+                    disposition="RETRY",
+                    message="Ledger contains unresolved reader extraction errors.",
+                    detail={"read_errors": list(state["read_errors"])},
+                )
+            )
+
+    all_issues = tuple(issues)
+    if any(i.disposition == "RETRY" for i in all_issues):
+        status = "RETRY"
+    elif any(i.disposition == "ESCALATE" for i in all_issues):
+        status = "ESCALATE"
+    else:
+        status = "PASS"
+
+    conc = assessment.conclusion
+    pred_key = conc.predicate or conc.claim_id
+    resolved_values = (
+        {
+            pred_key: {
+                "claim_id": conc.claim_id,
+                "subject": conc.subject,
+                "predicate": conc.predicate,
+                "value": conc.value,
+                "unit": conc.unit,
+                "epistemic_kind": assessment.effective_epistemic_kind,
+            }
+        }
+        if status == "PASS"
+        else {}
+    )
+
+    eff_payload_digest = (
+        digest(payload)
+        if payload is not None
+        else digest({"operation_id": op_id, "conclusion_id": conc.claim_id, "assessment_digest": assessment.assessment_digest})
+    )
+
+    decision_snapshot: dict[str, Any] = {
+        "operation_id": op_id,
+        "payload_digest": eff_payload_digest,
+        "assessment_digest": assessment.assessment_digest,
+        "domain_profile_fingerprint": assessment.domain_profile_fingerprint,
+        "conclusion_id": assessment.conclusion_id,
+        "effective_epistemic_kind": assessment.effective_epistemic_kind,
+        "verification_coverage": assessment.verification_coverage,
+        "evidence_support_index": assessment.evidence_support_index,
+        "conflict_index": assessment.conflict_index,
+        "uncertainty_index": assessment.uncertainty_index,
+        "resolved_values": resolved_values,
+        "status": status,
+        "issues": [asdict(i) for i in all_issues],
+        "authorization_head": op_id,
+    }
+
+    if state is not None:
+        decision_snapshot["configuration"] = state["configuration"]
+        decision_snapshot["ledger_state_digest"] = state["ledger_state_digest"]
+        decision_snapshot["documents"] = [
+            {
+                "document_id": d.document_id,
+                "revision": d.revision,
+                "authority_rank": d.authority_rank,
+                "weight": d.weight,
+                "dependence_group": d.dependence_group,
+                "attribution": d.attribution,
+            }
+            for _, d in sorted(layer_docs.items())
+        ]
+        decision_snapshot["all_unit_ids"] = sorted(u.unit_id for u in all_units)
+        decision_snapshot["eligible_unit_ids"] = sorted(conc.evidence_unit_ids)
+        decision_snapshot["winning_unit_ids"] = {pred_key: sorted(conc.evidence_unit_ids)}
+        decision_snapshot["read_state"] = {
+            "unread_documents": list(state["unread_documents"]),
+            "read_errors": list(state["read_errors"]),
+        }
+
+    snapshot_digest = digest(decision_snapshot)
+    active_key = signing_key if signing_key is not None else os.environ.get("CLAIMLAYER_SIGNING_KEY")
+    signature: str | None = None
+    if active_key is not None and active_key != "" and active_key != b"":
+        key_bytes = active_key.encode("utf-8") if isinstance(active_key, str) else active_key
+        signature = hmac.new(key_bytes, snapshot_digest.encode("utf-8"), hashlib.sha256).hexdigest()
+
+    if layer is not None:
+        auth_record = {
+            "snapshot": decision_snapshot,
+            "snapshot_digest": snapshot_digest,
+            "signature": signature,
+        }
+        layer.store.put("authorization", snapshot_digest, auth_record, head=op_id)
+
+    return AuthorizationVerdict(
+        status=status,
+        allowed=(status == "PASS"),
+        requires_human=(status == "ESCALATE"),
+        resolved_values=resolved_values,
+        issues=all_issues,
+        metrics={
+            "evidence_support_index": assessment.evidence_support_index,
+            "conflict_index": assessment.conflict_index,
+            "uncertainty_index": assessment.uncertainty_index,
+            "verification_coverage": assessment.verification_coverage,
+            "critical_unverified_steps": len(assessment.critical_unverified_steps),
+        },
+        operation_id=op_id,
+        payload_digest=eff_payload_digest,
         snapshot_digest=snapshot_digest,
         decision_snapshot=decision_snapshot,
         signature=signature,

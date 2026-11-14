@@ -371,6 +371,74 @@ _REPAIR_SPEC_TABLE: dict[str, dict[str, Any]] = {
         "allowed": ("generate_grounded_response",),
         "forbidden": ("empty_output",),
     },
+    "FALSE_EQUATION_IN_RESPONSE": {
+        "repairable": True,
+        "problem": "Response states an arithmetic equation whose sides do not evaluate equally.",
+        "instruction": (
+            "Correct the arithmetic equation so both sides equal the mathematically verified value, "
+            "or remove the incorrect equation."
+        ),
+        "allowed": ("correct_equation_to_match_verified_derivation", "remove_false_equation"),
+        "forbidden": ("retain_false_mathematical_equality",),
+    },
+    "UNGROUNDED_EQUATION_IN_RESPONSE": {
+        "repairable": True,
+        "problem": "Response states an equation whose operands or result do not correspond to verified graph steps.",
+        "instruction": (
+            "Remove the ungrounded equation or replace it strictly with the calculation derived from "
+            "verified premise operands."
+        ),
+        "allowed": ("align_equation_with_verified_steps", "remove_ungrounded_equation"),
+        "forbidden": ("invent_arithmetic_operands",),
+    },
+    "UNVERIFIED_EXPRESSION_IN_RESPONSE": {
+        "repairable": True,
+        "problem": "Response includes a symbolic expression that cannot be deterministically verified.",
+        "instruction": "Rewrite the expression in verified numeric terms or remove the unparseable formula.",
+        "allowed": ("replace_with_verified_arithmetic_expression", "remove_unparseable_expression"),
+        "forbidden": ("claim_unverified_symbolic_formula",),
+    },
+    "CONDITION_POLARITY_INVERTED": {
+        "repairable": True,
+        "problem": (
+            "Response inverts the logical polarity of a mandatory condition/exception "
+            "(e.g. turning an excluding exception into a concessive override or positive condition)."
+        ),
+        "instruction": (
+            "Restore the exact condition polarity from the evidence (e.g. 'salvo en caso de ...' or "
+            "'a menos que ...', not 'incluso en caso de ...')."
+        ),
+        "allowed": ("restore_verified_condition_polarity",),
+        "forbidden": ("invert_exception_with_concessive_marker", "claim_unconditional"),
+    },
+    "UNSUPPORTED_CONDITION_SUBSTITUTION": {
+        "repairable": True,
+        "problem": "Response substitutes an unrelated or ungrounded condition instead of the evidence condition.",
+        "instruction": "Remove the invented condition and state the exact required condition from the evidence.",
+        "allowed": ("restore_verified_condition_from_evidence",),
+        "forbidden": ("substitute_irrelevant_condition",),
+    },
+    "CONDITION_CORRESPONDENCE_UNRESOLVED": {
+        "repairable": True,
+        "problem": "Condition equivalence in the response could not be confirmed unambiguously.",
+        "instruction": "State the mandatory condition/exception explicitly using unmistakable conditional wording.",
+        "allowed": ("state_condition_with_explicit_operator",),
+        "forbidden": ("leave_condition_ambiguous",),
+    },
+    "CONCLUSION_POLARITY_INVERTED": {
+        "repairable": True,
+        "problem": "Response negates or reverses the polarity of the verified conclusion.",
+        "instruction": "Restore the affirmative verified conclusion polarity supported by the evidence and graph.",
+        "allowed": ("restore_verified_conclusion_polarity",),
+        "forbidden": ("negate_verified_conclusion",),
+    },
+    "RESPONSE_CORRESPONDENCE_PENDING_SEMANTIC": {
+        "repairable": True,
+        "problem": "Open-language terms in the response could not be grounded without semantic verification.",
+        "instruction": "Rephrase the claim strictly using terms grounded in the evidence and graph.",
+        "allowed": ("rephrase_using_grounded_terms",),
+        "forbidden": ("add_ungrounded_factual_claims",),
+    },
     "ARITHMETIC_MISMATCH": {
         "repairable": True,
         "problem": "Derived arithmetic value does not match premise operands.",
@@ -1012,13 +1080,17 @@ class RuleGuidedRepairAdapter:
             cond_strs = []
             for c in cond_items:
                 if isinstance(c, Mapping):
-                    f = c.get("field") or c.get("type") or "condición"
+                    f = str(c.get("field") or c.get("type") or "condición")
                     v = c.get("value")
-                    cond_strs.append(f"{f}: {v}" if v is not None else str(f))
+                    if v is not None and str(v).strip().lower().startswith(("salvo", "excepto", "a menos que", "unless", "except")):
+                        cond_strs.append(str(v).strip())
+                    else:
+                        cond_strs.append(f"{f}: {v}" if v is not None else f)
                 else:
                     cond_strs.append(str(c))
-            if cond_strs:
-                notes.append(f"Sujeto a la condición / excepción: {'; '.join(cond_strs)}.")
+            dedup_conds = list(dict.fromkeys(cond_strs))
+            if dedup_conds:
+                notes.append(f"Sujeto a la condición / excepción: {'; '.join(dedup_conds)}.")
 
         # Mention question year/scope if present so correspondence knows question wasn't evaded
         if question:

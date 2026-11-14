@@ -27,11 +27,13 @@ from claimlayer.v4 import (
     ClaimNode,
     InferenceStep,
     JustificationGraph,
+    LLMGraphProposalAdapter,
     LLMRepairAgent,
     OpenAICompatibleModel,
     RepairBudget,
     RepairOrchestrator,
     RuleGuidedRepairAdapter,
+    review_response,
 )
 
 
@@ -210,12 +212,18 @@ def _summarize_cycle(case_id: str, cycle: Any, *, mode: str) -> dict[str, Any]:
     }
 
 
-def run_demo(*, live_llm: bool = False, base_url: str = "http://127.0.0.1:1234/v1", model: str = "qwen/qwen3.5-9b") -> list[dict[str, Any]]:
+def run_demo(
+    *,
+    live_llm: bool = False,
+    supplied_graph: bool = False,
+    base_url: str = "http://127.0.0.1:1234/v1",
+    model: str = "qwen/qwen3.5-9b",
+) -> list[dict[str, Any]]:
+    llm_client = None
     if live_llm:
-        repair_agent = LLMRepairAgent(
-            OpenAICompatibleModel(base_url=base_url, model=model, api_key="lm-studio")
-        )
-        mode = f"live_llm:{model}"
+        llm_client = OpenAICompatibleModel(base_url=base_url, model=model, api_key="lm-studio")
+        repair_agent = LLMRepairAgent(llm_client)
+        mode = f"live_llm:{model}" + (":supplied_graph" if supplied_graph else ":adapter_extracted_graph")
     else:
         repair_agent = RuleGuidedRepairAdapter()
         mode = "deterministic_rule_guided"
@@ -227,28 +235,179 @@ def run_demo(*, live_llm: bool = False, base_url: str = "http://127.0.0.1:1234/v
             budget=RepairBudget(max_iterations=3),
             authorize_operation_id=case["operation_id"],
         )
+        graph_or_adapter = (
+            LLMGraphProposalAdapter(llm_client)
+            if live_llm and llm_client is not None and not supplied_graph
+            else case["graph"]
+        )
         cycle = orch.run(
             question=case["question"],
             initial_response=case["initial_response"],
             evidence=case["evidence"],
-            graph_or_adapter=case["graph"],
+            graph_or_adapter=graph_or_adapter,
             repair_agent=repair_agent,
         )
         results.append(_summarize_cycle(case["case_id"], cycle, mode=mode))
     return results
 
 
+def run_perturbation_benchmark() -> dict[str, Any]:
+    """Evaluate transformation perturbations (adversarial vs valid paraphrases) across Case 1 and Case 2."""
+    c1 = _build_case1_temporal_buffett()
+    c2 = _build_case2_incomplete_aggregation_and_condition()
+
+    matrix = [
+        # Adversarial perturbations (must NOT be accepted)
+        (
+            "false_equation",
+            c1,
+            (
+                "Según el texto, Warren Buffet tendría aproximadamente 106 años en 2026; "
+                "sin fechas completas no se puede determinar la edad exacta. "
+                "El cálculo es 13 + (2026 − 1933) = 13."
+            ),
+            False,
+        ),
+        (
+            "ungrounded_equation",
+            c1,
+            (
+                "Según el texto, Warren Buffet tendría aproximadamente 106 años en 2026; "
+                "sin fechas completas no se puede determinar la edad exacta. "
+                "El cálculo es 50 + 50 = 100."
+            ),
+            False,
+        ),
+        (
+            "conclusion_negation",
+            c1,
+            (
+                "Según el texto, Warren Buffet no tendría aproximadamente 106 años en 2026; "
+                "faltan fechas completas para precisar la edad."
+            ),
+            False,
+        ),
+        (
+            "ungrounded_claim_addition",
+            c1,
+            (
+                "Según el texto, Warren Buffet tendría aproximadamente 106 años en 2026 y es astronauta; "
+                "faltan el día y el mes para precisar su edad."
+            ),
+            False,
+        ),
+        (
+            "condition_inversion",
+            c2,
+            (
+                "Según el texto, el subtotal parcial de las facturas listadas es 1000 USD "
+                "sin constancia de completitud de población, incluso en caso de disputa activa."
+            ),
+            False,
+        ),
+        (
+            "unrelated_condition",
+            c2,
+            (
+                "Según el texto, el subtotal parcial de las facturas listadas es 1000 USD "
+                "sin constancia de completitud de población, si hace sol."
+            ),
+            False,
+        ),
+        # Valid paraphrases (MUST be accepted with response_correspondence_verified=True)
+        (
+            "valid_paraphrase_temporal_est_and_granularity",
+            c1,
+            (
+                "A partir del pasaje facilitado, la estimación para Warren Buffet es de unos 106 años en 2026; "
+                "faltan el día y el mes para precisar su edad."
+            ),
+            True,
+        ),
+        (
+            "valid_paraphrase_temporal_with_grounded_equation",
+            c1,
+            (
+                "Conforme al fragmento aportado, la edad de Warren Buffet rondaría los 106 años en 2026 "
+                "(13 + (2026 - 1933) = 106), aunque no hay fecha de nacimiento completa ni verificación histórica externa."
+            ),
+            True,
+        ),
+        (
+            "valid_paraphrase_subtotal_prerequisite_neg",
+            c2,
+            (
+                "De acuerdo con el documento proporcionado, el subtotal parcial de las facturas listadas "
+                "es 1000 USD, sin constancia de completitud de toda la población, solo si no existe disputa activa."
+            ),
+            True,
+        ),
+        (
+            "valid_paraphrase_subtotal_unless",
+            c2,
+            (
+                "Según el pasaje facilitado, el subtotal parcial de las facturas listadas es 1000 USD "
+                "(400 + 600 = 1000), sin constancia de completitud de población, a menos que haya disputa activa."
+            ),
+            True,
+        ),
+    ]
+
+    case_rows: list[dict[str, Any]] = []
+    false_accepts = 0
+    false_rejects = 0
+    negative_total = 0
+    positive_total = 0
+
+    for label, case, resp, expected_accept in matrix:
+        rv = review_response(case["question"], resp, case["evidence"], case["graph"])
+        actual_accept = bool(rv.disposition == "ACCEPT" and rv.assessment.response_correspondence_verified)
+        if not expected_accept:
+            negative_total += 1
+            if actual_accept:
+                false_accepts += 1
+        else:
+            positive_total += 1
+            if not actual_accept:
+                false_rejects += 1
+        case_rows.append({
+            "case": label,
+            "expected_accept": expected_accept,
+            "actual_accept": actual_accept,
+            "disposition": rv.disposition,
+            "response_correspondence_verified": rv.assessment.response_correspondence_verified,
+            "issues": [i.code for i in rv.issues],
+        })
+
+    return {
+        "cases": case_rows,
+        "negative_count": negative_total,
+        "positive_count": positive_total,
+        "false_accepts": false_accepts,
+        "false_rejects": false_rejects,
+        "false_accept_rate": (false_accepts / negative_total) if negative_total else 0.0,
+        "false_reject_rate": (false_rejects / positive_total) if positive_total else 0.0,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ClaimLayer v4 evaluation & repair cycle demo")
     parser.add_argument("--live-llm", action="store_true", help="Use live OpenAI-compatible LLM endpoint")
+    parser.add_argument("--supplied-graph", action="store_true", help="Keep supplied fixture graph in --live-llm mode instead of LLMGraphProposalAdapter")
     parser.add_argument("--base-url", default="http://127.0.0.1:1234/v1", help="OpenAI-compatible base URL")
     parser.add_argument("--model", default="qwen/qwen3.5-9b", help="Model name for live LLM mode")
     parser.add_argument("--json", action="store_true", help="Emit JSON output")
     args = parser.parse_args()
 
-    results = run_demo(live_llm=args.live_llm, base_url=args.base_url, model=args.model)
+    results = run_demo(
+        live_llm=args.live_llm,
+        supplied_graph=args.supplied_graph,
+        base_url=args.base_url,
+        model=args.model,
+    )
+    perturb = run_perturbation_benchmark()
     if args.json:
-        print(json.dumps(results, ensure_ascii=False, indent=2))
+        print(json.dumps({"cycles": results, "perturbation_benchmark": perturb}, ensure_ascii=False, indent=2))
         return 0
 
     for item in results:
@@ -262,6 +421,17 @@ def main() -> int:
             )
             print(f"    response: {att['response']}")
         print()
+
+    print("=== perturbation_benchmark ===")
+    print(
+        f"negative={perturb['negative_count']} positive={perturb['positive_count']} "
+        f"false_accept_rate={perturb['false_accept_rate']:.3f} false_reject_rate={perturb['false_reject_rate']:.3f}"
+    )
+    for row in perturb["cases"]:
+        print(
+            f"  - {row['case']}: expected_accept={row['expected_accept']} actual_accept={row['actual_accept']} "
+            f"disposition={row['disposition']} issues={row['issues']}"
+        )
     return 0
 
 

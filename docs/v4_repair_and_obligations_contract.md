@@ -73,3 +73,25 @@ La correspondencia texto ↔ grafo (`verify_response_graph_correspondence`) anal
 - `ReviewResult` devuelve `disposition` (`ACCEPT`, `RETRY`, `ESCALATE`, `ABSTAIN`), `response_digest`, `assessment_digest`, `verified_elements`, `issues` (con `code`, `claim_id`/`step_id`, `evidence_refs`, `reason`, `required_change`, `acceptance_condition`, `severity`), `required_repairs` y `unresolved_obligations`.
 - `RepairOrchestrator` ejecuta un ciclo acotado por `RepairBudget` (`max_attempts`, `VerificationBudget`), detecta respuestas duplicadas o estancamiento, reutiliza `VerificationCache` solo si las dependencias no cambian, conserva el historial completo y **nunca acepta por agotamiento de intentos**.
 - Aceptar una respuesta explicativa bien acotada (`disposition == "ACCEPT"`, por ejemplo *"Según el texto, tendría aproximadamente 106 años..."*) **no implica** autorizar una operación ejecutiva (`authorize(assessment, ...)` puede seguir devolviendo `ESCALATE` si la operación exige precisión exacta o verdad contrastada externamente).
+
+## 7. Verificación Real de Correspondencia Texto-Grafo y Perturbaciones
+
+La correspondencia texto-grafo en `claimlayer.v4.correspondence` (`verify_response_graph_correspondence`) no depende solo de coincidencias léxicas superficiales ni frases literales:
+
+1. **Verificación aritmética mediante AST (`verify_response_equations`, `EquationCheckResult`)**:
+   - Extrae ecuaciones en línea y cadenas de igualdades (`=`), limpia prefijos/unidades y desenvuelve paréntesis externos, evaluando expresiones mediante `ast.parse(..., mode="eval")` y aritmética exacta `Decimal` (sin `eval`).
+   - Rechaza igualdades aritméticamente falsas (`FALSE_EQUATION_IN_RESPONSE`, p. ej. `13 + (2026 − 1933) = 13`) e igualdades ciertas pero desconectadas de los operandos/resultados del paso en el grafo (`UNGROUNDED_EQUATION_IN_RESPONSE`, p. ej. `50 + 50 = 100`).
+   - Deja expresiones simbólicas o no parseables como pendientes (`UNVERIFIED_EXPRESSION_IN_RESPONSE`, `status="unknown"`), impidiendo `ACCEPT` y manteniendo `response_correspondence_verified=False`.
+
+2. **Comparación estructurada de condiciones y polaridad (`StructuredCondition`)**:
+   - Clasifica marcadores de excepción (`salvo`, `excepto`, `a menos que`), prerrequisitos positivos (`si`, `siempre que`, y prerrequisitos negados como `solo si no`), y anulaciones concesivas (`incluso en caso de`, `aunque`).
+   - Rechaza inversiones de polaridad (`CONDITION_POLARITY_INVERTED`, p. ej. *"incluso en caso de disputa activa"* frente a *"salvo en caso de disputa activa"*), omisiones (`CONDITION_DROPPED_IN_RESPONSE`), y sustituciones por condiciones no soportadas por evidencia (`UNSUPPORTED_CONDITION_SUBSTITUTION`, p. ej. *"si hace sol"*).
+   - Menciones ambiguas sin marcador de polaridad claro quedan en estado pendiente (`CONDITION_CORRESPONDENCE_UNRESOLVED`, `status="unknown"`) salvo resolución explícita mediante `SemanticEvaluatorConfig` (`open_semantics`).
+
+3. **Descomposición por cláusulas, polaridad de conclusión y afirmaciones no numéricas (`ResponseClauseClaim`)**:
+   - Divide sub-cláusulas discursivas y separa fórmulas, descargos/limitaciones de fecha (`no se puede determinar la edad exacta`), condiciones y afirmaciones.
+   - Detecta inversión de polaridad sobre la conclusión sin quedar enmascarada por descargos de limitación (`CONCLUSION_POLARITY_INVERTED`) y detecta afirmaciones fácticas no numéricas introducidas fuera del léxico verificado del documento/pregunta/grafo (`UNSUPPORTED_FACTUAL_ADDITION`, con delegación opcional a `open_semantics` -> `RESPONSE_CORRESPONDENCE_PENDING_SEMANTIC`).
+
+4. **Patrones estructurales composicionales y evaluación por perturbaciones**:
+   - Acepta paráfrasis legítimas de atribución documental, estimación/aproximación (`estimación`, `unos ...`, `en torno a`, `rondaría`) y granularidad de calendario (`faltan el día y el mes para precisar su edad`).
+   - `claim-layer/benchmarks/v4_repair_cycle_demo.py` (`run_perturbation_benchmark`) y `tests/test_v4_repair_cycle.py` (`test_17`–`test_21`) miden `false_accept_rate` sobre perturbaciones adversariales y `false_reject_rate` sobre paráfrasis válidas.

@@ -22,12 +22,14 @@ from claimlayer.v4 import (
     RepairOrchestrator,
     RuleGuidedRepairAdapter,
     ScriptedRepairAgent,
+    SemanticEvaluatorConfig,
     SourceDocument,
     VerificationObligation,
     Vocabulary,
     authorize,
     evaluate_response,
     review_response,
+    verify_response_equations,
     verify_review_freshness,
 )
 
@@ -817,3 +819,433 @@ def test_16_llm_repair_agent_and_graph_adapter_contract() -> None:
     sent_payload = stub_repair_model.seen_payloads[0][1]
     assert sent_payload["required_repairs"]
     assert cycle.operational_authorization is not None and cycle.operational_authorization.allowed is False
+
+
+# ---------------------------------------------------------------------------
+# Family 12: AST equation verification (audit false-repair remediation)
+# ---------------------------------------------------------------------------
+
+def test_17_false_equation_in_repaired_response_rejected_vs_true_equation_accepted() -> None:
+    doc = _doc(
+        "d_buffett",
+        "Warren Buffet compró su primera acción cuando tenía 13 años y era 1933.",
+        weight=0.95,
+    )
+    graph = _build_anchor_age_graph(
+        subject="Warren Buffet",
+        anchor_age=13,
+        anchor_year=1933,
+        reference_year=2026,
+        claimed_age=106,
+        quote_age="tenía 13 años",
+        quote_year="era 1933",
+        doc=doc,
+        approximate=False,
+    )
+    q = "¿Cuántos años tiene si estamos en 2026?"
+
+    # Direct unit test on AST equation parser/verifier
+    eq_bad, eq_bad_issues = verify_response_equations("El cálculo es 13 + (2026 − 1933) = 13.", graph)
+    assert len(eq_bad) == 1
+    assert eq_bad[0].is_mathematically_true is False
+    assert eq_bad[0].status == "refuted"
+    assert eq_bad_issues and eq_bad_issues[0]["code"] == "FALSE_EQUATION_IN_RESPONSE"
+
+    eq_good, eq_good_issues = verify_response_equations("El cálculo es 13 + (2026 − 1933) = 106.", graph)
+    assert len(eq_good) == 1
+    assert eq_good[0].is_mathematically_true is True
+    assert eq_good[0].matches_graph_step is True
+    assert eq_good[0].status == "verified"
+    assert eq_good_issues == []
+
+    # Full RepairOrchestrator cycle:
+    # iter 1: naive -> RETRY
+    # iter 2: superficially qualifies + FALSE equation (= 13) -> RETRY
+    # iter 3: properly qualified + TRUE grounded equation (= 106) -> ACCEPT
+    resp_false_eq = (
+        "Según el texto, Warren Buffet tendría aproximadamente 106 años en 2026; "
+        "la edad exacta no puede determinarse sin fechas completas ni ha sido verificada externamente. "
+        "El cálculo es 13 + (2026 − 1933) = 13."
+    )
+    resp_true_eq = (
+        "Según el texto, Warren Buffet tendría aproximadamente 106 años en 2026; "
+        "la edad exacta no puede determinarse sin fechas completas ni ha sido verificada externamente. "
+        "El cálculo es 13 + (2026 − 1933) = 106."
+    )
+    cycle = RepairOrchestrator(budget=RepairBudget(max_iterations=4)).run(
+        question=q,
+        initial_response="Tiene 106 años.",
+        evidence={"d_buffett": doc},
+        graph_or_adapter=graph,
+        repair_agent=ScriptedRepairAgent([resp_false_eq, resp_true_eq]),
+    )
+    assert cycle.iterations_used == 3
+    assert cycle.attempts[0].review.disposition == "RETRY"
+    assert cycle.attempts[1].review.disposition == "RETRY"
+    assert any(i.code == "FALSE_EQUATION_IN_RESPONSE" for i in cycle.attempts[1].review.issues)
+    assert cycle.attempts[1].review.assessment.response_correspondence_verified is False
+    assert cycle.accepted is True
+    assert cycle.final_disposition == "ACCEPT"
+    assert cycle.final_review.issues == ()
+    assert cycle.final_review.assessment.response_correspondence_verified is True
+
+    # Arithmetically true but ungrounded equation (operands/result unrelated to graph step)
+    resp_ungrounded_eq = (
+        "Según el texto, Warren Buffet tendría aproximadamente 106 años en 2026; "
+        "la edad exacta no puede determinarse sin fechas completas ni ha sido verificada externamente. "
+        "El cálculo es 50 + 50 = 100."
+    )
+    rv_ungrounded = review_response(q, resp_ungrounded_eq, {"d_buffett": doc}, graph)
+    assert rv_ungrounded.disposition == "RETRY"
+    assert any(i.code == "UNGROUNDED_EQUATION_IN_RESPONSE" for i in rv_ungrounded.issues)
+    assert rv_ungrounded.assessment.response_correspondence_verified is False
+
+    # Symbolic / unparseable expression cannot receive ACCEPT either
+    resp_symbolic_eq = (
+        "Según el texto, Warren Buffet tendría aproximadamente 106 años en 2026; "
+        "la edad exacta no puede determinarse sin fechas completas ni ha sido verificada externamente. "
+        "El cálculo es 13 + x = 106."
+    )
+    rv_symbolic = review_response(q, resp_symbolic_eq, {"d_buffett": doc}, graph)
+    assert rv_symbolic.disposition != "ACCEPT"
+    assert any(i.code == "UNVERIFIED_EXPRESSION_IN_RESPONSE" for i in rv_symbolic.issues)
+    assert rv_symbolic.assessment.response_correspondence_verified is False
+
+
+# ---------------------------------------------------------------------------
+# Family 13: Condition polarity inversion, unrelated condition, and ambiguity
+# ---------------------------------------------------------------------------
+
+def _build_conditional_refund_fixture() -> tuple[SourceDocument, JustificationGraph, str]:
+    doc = _doc(
+        "d_cond",
+        "El reembolso aplicable es de 500 USD, salvo en caso de disputa activa.",
+        weight=0.95,
+    )
+    ext = ClaimNode(
+        claim_id="r_ext",
+        kind="extraction",
+        subject="Reembolso",
+        predicate="refund",
+        value=500,
+        unit="USD",
+        conditions=({"field": "exception", "value": "salvo en caso de disputa activa"},),
+        condition_status="conditional",
+        evidence=(_ref(doc, "El reembolso aplicable es de 500 USD, salvo en caso de disputa activa."),),
+        structural_reliability=0.95,
+    )
+    conc = ClaimNode(
+        claim_id="r_conc",
+        kind="derivation",
+        subject="Reembolso",
+        predicate="refund",
+        value=500,
+        unit="USD",
+        conditions=({"field": "exception", "value": "salvo en caso de disputa activa"},),
+        condition_status="conditional",
+    )
+    step = InferenceStep(
+        step_id="s_ref",
+        operation="quantities",
+        premises=("r_ext",),
+        conclusion_id="r_conc",
+    )
+    graph = JustificationGraph(
+        claims={"r_ext": ext, "r_conc": conc},
+        steps=(step,),
+        conclusion_id="r_conc",
+    )
+    return doc, graph, "¿Cuál es el reembolso aplicable?"
+
+
+def test_18_condition_inversion_and_unrelated_condition_substitution_rejected() -> None:
+    doc, graph, q = _build_conditional_refund_fixture()
+
+    # a) Omitted condition -> RETRY
+    rv_dropped = review_response(
+        q,
+        "Según el texto, el reembolso aplicable es de 500 USD.",
+        {"d_cond": doc},
+        graph,
+    )
+    assert rv_dropped.disposition == "RETRY"
+    assert any(i.code == "CONDITION_DROPPED_IN_RESPONSE" for i in rv_dropped.issues)
+
+    # b) Polarity inverted ("incluso en caso de disputa activa") -> RETRY
+    rv_inverted = review_response(
+        q,
+        "Según el texto, el reembolso aplicable es de 500 USD, incluso en caso de disputa activa.",
+        {"d_cond": doc},
+        graph,
+    )
+    assert rv_inverted.disposition == "RETRY"
+    assert any(i.code == "CONDITION_POLARITY_INVERTED" for i in rv_inverted.issues)
+    assert rv_inverted.assessment.response_correspondence_verified is False
+
+    # c) Unrelated condition ("si hace sol") -> RETRY with both dropped and unsupported condition
+    rv_unrelated = review_response(
+        q,
+        "Según el texto, el reembolso aplicable es de 500 USD, si hace sol.",
+        {"d_cond": doc},
+        graph,
+    )
+    assert rv_unrelated.disposition == "RETRY"
+    issue_codes = {i.code for i in rv_unrelated.issues}
+    assert "CONDITION_DROPPED_IN_RESPONSE" in issue_codes
+    assert "UNSUPPORTED_CONDITION_SUBSTITUTION" in issue_codes
+
+    # d) Unmarked ambiguous mention -> never ACCEPT without open_semantics resolution
+    rv_ambig = review_response(
+        q,
+        "Según el texto, el reembolso aplicable es de 500 USD; disputa activa.",
+        {"d_cond": doc},
+        graph,
+    )
+    assert rv_ambig.disposition != "ACCEPT"
+    assert any(i.code == "CONDITION_CORRESPONDENCE_UNRESOLVED" for i in rv_ambig.issues)
+    assert rv_ambig.assessment.response_correspondence_verified is False
+
+    seen_checks: list[str] = []
+
+    def _resolve_cond(**kwargs: object) -> dict[str, str]:
+        seen_checks.append(str(kwargs.get("check")))
+        if kwargs.get("check") == "condition_correspondence":
+            return {"status": "verified"}
+        return {"status": "unknown"}
+
+    prof_sem = DomainProfile(
+        profile_id="cond_sem",
+        semantic_evaluator=SemanticEvaluatorConfig(enabled=True, callable_evaluator=_resolve_cond),
+    )
+    rv_resolved = review_response(
+        q,
+        "Según el texto, el reembolso aplicable es de 500 USD; disputa activa.",
+        {"d_cond": doc},
+        graph,
+        domain_profile=prof_sem,
+    )
+    assert "condition_correspondence" in seen_checks
+    assert rv_resolved.disposition == "ACCEPT"
+    assert rv_resolved.assessment.response_correspondence_verified is True
+
+    # e) Proper exception preservation -> ACCEPT
+    rv_valid = review_response(
+        q,
+        "Según el texto, el reembolso aplicable es de 500 USD, salvo en caso de disputa activa.",
+        {"d_cond": doc},
+        graph,
+    )
+    assert rv_valid.disposition == "ACCEPT"
+    assert rv_valid.issues == ()
+    assert rv_valid.assessment.response_correspondence_verified is True
+
+
+# ---------------------------------------------------------------------------
+# Family 14: Conclusion negation & ungrounded non-numeric factual addition
+# ---------------------------------------------------------------------------
+
+def test_19_conclusion_negation_and_ungrounded_non_numeric_assertion_rejected() -> None:
+    doc = _doc(
+        "d_buffett",
+        "Warren Buffet compró su primera acción cuando tenía 13 años y era 1933.",
+        weight=0.95,
+    )
+    graph = _build_anchor_age_graph(
+        subject="Warren Buffet",
+        anchor_age=13,
+        anchor_year=1933,
+        reference_year=2026,
+        claimed_age=106,
+        quote_age="tenía 13 años",
+        quote_year="era 1933",
+        doc=doc,
+        approximate=True,
+    )
+    q = "¿Cuántos años tiene si estamos en 2026?"
+
+    negated_resp = (
+        "Según el texto, Warren Buffet no tendría aproximadamente 106 años en 2026, "
+        "aunque no se puede determinar la edad exacta sin fechas completas."
+    )
+    rv_neg = review_response(q, negated_resp, {"d_buffett": doc}, graph)
+    assert rv_neg.disposition == "RETRY"
+    assert any(i.code == "CONCLUSION_POLARITY_INVERTED" for i in rv_neg.issues)
+    assert rv_neg.assessment.response_correspondence_verified is False
+
+    hallucinated_non_numeric = (
+        "Según el texto, tendría aproximadamente 106 años en 2026 y Warren Buffet es astronauta, "
+        "aunque no se puede determinar la edad exacta sin fechas completas."
+    )
+    rv_halluc = review_response(q, hallucinated_non_numeric, {"d_buffett": doc}, graph)
+    assert rv_halluc.disposition == "RETRY"
+    assert any(i.code == "UNSUPPORTED_FACTUAL_ADDITION" for i in rv_halluc.issues)
+    assert rv_halluc.assessment.response_correspondence_verified is False
+
+
+# ---------------------------------------------------------------------------
+# Family 15: Compositional paraphrase acceptance & perturbation matrix
+# ---------------------------------------------------------------------------
+
+def test_20_valid_paraphrases_accepted_across_domains() -> None:
+    doc_age = _doc(
+        "d_buffett",
+        "Warren Buffet compró su primera acción cuando tenía 13 años y era 1933.",
+        weight=0.95,
+    )
+    graph_age = _build_anchor_age_graph(
+        subject="Warren Buffet",
+        anchor_age=13,
+        anchor_year=1933,
+        reference_year=2026,
+        claimed_age=106,
+        quote_age="tenía 13 años",
+        quote_year="era 1933",
+        doc=doc_age,
+        approximate=False,
+    )
+    paraphrase_age = (
+        "A partir del pasaje facilitado, la estimación para Warren Buffet es de unos 106 años en 2026; "
+        "faltan el día y el mes para precisar su edad."
+    )
+    rv_age = review_response(
+        "¿Cuántos años tiene si estamos en 2026?",
+        paraphrase_age,
+        {"d_buffett": doc_age},
+        graph_age,
+    )
+    assert rv_age.disposition == "ACCEPT"
+    assert rv_age.issues == ()
+    assert rv_age.assessment.response_correspondence_verified is True
+
+    doc_cond, graph_cond, q_cond = _build_conditional_refund_fixture()
+    paraphrase_cond = (
+        "De acuerdo con el documento proporcionado, el reembolso aplicable es de 500 USD, "
+        "solo si no existe disputa activa."
+    )
+    rv_cond = review_response(q_cond, paraphrase_cond, {"d_cond": doc_cond}, graph_cond)
+    assert rv_cond.disposition == "ACCEPT"
+    assert rv_cond.issues == ()
+    assert rv_cond.assessment.response_correspondence_verified is True
+
+
+def test_21_transformation_perturbation_matrix_zero_false_accept_and_zero_false_reject() -> None:
+    doc_age = _doc(
+        "d_buffett",
+        "Warren Buffet compró su primera acción cuando tenía 13 años y era 1933.",
+        weight=0.95,
+    )
+    graph_age = _build_anchor_age_graph(
+        subject="Warren Buffet",
+        anchor_age=13,
+        anchor_year=1933,
+        reference_year=2026,
+        claimed_age=106,
+        quote_age="tenía 13 años",
+        quote_year="era 1933",
+        doc=doc_age,
+        approximate=False,
+    )
+    q_age = "¿Cuántos años tiene si estamos en 2026?"
+    doc_cond, graph_cond, q_cond = _build_conditional_refund_fixture()
+
+    cases = [
+        # (name, q, resp, ev, graph, expected_accept)
+        (
+            "false_equation",
+            q_age,
+            "Según el texto, tendría aproximadamente 106 años en 2026 sin fechas completas para exactitud. El cálculo es 13 + (2026 − 1933) = 13.",
+            {"d_buffett": doc_age},
+            graph_age,
+            False,
+        ),
+        (
+            "ungrounded_equation",
+            q_age,
+            "Según el texto, tendría aproximadamente 106 años en 2026 sin fechas completas para exactitud. El cálculo es 50 + 50 = 100.",
+            {"d_buffett": doc_age},
+            graph_age,
+            False,
+        ),
+        (
+            "conclusion_negation",
+            q_age,
+            "Según el texto, Warren Buffet no tendría aproximadamente 106 años en 2026; faltan fechas completas.",
+            {"d_buffett": doc_age},
+            graph_age,
+            False,
+        ),
+        (
+            "ungrounded_claim_addition",
+            q_age,
+            "Según el texto, tendría aproximadamente 106 años en 2026 y Warren Buffet es astronauta; faltan el día y el mes para precisar su edad.",
+            {"d_buffett": doc_age},
+            graph_age,
+            False,
+        ),
+        (
+            "condition_inversion",
+            q_cond,
+            "Según el texto, el reembolso aplicable es de 500 USD, incluso en caso de disputa activa.",
+            {"d_cond": doc_cond},
+            graph_cond,
+            False,
+        ),
+        (
+            "unrelated_condition",
+            q_cond,
+            "Según el texto, el reembolso aplicable es de 500 USD, si hace sol.",
+            {"d_cond": doc_cond},
+            graph_cond,
+            False,
+        ),
+        (
+            "valid_age_paraphrase_1",
+            q_age,
+            "A partir del pasaje facilitado, la estimación para Warren Buffet es de unos 106 años en 2026; faltan el día y el mes para precisar su edad.",
+            {"d_buffett": doc_age},
+            graph_age,
+            True,
+        ),
+        (
+            "valid_age_paraphrase_2_with_grounded_equation",
+            q_age,
+            "Conforme al fragmento aportado, la edad de Warren Buffet rondaría los 106 años en 2026 (13 + (2026 - 1933) = 106), aunque no hay fecha de nacimiento completa ni verificación histórica externa.",
+            {"d_buffett": doc_age},
+            graph_age,
+            True,
+        ),
+        (
+            "valid_cond_paraphrase_1",
+            q_cond,
+            "De acuerdo con el documento proporcionado, el reembolso aplicable es de 500 USD, solo si no existe disputa activa.",
+            {"d_cond": doc_cond},
+            graph_cond,
+            True,
+        ),
+        (
+            "valid_cond_paraphrase_2",
+            q_cond,
+            "Según el pasaje facilitado, el reembolso aplicable es de 500 USD, a menos que haya disputa activa.",
+            {"d_cond": doc_cond},
+            graph_cond,
+            True,
+        ),
+    ]
+
+    false_accepts = 0
+    false_rejects = 0
+    negative_total = sum(1 for item in cases if not item[5])
+    positive_total = sum(1 for item in cases if item[5])
+    for name, q, resp, ev, graph, expected_accept in cases:
+        rv = review_response(q, resp, ev, graph)
+        actual_accept = rv.disposition == "ACCEPT" and rv.assessment.response_correspondence_verified
+        if not expected_accept and actual_accept:
+            false_accepts += 1
+        elif expected_accept and not actual_accept:
+            false_rejects += 1
+            raise AssertionError(f"False reject on {name}: disposition={rv.disposition}, issues={[i.code for i in rv.issues]}")
+
+    false_accept_rate = false_accepts / negative_total
+    false_reject_rate = false_rejects / positive_total
+    assert false_accept_rate == 0.0
+    assert false_reject_rate == 0.0

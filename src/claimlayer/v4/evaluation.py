@@ -1181,6 +1181,7 @@ def evaluate_response(
             documents=documents,
             unit_registry=profile.vocabulary.units if profile.vocabulary is not None else None,
             has_material_conflict=has_material_conflict,
+            semantic_evaluator=profile.semantic_evaluator,
         )
     else:
         correspondence_report = {
@@ -1311,15 +1312,24 @@ def evaluate_response(
         corr_step_id = "mandatory::response_correspondence"
         conc_extra_steps.add(corr_step_id)
         if corr_issues:
+            has_refuted_corr_issue = False
             for idx, issue in enumerate(corr_issues):
                 code = str(issue.get("code") or f"CORRESPONDENCE_ISSUE_{idx}")
+                issue_status = str(issue.get("status") or "refuted")
+                if issue_status not in ("refuted", "unknown"):
+                    issue_status = "refuted"
+                is_sem_pending = code in ("RESPONSE_CORRESPONDENCE_PENDING_SEMANTIC", "CONDITION_CORRESPONDENCE_UNRESOLVED")
                 ob_id = f"mandatory::correspondence::{code.lower()}::{idx}"
                 chk = VerifierResult(
                     obligation_id=ob_id,
                     step_id=corr_step_id,
-                    family="explicit_logic",
-                    status="refuted",
-                    guarantee_kind="deterministic_formal",
+                    family="open_semantics" if (issue_status == "unknown" and is_sem_pending) else "explicit_logic",
+                    status=issue_status,
+                    guarantee_kind=(
+                        "probabilistic_model"
+                        if (issue_status == "unknown" and is_sem_pending)
+                        else "deterministic_formal"
+                    ),
                     evidence=dict(issue),
                     reasons=(code,),
                     verifier_id="response_correspondence_verifier",
@@ -1327,7 +1337,21 @@ def evaluate_response(
                 )
                 all_checks.append(chk)
                 critical_check_keys.add((chk.step_id, chk.obligation_id))
-            node_refuted[conc_id] = True
+                if issue_status == "unknown":
+                    pending_obligations.append({
+                        "obligation_id": chk.obligation_id,
+                        "step_id": chk.step_id,
+                        "family": chk.family,
+                        "reasons": list(chk.reasons),
+                        "critical": True,
+                        "origin": "engine_mandatory",
+                    })
+                    if chk.step_id not in critical_unverified:
+                        critical_unverified.append(chk.step_id)
+                else:
+                    has_refuted_corr_issue = True
+            if has_refuted_corr_issue:
+                node_refuted[conc_id] = True
             conc_derivations = []
         else:
             chk = VerifierResult(

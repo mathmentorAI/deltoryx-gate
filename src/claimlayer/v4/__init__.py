@@ -20,7 +20,11 @@ from .authorization import (
     verify_authorization_verdict,
 )
 from .correspondence import (
+    EquationCheckResult,
+    ResponseClauseClaim,
+    StructuredCondition,
     compute_response_digest,
+    verify_response_equations,
     verify_response_graph_correspondence,
 )
 from .domain_profile import (
@@ -139,7 +143,8 @@ __all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'UnitEvaluation', 'evaluate_unit_a
            'FieldEvidence', 'FidelityFinding', 'check_clause_boundary_completeness',
            'evaluate_dual_readers', 'render_canonical_claim', 'verify_extraction_fidelity', 'B2B_CONTRACTS_VOCABULARY',
            'B2B_DEFAULT_ACCEPTANCE_POLICY', 'SECURITIZATION_VOCABULARY', 'SECURITIZATION_ACCEPTANCE_POLICY',
-           'compute_response_digest', 'verify_response_graph_correspondence',
+           'EquationCheckResult', 'ResponseClauseClaim', 'StructuredCondition',
+           'compute_response_digest', 'verify_response_equations', 'verify_response_graph_correspondence',
            'MANDATORY_OBLIGATION_FAMILIES', 'OBLIGATION_GENERATOR_VERSION',
            'generate_mandatory_obligations', 'infer_conclusion_semantic_domain',
            'LLMGraphProposalAdapter', 'LLMRepairAgent', 'RepairAttemptRecord', 'RepairBudget',

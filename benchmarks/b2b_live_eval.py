@@ -17,12 +17,13 @@ Supports:
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 import os
 import sys
 from typing import Any, Mapping, Sequence
 
+from claimlayer.semantic.models import canonical
 from claimlayer.v4 import (
     AcceptancePolicy,
     B2B_CONTRACTS_VOCABULARY,
@@ -41,6 +42,7 @@ from claimlayer.v4 import (
     evaluate_dual_readers,
     verify_extraction_fidelity,
 )
+from claimlayer.v4.vocabulary import label_key
 
 
 @dataclass(frozen=True)
@@ -1128,15 +1130,104 @@ class _ScriptedModel:
         return {"output": {"proposals": enriched}}
 
 
+class _CapturingReader:
+    """Wraps a ProposalReader and caches per-(document_id, revision) propose() outputs."""
+
+    def __init__(self, inner: LLMProposalReader) -> None:
+        self._inner = inner
+        self.cache: dict[tuple[str, str], Mapping[str, Any]] = {}
+
+    @property
+    def identity(self) -> Mapping[str, Any]:
+        return self._inner.identity
+
+    @property
+    def structural_reliability(self) -> float | None:
+        return self._inner.structural_reliability
+
+    def propose(self, request: Mapping[str, Any]) -> Mapping[str, Any]:
+        doc = request["document"]
+        key = (doc["document_id"], doc["revision"])
+        if key not in self.cache:
+            self.cache[key] = self._inner.propose(request)
+        return self.cache[key]
+
+
+class _ReplayReader:
+    """Replays captured propose() outputs with an empirically calibrated structural_reliability."""
+
+    def __init__(
+        self,
+        base_identity: Mapping[str, Any],
+        cache: Mapping[tuple[str, str], Mapping[str, Any]],
+        structural_reliability: float | None,
+    ) -> None:
+        self._identity = dict(base_identity)
+        self._cache = cache
+        self.structural_reliability = structural_reliability
+
+    @property
+    def identity(self) -> Mapping[str, Any]:
+        return {**self._identity, "structural_reliability": self.structural_reliability}
+
+    def propose(self, request: Mapping[str, Any]) -> Mapping[str, Any]:
+        doc = request["document"]
+        return self._cache[(doc["document_id"], doc["revision"])]
+
+
+def _canonical_unit_record(case_id: str, u: Any) -> dict[str, Any]:
+    p = u.proposition
+    return {
+        "case_id": case_id,
+        "document_id": u.evidence[0].document_id if u.evidence else "",
+        "entity": label_key(p.get("entity", "")),
+        "predicate": p.get("predicate"),
+        "scope": p.get("scope", {}),
+        "value": p.get("value"),
+        "unit": p.get("unit"),
+        "polarity": p.get("polarity"),
+        "condition_status": p.get("condition_status"),
+        "conditions": p.get("conditions", []),
+    }
+
+
+def _index_records_by_semantic_key(
+    records: Sequence[Mapping[str, Any]],
+) -> dict[tuple[str, str, str, str, str, int], dict[str, Any]]:
+    counts: dict[tuple[str, str, str, str, str], int] = {}
+    indexed: dict[tuple[str, str, str, str, str, int], dict[str, Any]] = {}
+    ordered = sorted(records, key=lambda r: canonical(dict(r)))
+    for rec in ordered:
+        base_key = (
+            str(rec["case_id"]),
+            str(rec["entity"]),
+            str(rec["predicate"]),
+            canonical(rec.get("scope", {})),
+            str(rec.get("document_id", "")),
+        )
+        occ = counts.get(base_key, 0)
+        counts[base_key] = occ + 1
+        indexed[(*base_key, occ)] = dict(rec)
+    return indexed
+
+
 def _eval_layer1_gold_reasoning(cases: Sequence[EvalCase], policy: AcceptancePolicy) -> dict[str, Any]:
     correct = 0
     details = []
+    gold_resolved_by_case: dict[str, dict[str, Any]] = {}
     for case in cases:
         layer = EvidenceLayer(vocabulary=B2B_CONTRACTS_VOCABULARY, policy=policy)
         for doc in case.docs:
             layer.ingest(doc)
         res = layer.ingest_units(
-            [{"proposal": u["proposal"], "evidence": u["evidence"]} for u in case.gold_units],
+            [
+                {
+                    "proposal": u["proposal"],
+                    "evidence": u["evidence"],
+                    "field_evidence": u["fe"],
+                }
+                for u in case.gold_units
+            ],
             attestor="gold_oracle",
         )
         fe_map = {uid: case.gold_units[i]["fe"] for i, uid in enumerate(res["unit_ids"])}
@@ -1154,6 +1245,7 @@ def _eval_layer1_gold_reasoning(cases: Sequence[EvalCase], policy: AcceptancePol
         ok = (verdict.allowed == case.expected_allowed) and (verdict.status == case.expected_status)
         if ok:
             correct += 1
+        gold_resolved_by_case[case.case_id] = dict(verdict.resolved_values)
         details.append(
             {
                 "case_id": case.case_id,
@@ -1168,13 +1260,15 @@ def _eval_layer1_gold_reasoning(cases: Sequence[EvalCase], policy: AcceptancePol
         "correct": correct,
         "accuracy": round(correct / max(1, len(cases)), 4),
         "details": details,
+        "gold_resolved_by_case": gold_resolved_by_case,
     }
 
 
 def _extract_with_reader(
-    reader: LLMProposalReader,
+    reader: Any,
     cases: Sequence[EvalCase],
     policy: AcceptancePolicy,
+    gold_resolved_by_case: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     all_extracted: list[dict[str, Any]] = []
     per_case_verdicts: list[dict[str, Any]] = []
@@ -1194,17 +1288,7 @@ def _extract_with_reader(
             doc = next((d for d in case.docs if d.document_id == u.evidence[0].document_id), None)
             if doc is not None:
                 fidelity_findings.extend(verify_extraction_fidelity(doc.text, u))
-
-            all_extracted.append(
-                {
-                    "case_id": case.case_id,
-                    "entity": u.proposition.get("entity"),
-                    "predicate": u.proposition.get("predicate"),
-                    "value": u.proposition.get("value"),
-                    "condition_status": u.proposition.get("condition_status"),
-                    "conditions": u.proposition.get("conditions", []),
-                }
-            )
+            all_extracted.append(_canonical_unit_record(case.case_id, u))
 
         verdict = authorize_operation(
             layer,
@@ -1216,6 +1300,12 @@ def _extract_with_reader(
             ingest_summary=summary,
             numeric_bounds=case.numeric_bounds,
         )
+        expected_vals = (gold_resolved_by_case or {}).get(case.case_id)
+        values_match = (
+            True
+            if (not case.expected_allowed or expected_vals is None)
+            else canonical(verdict.resolved_values) == canonical(dict(expected_vals))
+        )
         per_case_verdicts.append(
             {
                 "case_id": case.case_id,
@@ -1223,6 +1313,7 @@ def _extract_with_reader(
                 "expected_status": case.expected_status,
                 "actual_allowed": verdict.allowed,
                 "actual_status": verdict.status,
+                "values_match": values_match,
                 "fidelity_finding_codes": [f.code for f in fidelity_findings],
             }
         )
@@ -1240,24 +1331,38 @@ def _build_gold_flat(cases: Sequence[EvalCase]) -> list[dict[str, Any]]:
             attestor="gold_oracle",
         )
         for u in layer.units:
-            gold.append(
-                {
-                    "case_id": c.case_id,
-                    "entity": u.proposition.get("entity"),
-                    "predicate": u.proposition.get("predicate"),
-                    "value": u.proposition.get("value"),
-                    "condition_status": u.proposition.get("condition_status"),
-                    "conditions": u.proposition.get("conditions", []),
-                }
-            )
+            gold.append(_canonical_unit_record(c.case_id, u))
     return gold
+
+
+def _align_dual_reader_cases(
+    gold_records: Sequence[Mapping[str, Any]],
+    ext_a_records: Sequence[Mapping[str, Any]],
+    ext_b_records: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    g_map = _index_records_by_semantic_key(gold_records)
+    a_map = _index_records_by_semantic_key(ext_a_records)
+    b_map = _index_records_by_semantic_key(ext_b_records)
+    all_keys = sorted(set(g_map) | set(a_map) | set(b_map))
+    return [
+        {
+            "gold": g_map.get(k),
+            "reader_a": a_map.get(k),
+            "reader_b": b_map.get(k),
+        }
+        for k in all_keys
+    ]
 
 
 def _risk_coverage_at(verdicts: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     total = len(verdicts)
     accepted = [v for v in verdicts if v["actual_allowed"]]
     abstained = [v for v in verdicts if not v["actual_allowed"]]
-    false_pass = [v for v in accepted if not v["expected_allowed"]]
+    false_pass = [
+        v
+        for v in accepted
+        if (not v["expected_allowed"]) or (not v.get("values_match", True))
+    ]
     coverage = len(accepted) / max(1, total)
     selective_risk = (len(false_pass) / len(accepted)) if accepted else 0.0
     return {
@@ -1299,43 +1404,40 @@ def run_benchmark(
         adapter_b = _ScriptedModel("dry-run-reader-b", combined_b)
         mode = "dry-run"
 
-    reader_a = LLMProposalReader(adapter_a, prompt=STRICT_READER_PROMPT)
-    reader_b = LLMProposalReader(adapter_b, prompt=STRICT_READER_PROMPT)
+    raw_reader_a = LLMProposalReader(adapter_a, prompt=STRICT_READER_PROMPT)
+    raw_reader_b = LLMProposalReader(adapter_b, prompt=STRICT_READER_PROMPT)
+    cap_a = _CapturingReader(raw_reader_a)
+    cap_b = _CapturingReader(raw_reader_b)
 
     # Layer 1: Gold deterministic reasoning
-    l1_dev = _eval_layer1_gold_reasoning(dev_cases, B2B_DEFAULT_ACCEPTANCE_POLICY)
-    l1_test = _eval_layer1_gold_reasoning(test_cases, B2B_DEFAULT_ACCEPTANCE_POLICY)
+    l1_dev_full = _eval_layer1_gold_reasoning(dev_cases, B2B_DEFAULT_ACCEPTANCE_POLICY)
+    l1_test_full = _eval_layer1_gold_reasoning(test_cases, B2B_DEFAULT_ACCEPTANCE_POLICY)
+    gold_dev_resolved = l1_dev_full.pop("gold_resolved_by_case")
+    gold_test_resolved = l1_test_full.pop("gold_resolved_by_case")
 
-    # Layer 2: Dual-reader extraction & shared error evaluation
-    ext_a_dev, verdicts_a_dev = _extract_with_reader(reader_a, dev_cases, B2B_DEFAULT_ACCEPTANCE_POLICY)
-    ext_b_dev, _ = _extract_with_reader(reader_b, dev_cases, B2B_DEFAULT_ACCEPTANCE_POLICY)
+    # Layer 2: Extract ONCE per reader per split; align by semantic key
+    ext_a_dev, _ = _extract_with_reader(cap_a, dev_cases, B2B_DEFAULT_ACCEPTANCE_POLICY, gold_dev_resolved)
+    ext_b_dev, _ = _extract_with_reader(cap_b, dev_cases, B2B_DEFAULT_ACCEPTANCE_POLICY, gold_dev_resolved)
     gold_dev = _build_gold_flat(dev_cases)
-    dual_dev = evaluate_dual_readers(
-        [
-            {
-                "gold": g,
-                "reader_a": ext_a_dev[i] if i < len(ext_a_dev) else None,
-                "reader_b": ext_b_dev[i] if i < len(ext_b_dev) else None,
-            }
-            for i, g in enumerate(gold_dev)
-        ]
-    )
+    aligned_dev = _align_dual_reader_cases(gold_dev, ext_a_dev, ext_b_dev)
+    dual_dev = evaluate_dual_readers(aligned_dev)
 
-    ext_a_test, verdicts_a_test = _extract_with_reader(reader_a, test_cases, B2B_DEFAULT_ACCEPTANCE_POLICY)
-    ext_b_test, _ = _extract_with_reader(reader_b, test_cases, B2B_DEFAULT_ACCEPTANCE_POLICY)
+    # Empirical structural_reliability measured from Reader A exact match rate on DEV
+    dev_exact_hits = sum(1 for row in aligned_dev if row["gold"] is not None and row["reader_a"] == row["gold"])
+    measured_dev_reliability = round(dev_exact_hits / max(1, len(aligned_dev)), 4)
+
+    ext_a_test, _ = _extract_with_reader(cap_a, test_cases, B2B_DEFAULT_ACCEPTANCE_POLICY, gold_test_resolved)
+    ext_b_test, _ = _extract_with_reader(cap_b, test_cases, B2B_DEFAULT_ACCEPTANCE_POLICY, gold_test_resolved)
     gold_test = _build_gold_flat(test_cases)
-    dual_test = evaluate_dual_readers(
-        [
-            {
-                "gold": g,
-                "reader_a": ext_a_test[i] if i < len(ext_a_test) else None,
-                "reader_b": ext_b_test[i] if i < len(ext_b_test) else None,
-            }
-            for i, g in enumerate(gold_test)
-        ]
-    )
+    aligned_test = _align_dual_reader_cases(gold_test, ext_a_test, ext_b_test)
+    dual_test = evaluate_dual_readers(aligned_test)
 
-    # Layer 3: Policy sweep on DEV -> calibrate (tau, delta) -> evaluate on blind TEST
+    # Layer 3: Replay captured extractions (zero extra reader calls) over DEV (tau, delta) grid
+    calibrated_reader_a = _ReplayReader(
+        raw_reader_a.identity,
+        cap_a.cache,
+        structural_reliability=measured_dev_reliability,
+    )
     grid = [(0.50, 0.30), (0.70, 0.20), (0.85, 0.10)]
     dev_curve = []
     for tau, delta in grid:
@@ -1345,7 +1447,7 @@ def run_benchmark(
             allowed_assertion_kinds=B2B_DEFAULT_ACCEPTANCE_POLICY.allowed_assertion_kinds,
             version=f"sweep-{tau}-{delta}",
         )
-        _, v_dev = _extract_with_reader(reader_a, dev_cases, pol)
+        _, v_dev = _extract_with_reader(calibrated_reader_a, dev_cases, pol, gold_dev_resolved)
         metrics = _risk_coverage_at(v_dev)
         dev_curve.append({"tau": tau, "delta": delta, **metrics})
 
@@ -1357,12 +1459,18 @@ def run_benchmark(
         allowed_assertion_kinds=B2B_DEFAULT_ACCEPTANCE_POLICY.allowed_assertion_kinds,
         version="calibrated",
     )
-    _, calibrated_test_verdicts = _extract_with_reader(reader_a, test_cases, calibrated_pol)
+    _, calibrated_test_verdicts = _extract_with_reader(
+        calibrated_reader_a,
+        test_cases,
+        calibrated_pol,
+        gold_test_resolved,
+    )
     test_at_calibrated = _risk_coverage_at(calibrated_test_verdicts)
 
     return {
         "mode": mode,
-        "layer1_gold_reasoning": {"dev": l1_dev, "test": l1_test},
+        "reader_a_dev_measured_reliability": measured_dev_reliability,
+        "layer1_gold_reasoning": {"dev": l1_dev_full, "test": l1_test_full},
         "layer2_dual_reader_extraction": {
             "dev": dual_dev,
             "test": dual_test,

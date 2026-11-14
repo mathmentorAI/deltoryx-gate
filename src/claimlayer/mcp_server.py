@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sys
 from dataclasses import dataclass, field
 from datetime import date
@@ -213,19 +214,58 @@ class MCPVerificationServer:
                     f"Caller policy cannot override server evaluation date as_of='{server_as_of}'.",
                 )
 
-        min_rank = int(raw_policy.get("min_tier_rank", base.min_tier_rank))
+        raw_rank = raw_policy.get("min_tier_rank", base.min_tier_rank)
+        if isinstance(raw_rank, bool):
+            raise MCPError(JSONRPC_INVALID_PARAMS, "min_tier_rank must be an integer.")
+        try:
+            min_rank = int(raw_rank)
+        except (TypeError, ValueError) as exc:
+            raise MCPError(JSONRPC_INVALID_PARAMS, f"min_tier_rank must be an integer: {exc}") from exc
         if min_rank < base.min_tier_rank:
             raise MCPError(
                 JSONRPC_INVALID_PARAMS,
                 f"Caller policy cannot lower min_tier_rank below {base.min_tier_rank}.",
             )
 
-        min_sup = float(raw_policy.get("min_support", base.min_support))
+        raw_min_sup = raw_policy.get("min_support", base.min_support)
+        if isinstance(raw_min_sup, bool):
+            raise MCPError(JSONRPC_INVALID_PARAMS, "min_support must be a finite number in [0.0, 1.0].")
+        try:
+            min_sup = float(raw_min_sup)
+        except (TypeError, ValueError) as exc:
+            raise MCPError(JSONRPC_INVALID_PARAMS, f"min_support must be a finite number in [0.0, 1.0]: {exc}") from exc
+        if not math.isfinite(min_sup) or min_sup < 0.0 or min_sup > 1.0:
+            raise MCPError(
+                JSONRPC_INVALID_PARAMS,
+                f"min_support must be a finite number in [0.0, 1.0], got {raw_min_sup!r}.",
+            )
         if min_sup < base.min_support:
             raise MCPError(
                 JSONRPC_INVALID_PARAMS,
                 f"Caller policy cannot lower min_support below {base.min_support}.",
             )
+
+        if "confidence_threshold" in raw_policy and raw_policy["confidence_threshold"] is not None:
+            raw_ct = raw_policy["confidence_threshold"]
+            if isinstance(raw_ct, bool):
+                raise MCPError(JSONRPC_INVALID_PARAMS, "confidence_threshold must be a finite number in [0.0, 1.0].")
+            try:
+                ct_val = float(raw_ct)
+            except (TypeError, ValueError) as exc:
+                raise MCPError(JSONRPC_INVALID_PARAMS, f"confidence_threshold invalid: {exc}") from exc
+            if not math.isfinite(ct_val) or ct_val < 0.0 or ct_val > 1.0:
+                raise MCPError(JSONRPC_INVALID_PARAMS, "confidence_threshold must be a finite number in [0.0, 1.0].")
+
+        if "conflict_escalation_threshold" in raw_policy and raw_policy["conflict_escalation_threshold"] is not None:
+            raw_cet = raw_policy["conflict_escalation_threshold"]
+            if isinstance(raw_cet, bool):
+                raise MCPError(JSONRPC_INVALID_PARAMS, "conflict_escalation_threshold must be a finite number in [0.0, 1.0].")
+            try:
+                cet_val = float(raw_cet)
+            except (TypeError, ValueError) as exc:
+                raise MCPError(JSONRPC_INVALID_PARAMS, f"conflict_escalation_threshold invalid: {exc}") from exc
+            if not math.isfinite(cet_val) or cet_val < 0.0 or cet_val > 1.0:
+                raise MCPError(JSONRPC_INVALID_PARAMS, "conflict_escalation_threshold must be a finite number in [0.0, 1.0].")
 
         req_preds = list(base.required_predicates)
         for p in raw_policy.get("required_predicates") or []:
@@ -238,11 +278,35 @@ class MCPVerificationServer:
                 req_srcs.append(str(s))
 
         bounds = dict(base.numeric_bounds)
-        if "numeric_bounds" in raw_policy and isinstance(raw_policy["numeric_bounds"], dict):
+        if "numeric_bounds" in raw_policy and raw_policy["numeric_bounds"] is not None:
+            if not isinstance(raw_policy["numeric_bounds"], dict):
+                raise MCPError(JSONRPC_INVALID_PARAMS, "numeric_bounds must be an object.")
             for k, v in raw_policy["numeric_bounds"].items():
+                if not isinstance(v, (list, tuple)) or len(v) != 2:
+                    raise MCPError(JSONRPC_INVALID_PARAMS, f"numeric_bounds[{k!r}] must be a 2-element [min, max] array.")
                 key_str = str(k)
-                new_lo = float(v[0]) if v[0] is not None else None
-                new_hi = float(v[1]) if v[1] is not None else None
+                new_lo: float | None = None
+                new_hi: float | None = None
+                if v[0] is not None:
+                    if isinstance(v[0], bool):
+                        raise MCPError(JSONRPC_INVALID_PARAMS, f"numeric_bounds[{k!r}] lower bound must be a finite number.")
+                    try:
+                        new_lo = float(v[0])
+                    except (TypeError, ValueError) as exc:
+                        raise MCPError(JSONRPC_INVALID_PARAMS, f"numeric_bounds[{k!r}] lower bound invalid: {exc}") from exc
+                    if not math.isfinite(new_lo):
+                        raise MCPError(JSONRPC_INVALID_PARAMS, f"numeric_bounds[{k!r}] lower bound must be finite.")
+                if v[1] is not None:
+                    if isinstance(v[1], bool):
+                        raise MCPError(JSONRPC_INVALID_PARAMS, f"numeric_bounds[{k!r}] upper bound must be a finite number.")
+                    try:
+                        new_hi = float(v[1])
+                    except (TypeError, ValueError) as exc:
+                        raise MCPError(JSONRPC_INVALID_PARAMS, f"numeric_bounds[{k!r}] upper bound invalid: {exc}") from exc
+                    if not math.isfinite(new_hi):
+                        raise MCPError(JSONRPC_INVALID_PARAMS, f"numeric_bounds[{k!r}] upper bound must be finite.")
+                if new_lo is not None and new_hi is not None and new_lo > new_hi:
+                    raise MCPError(JSONRPC_INVALID_PARAMS, f"numeric_bounds[{k!r}] lower bound cannot exceed upper bound.")
                 if key_str in bounds:
                     base_lo, base_hi = bounds[key_str]
                     eff_lo = (
@@ -342,17 +406,24 @@ class MCPVerificationServer:
                         JSONRPC_INVALID_PARAMS,
                         f"Fact quote '{quote_str[:60]}' does not appear in source '{src.id}'.",
                     )
-                self.ledger.add_fact(
-                    FactRecord(
-                        subject=str(rf["subject"]),
-                        predicate=str(rf["predicate"]),
-                        value=str(rf["value"]),
-                        source_id=src.id,
-                        quote=quote_str,
-                        unit=rf.get("unit"),
-                        confidence=float(rf.get("confidence", 1.0)),
+                raw_conf = rf.get("confidence", 1.0)
+                if isinstance(raw_conf, bool):
+                    raise MCPError(JSONRPC_INVALID_PARAMS, "Fact confidence must be a finite float in [0.0, 1.0].")
+                try:
+                    conf_val = float(raw_conf)
+                    self.ledger.add_fact(
+                        FactRecord(
+                            subject=str(rf["subject"]),
+                            predicate=str(rf["predicate"]),
+                            value=str(rf["value"]),
+                            source_id=src.id,
+                            quote=quote_str,
+                            unit=rf.get("unit"),
+                            confidence=conf_val,
+                        )
                     )
-                )
+                except ValueError as exc:
+                    raise MCPError(JSONRPC_INVALID_PARAMS, str(exc)) from exc
             return {
                 "registered": True,
                 "source_id": src.id,
@@ -369,13 +440,16 @@ class MCPVerificationServer:
                         JSONRPC_INVALID_PARAMS,
                         f"Caller cannot override server evaluation date as_of='{pol.as_of}'.",
                     )
-            verdict = self.ledger.verify(
-                assertions=arguments.get("assertions") or [],
-                policy=pol,
-                as_of=pol.as_of,
-                agent_id=session_agent_id,
-                record=True,
-            )
+            try:
+                verdict = self.ledger.verify(
+                    assertions=arguments.get("assertions") or [],
+                    policy=pol,
+                    as_of=pol.as_of,
+                    agent_id=session_agent_id,
+                    record=True,
+                )
+            except (ValueError, TypeError) as exc:
+                raise MCPError(JSONRPC_INVALID_PARAMS, str(exc)) from exc
             return verdict.to_dict()
 
         if name == "check_escalation":

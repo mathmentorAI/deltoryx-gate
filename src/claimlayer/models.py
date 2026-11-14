@@ -268,7 +268,41 @@ class Policy:
 
     def __post_init__(self) -> None:
         if self.confidence_threshold is not None:
-            object.__setattr__(self, "min_support", float(self.confidence_threshold))
+            object.__setattr__(
+                self, "min_support", _validate_confidence(self.confidence_threshold)
+            )
+        else:
+            object.__setattr__(self, "min_support", _validate_confidence(self.min_support))
+        object.__setattr__(
+            self,
+            "conflict_escalation_threshold",
+            _validate_confidence(self.conflict_escalation_threshold),
+        )
+        if not isinstance(self.numeric_bounds, Mapping):
+            raise ValueError("numeric_bounds must be a mapping")
+        validated_bounds: dict[str, tuple[float | None, float | None]] = {}
+        for k, bounds in self.numeric_bounds.items():
+            if not isinstance(bounds, (tuple, list)) or len(bounds) != 2:
+                raise ValueError(f"numeric_bounds[{k!r}] must be a 2-element (min, max) pair")
+            raw_lo, raw_hi = bounds[0], bounds[1]
+            lo: float | None = None
+            hi: float | None = None
+            if raw_lo is not None:
+                if isinstance(raw_lo, bool) or not isinstance(raw_lo, (int, float)):
+                    raise ValueError(f"numeric_bounds[{k!r}] lower bound must be finite number")
+                lo = float(raw_lo)
+                if not math.isfinite(lo):
+                    raise ValueError(f"numeric_bounds[{k!r}] lower bound must be finite number")
+            if raw_hi is not None:
+                if isinstance(raw_hi, bool) or not isinstance(raw_hi, (int, float)):
+                    raise ValueError(f"numeric_bounds[{k!r}] upper bound must be finite number")
+                hi = float(raw_hi)
+                if not math.isfinite(hi):
+                    raise ValueError(f"numeric_bounds[{k!r}] upper bound must be finite number")
+            if lo is not None and hi is not None and lo > hi:
+                raise ValueError(f"numeric_bounds[{k!r}] lower bound cannot exceed upper bound")
+            validated_bounds[str(k)] = (lo, hi)
+        object.__setattr__(self, "numeric_bounds", validated_bounds)
         if isinstance(self.required_predicates, list):
             object.__setattr__(self, "required_predicates", tuple(self.required_predicates))
         if isinstance(self.required_source_ids, list):

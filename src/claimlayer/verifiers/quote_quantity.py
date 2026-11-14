@@ -849,12 +849,39 @@ def extract_quantities(
     fraction_pattern = re.compile(
         r"\b(" + "|".join(_ONES_EN) + r")[ -]+("
         + "|".join(denominator_words) + r")s?\b", re.IGNORECASE)
+    fraction_unit_suffix_re = re.compile(
+        r"(?:\s+(?:of\s+(?:an?|the)|de\s+(?:un|una|el|la)|an?))?\s*"
+        r"(?:(?P<scale>mil\s+millones|billions?|millions?|millones|mill[oó]n|thousands?|miles|mil)\b\s*(?:(?:of|de)\s+)?)?"
+        r"(?P<unit>(?!(?:us\$|\$|€|£)\s*\d)" + _UNIT_PATTERN + r")?",
+        re.IGNORECASE,
+    )
     for m in fraction_pattern.finditer(scrubbed):
         if _overlaps(m.start(), m.end()):
             continue
-        magnitude = Decimal(_ONES_EN[m[1].lower()]) / Decimal(denominator_words[m[2].lower()]) * 100
-        occupied_spans.append(m.span())
-        results.append(ParsedQuantity(magnitude, "PERCENT", is_fraction=True, span=m.span()))
+        ratio = Decimal(_ONES_EN[m[1].lower()]) / Decimal(denominator_words[m[2].lower()])
+        tail_m = fraction_unit_suffix_re.match(scrubbed, m.end())
+        tail_scale = tail_m.group("scale") if tail_m else None
+        tail_unit_raw = tail_m.group("unit") if tail_m else None
+        if tail_unit_raw or tail_scale:
+            unit = canonicalize_unit(tail_unit_raw) if tail_unit_raw else default_unit
+            if unit == "PERCENT" and not tail_scale:
+                mag = ratio * Decimal("100")
+            else:
+                scale_factor = (
+                    _SCALE_FACTORS.get(re.sub(r"\s+", " ", tail_scale.strip().lower()), Decimal("1"))
+                    if tail_scale
+                    else Decimal("1")
+                )
+                mag = ratio * scale_factor
+            span = (m.start(), tail_m.end())
+            if _overlaps(span[0], span[1]):
+                continue
+            occupied_spans.append(span)
+            results.append(ParsedQuantity(mag.normalize(), unit, is_fraction=True, span=span))
+        else:
+            magnitude = ratio * Decimal("100")
+            occupied_spans.append(m.span())
+            results.append(ParsedQuantity(magnitude.normalize(), "PERCENT", is_fraction=True, span=m.span()))
 
     # 2. Financial ratio covenants ("1.25 to 1.00" -> 1.25 MULTIPLIER)
     for m in _RATIO_COVENANT_RE.finditer(scrubbed):
@@ -1100,9 +1127,9 @@ def _score_subclause_match(clause_text: str, phrases: list[str], tokens: set[str
             if re.search(r"\b" + re.escape(prefix) + r"\s+[a-z0-9]+\b", low):
                 score -= 10
     clause_words = set(re.findall(r"[a-zA-Z0-9áéíóúñüÁÉÍÓÚÑÜ]+", low))
-    for tok in tokens:
+    for tok in sorted(tokens):
         if tok in clause_words or any(
-            cw.startswith(tok[:4]) and len(tok) >= 4 for cw in clause_words
+            cw.startswith(tok[:4]) and len(tok) >= 4 for cw in sorted(clause_words)
         ):
             score += 3
     return score
@@ -1161,7 +1188,7 @@ def _check_multi_quantity_subject_binding(
             target_pos = low_quote.find(ph)
             break
     if target_pos < 0:
-        for tok in tokens:
+        for tok in sorted(tokens):
             if len(re.findall(r"\b" + re.escape(tok) + r"\b", low_quote)) == 1:
                 target_pos = low_quote.find(tok)
                 break

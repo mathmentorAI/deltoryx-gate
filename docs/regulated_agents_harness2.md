@@ -37,7 +37,7 @@ In addition, `Deltoryx Gate v4` gives `Harness²` an **objective, deterministic 
 When building systems for high-risk or regulated domains (credit, employment, essential services, structured finance, commercial contracts), `Harness²` + `Deltoryx Gate v4` provides a concrete technical control surface:
 
 - **Effective Human Oversight (e.g., EU AI Act Art. 14):** `ESCALATE` (`requires_human=True`) and `RETRY` enforce explicit abstention on unread documents, `unknown_condition`, `unrepresentable_condition`, or equal-tier contradictions—preventing silent automation over incomplete evidence.
-- **Record-Keeping & Traceability (Arts. 12–13):** Every authorization decision binds back to exact character offsets (`EvidenceRef`, `FieldEvidence`), explicit `Vocabulary` and `AcceptancePolicy` versions, and HMAC-authenticated receipts (`verify_receipt(..., allow_unkeyed=False)`).
+- **Record-Keeping & Traceability (Arts. 12–13):** Every authorization decision binds back to exact character offsets (`EvidenceRef`, `FieldEvidence`), explicit `Vocabulary` and `AcceptancePolicy` versions, execution-target digests (`operation_id`, `payload_digest`, and `snapshot_digest` on `AuthorizationVerdict`), and HMAC-authenticated receipts (`verify_receipt(..., allow_unkeyed=False)`, sealed with a domain-separated `0x00`/`0x01` SHA-256 Merkle tree inspired by RFC 9162).
 - **Risk Management & Accuracy Separation (Arts. 9, 15):** The 3-layer evaluation harness (`benchmarks/b2b_live_eval.py`) separates deterministic reasoning over typed facts, extraction fidelity (including dual-reader shared-error measurement via `evaluate_dual_readers`), and end-to-end risk-coverage (`selective_risk` vs. `automation_coverage`).
 
 ---
@@ -46,5 +46,6 @@ When building systems for high-risk or regulated domains (credit, employment, es
 
 Using `Harness²` with `Deltoryx Gate` **does not by itself grant legal or regulatory certification** under the EU AI Act (RIA), SEC rules, or any other statute:
 
+- `PASS` certifies **deterministic conformance with the declared domain contract, source hierarchy, and operator policy** over the supplied documents and policy — not open-world semantic completeness over unextracted prose outside the submitted contract.
 - Regulatory compliance also requires organizational governance, data/privacy controls (e.g., GDPR), cybersecurity, bias/fairness assessments, conformity assessments where applicable, and empirical validation on live domain documents (`--live`).
 - What `Deltoryx Gate` provides is the **deterministic verification and authorization boundary** that allows teams to adopt adaptive agent harnesses without surrendering auditability, policy control, or abstention guarantees.

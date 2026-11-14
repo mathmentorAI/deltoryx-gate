@@ -26,6 +26,7 @@ from claimlayer.verifiers.precedence import (
 )
 from claimlayer.verifiers.quote_quantity import (
     _to_commensurable_base,
+    canonicalize_unit,
     canonicalize_value,
     extract_quantities,
     infer_predicate_dimension,
@@ -153,12 +154,12 @@ def _dimension_compatible_with_bound(bound_key: str, q_unit: str) -> bool:
     return True
 
 
-def _match_numeric_bound(
+def _match_numeric_bound_entry(
     assertion: Assertion,
     q_unit: str,
     policy: Policy,
-) -> tuple[float | None, float | None] | None:
-    """Match an assertion & quantity against policy.numeric_bounds with dimension and quote-topic awareness."""
+) -> tuple[str, tuple[float | None, float | None]] | None:
+    """Match an assertion & quantity against policy.numeric_bounds, returning (bound_key, bounds)."""
     if not policy.numeric_bounds:
         return None
     predicate = assertion.predicate
@@ -166,14 +167,22 @@ def _match_numeric_bound(
     raw_pred = normalize_key(predicate)
 
     for k, bounds in policy.numeric_bounds.items():
-        if not _dimension_compatible_with_bound(k, q_unit):
+        base_k = k.split(":", 1)[0]
+        if ":" in k:
+            explicit_bound_unit = canonicalize_unit(k.split(":", 1)[1])
+            q_base_unit = _to_commensurable_base(Decimal("1"), q_unit)[1]
+            t_base_unit = _to_commensurable_base(Decimal("1"), explicit_bound_unit)[1]
+            if q_unit != explicit_bound_unit and q_base_unit != t_base_unit:
+                continue
+        elif not _dimension_compatible_with_bound(base_k, q_unit):
             continue
         if (
-            k == predicate
-            or normalize_key(k) == raw_pred
-            or normalize_predicate_key(k, policy.predicate_aliases) == norm_pred
+            k == f"{predicate}:{q_unit}"
+            or base_k == predicate
+            or normalize_key(base_k) == raw_pred
+            or normalize_predicate_key(base_k, policy.predicate_aliases) == norm_pred
         ):
-            return bounds
+            return k, bounds
 
     pred_stems = {t for t in norm_pred.split("_") if t and t not in _GENERIC_BOUND_SUFFIXES}
     affirmative_quote = re.sub(
@@ -189,16 +198,47 @@ def _match_numeric_bound(
     }
 
     for k, bounds in policy.numeric_bounds.items():
-        if not _dimension_compatible_with_bound(k, q_unit):
+        base_k = k.split(":", 1)[0]
+        if not _dimension_compatible_with_bound(base_k, q_unit):
             continue
-        k_norm = normalize_predicate_key(k, policy.predicate_aliases)
+        k_norm = normalize_predicate_key(base_k, policy.predicate_aliases)
         k_stems = {t for t in k_norm.split("_") if t and t not in _GENERIC_BOUND_SUFFIXES}
         if not k_stems:
             continue
         if pred_stems == k_stems or k_stems.issubset(pred_stems) or k_stems.issubset(quote_stems):
-            return bounds
+            return k, bounds
 
     return None
+
+
+def _match_numeric_bound(
+    assertion: Assertion,
+    q_unit: str,
+    policy: Policy,
+) -> tuple[float | None, float | None] | None:
+    """Match an assertion & quantity against policy.numeric_bounds with dimension and quote-topic awareness."""
+    entry = _match_numeric_bound_entry(assertion, q_unit, policy)
+    return entry[1] if entry is not None else None
+
+
+def _normalize_magnitude_for_bound(magnitude: Decimal, q_unit: str, bound_key: str) -> Decimal:
+    """Normalize quantity magnitude to canonical/bound units so e.g. 2 weeks and 14 days match."""
+    q_base_mag, q_base_unit = _to_commensurable_base(magnitude, q_unit)
+    target_unit: str | None = None
+    if ":" in bound_key:
+        target_unit = canonicalize_unit(bound_key.split(":", 1)[1])
+    else:
+        tokens = normalize_key(bound_key).split("_")
+        if tokens:
+            tail = canonicalize_unit(tokens[-1])
+            if tail in {"DAYS", "WEEKS", "MONTHS", "YEARS", "BPS", "PERCENT"}:
+                target_unit = tail
+    if target_unit is None:
+        return q_base_mag
+    t_factor, t_base_unit = _to_commensurable_base(Decimal("1"), target_unit)
+    if q_base_unit == t_base_unit and t_factor != 0:
+        return q_base_mag / t_factor
+    return magnitude
 
 
 def _find_indexed_peer_clause_conflict(
@@ -461,11 +501,12 @@ def evaluate_conflicts_and_thresholds(
     if policy.numeric_bounds:
         quantities = extract_quantities(assertion.value, explicit_unit=assertion.unit)
         for q in quantities:
-            bounds = _match_numeric_bound(assertion, q.unit, policy)
-            if bounds is None:
+            entry = _match_numeric_bound_entry(assertion, q.unit, policy)
+            if entry is None:
                 continue
-            min_bound, max_bound = bounds
-            if min_bound is not None and q.magnitude < Decimal(str(min_bound)):
+            bound_key, (min_bound, max_bound) = entry
+            norm_mag = _normalize_magnitude_for_bound(q.magnitude, q.unit, bound_key)
+            if min_bound is not None and norm_mag < Decimal(str(min_bound)):
                 issues.append(
                     Issue(
                         code="POLICY_THRESHOLD_EXCEEDED",
@@ -474,13 +515,13 @@ def evaluate_conflicts_and_thresholds(
                         subject=assertion.subject,
                         predicate=assertion.predicate,
                         message=(
-                            f"{assertion.subject}.{assertion.predicate} = {q.magnitude} is below "
+                            f"{assertion.subject}.{assertion.predicate} = {norm_mag} is below "
                             f"policy auto-approval floor ({min_bound:g})."
                         ),
                         remediation="Requires human sign-off for below-floor exception.",
                     )
                 )
-            if max_bound is not None and q.magnitude > Decimal(str(max_bound)):
+            if max_bound is not None and norm_mag > Decimal(str(max_bound)):
                 issues.append(
                     Issue(
                         code="POLICY_THRESHOLD_EXCEEDED",
@@ -489,7 +530,7 @@ def evaluate_conflicts_and_thresholds(
                         subject=assertion.subject,
                         predicate=assertion.predicate,
                         message=(
-                            f"{assertion.subject}.{assertion.predicate} = {q.magnitude} exceeds "
+                            f"{assertion.subject}.{assertion.predicate} = {norm_mag} exceeds "
                             f"policy auto-approval cap ({max_bound:g})."
                         ),
                         remediation="Requires human sign-off for above-cap commitment.",

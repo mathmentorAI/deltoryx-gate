@@ -115,6 +115,49 @@ class EvidenceLayer:
                                            'created_at': datetime.now(timezone.utc).isoformat()})
         return event_id
 
+    def _record_doc_read_status(self, document_id: str, revision: str, *, unread: bool,
+                                errors: list[dict[str, Any]]) -> None:
+        payload = {'document_id': document_id, 'revision': revision,
+                   'unread': bool(unread), 'errors': list(errors)}
+        self.store.put('doc_read_status', digest(payload), payload, head=document_id)
+
+    def _store_field_evidence(self, unit_id: str, raw_fe: Any) -> None:
+        normalized: dict[str, dict[str, Any]] = {}
+        if isinstance(raw_fe, Mapping):
+            for fname, ref in raw_fe.items():
+                ref_dict = asdict(ref) if isinstance(ref, EvidenceRef) else dict(ref)
+                normalized[str(fname)] = ref_dict
+        elif isinstance(raw_fe, (list, tuple)):
+            for entry in raw_fe:
+                if hasattr(entry, 'field') and hasattr(entry, 'evidence'):
+                    normalized[str(entry.field)] = asdict(entry.evidence)
+                elif isinstance(entry, Mapping) and 'field' in entry and 'evidence' in entry:
+                    ref = entry['evidence']
+                    normalized[str(entry['field'])] = asdict(ref) if isinstance(ref, EvidenceRef) else dict(ref)
+        if normalized:
+            clean = json.loads(canonical(normalized))
+            self.store.put('field_evidence', digest({'unit_id': unit_id, 'fe': clean}), clean, head=unit_id)
+
+    @property
+    def documents(self) -> list[SourceDocument]:
+        return [SourceDocument(**r) for _, _, r in self.store.heads('document')]
+
+    @property
+    def unread_documents(self) -> tuple[str, ...]:
+        return tuple(sorted(name for name, _, st in self.store.heads('doc_read_status') if st and st.get('unread')))
+
+    @property
+    def read_errors(self) -> tuple[dict[str, Any], ...]:
+        out: list[dict[str, Any]] = []
+        for _, _, st in self.store.heads('doc_read_status'):
+            if st and st.get('errors'):
+                out.extend(st['errors'])
+        return tuple(out)
+
+    @property
+    def field_evidences(self) -> dict[str, dict[str, dict[str, Any]]]:
+        return {uid: rec for uid, _, rec in self.store.heads('field_evidence') if rec}
+
     def ingest(self, documents):
         """Store sources; if a reader is configured, record its proposals and admit conforming units."""
         if isinstance(documents, SourceDocument):
@@ -128,6 +171,7 @@ class EvidenceLayer:
             summary['documents_ingested'] += 1
             if self.reader is None:
                 summary['unread_documents'].append(document.document_id)
+                self._record_doc_read_status(document.document_id, document.revision, unread=True, errors=[])
                 continue
             request = {'task': 'propose', 'contract': CONTRACT, 'reader': self.reader.identity,
                        'document': {'document_id': document.document_id, 'revision': document.revision,
@@ -142,22 +186,30 @@ class EvidenceLayer:
                 except Exception as exc:  # recorded, never converted into evidence
                     self._event({'task': 'propose', 'request_key': key, 'error_type': type(exc).__name__,
                                  'diagnostics': getattr(exc, 'diagnostics', None)})
-                    summary['read_errors'].append({'document_id': document.document_id, 'error_type': type(exc).__name__})
+                    err = {'document_id': document.document_id, 'error_type': type(exc).__name__}
+                    summary['read_errors'].append(err)
                     summary['unread_documents'].append(document.document_id)
+                    self._record_doc_read_status(document.document_id, document.revision, unread=True, errors=[err])
                     continue
                 cached = {'request_key': key, 'result': json.loads(canonical(result))}
                 self.store.put('read', key, cached, head=key)
             result = cached['result']
             producer = {'kind': 'reader', 'identity': self.reader.identity, 'read_key': key}
-            if result.get('errors'):
-                summary['read_errors'].extend({'document_id': document.document_id, **e} for e in result['errors'])
+            doc_errors = [{'document_id': document.document_id, **e} for e in result.get('errors', ())]
+            if doc_errors:
+                summary['read_errors'].extend(doc_errors)
+                summary['unread_documents'].append(document.document_id)
+            self._record_doc_read_status(document.document_id, document.revision,
+                                         unread=bool(doc_errors), errors=doc_errors)
             for rejected in result.get('rejected', []):
                 self._reject(rejected.get('proposal'), rejected.get('basis'), producer,
                              {'reason': rejected.get('reason', 'reader_contract'), 'path': '', 'detail': rejected.get('detail')},
                              summary)
             for item in result.get('items', []):
-                self._admit(item.get('proposal'), item.get('basis'), item.get('evidence'), 'reader', producer,
-                            getattr(self.reader, 'structural_reliability', None), summary)
+                uid = self._admit(item.get('proposal'), item.get('basis'), item.get('evidence'), 'reader', producer,
+                                  getattr(self.reader, 'structural_reliability', None), summary)
+                if uid is not None and item.get('field_evidence'):
+                    self._store_field_evidence(uid, item['field_evidence'])
         return summary
 
     def ingest_units(self, items, *, attestor: str, structural_reliability: float | None = 1.0):
@@ -170,6 +222,15 @@ class EvidenceLayer:
             evidence = [asdict(r) if isinstance(r, EvidenceRef) else r for r in item.get('evidence', ())]
             unit_id = self._admit(item.get('proposal'), item.get('basis', EXPLICIT), evidence, 'application',
                                   producer, structural_reliability, summary)
+            if unit_id is not None:
+                if item.get('field_evidence'):
+                    self._store_field_evidence(unit_id, item['field_evidence'])
+                for ev in evidence:
+                    doc_id = ev.get('document_id') if isinstance(ev, Mapping) else None
+                    if doc_id:
+                        _, st = self.store.head('doc_read_status', doc_id)
+                        if st and st.get('unread') and not st.get('errors'):
+                            self._record_doc_read_status(doc_id, st['revision'], unread=False, errors=[])
             summary['unit_ids'].append(unit_id)
         return summary
 

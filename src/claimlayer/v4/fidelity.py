@@ -8,10 +8,12 @@ dual-reader agreement and correlated-error diagnostics.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 import re
 from typing import Any, Mapping, Sequence
 
 from ..semantic.models import EvidenceRef
+from ..verifiers.quote_quantity import extract_dates, extract_quantities
 from .models import EvidenceUnit
 
 _CONDITIONAL_MARKER_RE = re.compile(
@@ -145,21 +147,89 @@ def check_clause_boundary_completeness(doc_text: str, ref: EvidenceRef) -> list[
     return findings
 
 
-def _value_markers_present(value: Any, text: str) -> bool:
-    low = text.lower()
-    if isinstance(value, dict) and "value" in value:
-        num = str(value["value"])
-        if num in text:
-            return True
-        if "." in num and num.rstrip("0").rstrip(".") in text:
-            return True
+_UNIT_TO_V4_FACTOR: dict[str, tuple[Decimal, str]] = {
+    "DAYS": (Decimal("1"), "calendar_days"),
+    "CALENDAR_DAYS": (Decimal("1"), "calendar_days"),
+    "WEEKS": (Decimal("7"), "calendar_days"),
+    "BUSINESS_DAYS": (Decimal("1"), "business_days"),
+    "MONTHS": (Decimal("1"), "months"),
+    "YEARS": (Decimal("12"), "months"),
+    "HOURS": (Decimal("1"), "hours"),
+    "PERCENT": (Decimal("1"), "percent"),
+    "BPS": (Decimal("0.01"), "percentage_point"),
+    "USD": (Decimal("1"), "USD"),
+    "EUR": (Decimal("1"), "EUR"),
+    "GBP": (Decimal("1"), "GBP"),
+    "MULTIPLIER": (Decimal("1"), "multiple"),
+}
+
+
+def _extract_standalone_decimals(text: str) -> list[Decimal]:
+    cleaned = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", text)
+    out: list[Decimal] = []
+    for tok in re.findall(r"(?<![0-9.])[-+]?\d+(?:\.\d+)?(?![0-9.])", cleaned):
+        try:
+            out.append(Decimal(tok))
+        except InvalidOperation:
+            continue
+    return out
+
+
+def _numeric_marker_present(raw_num: Any, text: str, *, unit_hint: str | None = None) -> bool:
+    if isinstance(raw_num, bool):
         return False
+    try:
+        target = Decimal(str(raw_num).strip())
+    except (InvalidOperation, ValueError):
+        return False
+    if not target.is_finite():
+        return False
+    if any(n == target for n in _extract_standalone_decimals(text)):
+        return True
+    for q in extract_quantities(text):
+        if q.magnitude == target:
+            return True
+        if unit_hint and q.unit in _UNIT_TO_V4_FACTOR:
+            factor, base_u = _UNIT_TO_V4_FACTOR[q.unit]
+            if base_u == unit_hint and (q.magnitude * factor) == target:
+                return True
+    return False
+
+
+def _tokens_present_bounded(tokens: Sequence[str], text: str) -> bool:
+    if not tokens:
+        return True
+    low = text.lower()
+    return all(
+        re.search(r"(?<![a-z0-9])" + re.escape(t) + r"(?![a-z0-9])", low) is not None
+        for t in tokens
+    )
+
+
+def _value_markers_present(value: Any, text: str) -> bool:
+    if isinstance(value, dict) and "value" in value:
+        return _numeric_marker_present(value["value"], text, unit_hint=value.get("unit"))
+    if isinstance(value, dict):
+        return all(_value_markers_present(v, text) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return bool(value) and all(_value_markers_present(item, text) for item in value)
     if isinstance(value, bool):
         return True
+    if isinstance(value, (int, float, Decimal)):
+        return _numeric_marker_present(value, text)
     if isinstance(value, str):
-        tokens = [t for t in re.findall(r"[a-z0-9]+", value.lower()) if len(t) >= 3]
-        return not tokens or all(t in low for t in tokens)
-    return str(value).lower() in low
+        stripped = value.strip()
+        if re.fullmatch(r"[-+]?\d+(?:\.\d+)?", stripped):
+            return _numeric_marker_present(stripped, text)
+        if re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", stripped):
+            if re.search(r"(?<![0-9\-])" + re.escape(stripped) + r"(?![0-9\-])", text):
+                return True
+            return stripped in extract_dates(text, allow_slash=True)
+        tokens = [t for t in re.findall(r"[a-z0-9]+", stripped.lower()) if len(t) >= 2]
+        if not tokens:
+            tokens = re.findall(r"[a-z0-9]+", stripped.lower())
+        return _tokens_present_bounded(tokens, text)
+    return _value_markers_present(str(value), text)
 
 
 def verify_extraction_fidelity(
@@ -257,7 +327,20 @@ def verify_extraction_fidelity(
                     )
                 )
 
-    # 4. Per-field evidence binding checks
+    # 4. Mandatory value grounding against cited evidence quotes (even without field_evidence)
+    cited_quotes = " ".join(r.quote for r in unit.evidence)
+    val_grounded = _value_markers_present(val, cited_quotes)
+    if not val_grounded:
+        findings.append(
+            FidelityFinding(
+                code="VALUE_NOT_IN_EVIDENCE",
+                message=f"Proposed value {val!r} is not grounded in the cited evidence quote.",
+                field="value",
+                detail={"value": val, "quotes": [r.quote for r in unit.evidence]},
+            )
+        )
+
+    # 5. Per-field evidence binding checks
     by_field = {fe.field: fe for fe in (field_evidence or ())}
     for req_field in require_field_evidence:
         if req_field not in by_field:
@@ -282,7 +365,7 @@ def verify_extraction_fidelity(
             continue
         if fe.field == "entity" and prop.get("entity"):
             ent_tokens = [t for t in re.findall(r"[a-z0-9]+", str(prop["entity"]).lower()) if len(t) >= 2]
-            if ent_tokens and not all(t in ref.quote.lower() for t in ent_tokens):
+            if ent_tokens and not _tokens_present_bounded(ent_tokens, ref.quote):
                 findings.append(
                     FidelityFinding(
                         code="ENTITY_NOT_IN_FIELD_EVIDENCE",

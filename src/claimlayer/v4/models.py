@@ -112,6 +112,10 @@ class AcceptancePolicy:
     version: str = 'v4-acceptance-1'
 
     def __post_init__(self):
+        for name, lo_ok in (('tau', True), ('delta', False), ('path_discount', False)):
+            val = getattr(self, name)
+            if type(val) not in (int, float) or not math.isfinite(val):
+                raise ValueError(f'{name} must be a finite number')
         if not 0 <= self.tau <= 1 or not 0 < self.delta <= 1:
             raise ValueError('tau in [0,1] and delta in (0,1] are required')
         if not 0 < self.path_discount <= 1:

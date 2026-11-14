@@ -954,12 +954,15 @@ def verify_authorization_verdict(
             return False
         if active_head_id != verdict.snapshot_digest:
             return False
-        if not allow_consumed:
-            try:
-                consumed = layer.store.get("execution", verdict.snapshot_digest)
-            except (ValueError, TypeError, KeyError):
+        try:
+            exec_state = get_execution_state(layer, verdict.snapshot_digest)
+        except (ValueError, TypeError, KeyError):
+            return False
+        if isinstance(exec_state, Mapping):
+            state_val = exec_state.get("state")
+            if state_val in {"UNCERTAIN", "ABORTED", "IN_FLIGHT"}:
                 return False
-            if isinstance(consumed, Mapping) and consumed.get("consumed"):
+            if not allow_consumed and exec_state.get("consumed"):
                 return False
 
     active_key = signing_key if signing_key is not None else os.environ.get("CLAIMLAYER_SIGNING_KEY")
@@ -975,6 +978,96 @@ def verify_authorization_verdict(
     return verdict.signature is None
 
 
+EXECUTION_STATES = frozenset({"IN_FLIGHT", "COMPLETED", "UNCERTAIN", "ABORTED", "ABORTED_RETRYABLE"})
+_RECONCILIATION_RESOLUTIONS = frozenset({"CONFIRM_COMPLETED", "CONFIRM_ABORTED_ALLOW_RETRY", "MARK_ABORTED"})
+
+
+def compute_execution_idempotency_key(verdict: AuthorizationVerdict) -> str:
+    """Return a deterministic idempotency key bound to verdict snapshot, operation, and payload."""
+    return digest(
+        {
+            "snapshot_digest": verdict.snapshot_digest,
+            "operation_id": verdict.operation_id,
+            "payload_digest": verdict.payload_digest,
+        }
+    )
+
+
+def get_execution_state(
+    layer: EvidenceLayer,
+    verdict_or_digest: AuthorizationVerdict | str,
+) -> dict[str, Any] | None:
+    """Return the latest persisted execution record for an AuthorizationVerdict, or None."""
+    snap_digest = (
+        verdict_or_digest.snapshot_digest
+        if isinstance(verdict_or_digest, AuthorizationVerdict)
+        else str(verdict_or_digest)
+    )
+    if not snap_digest:
+        return None
+    _, head_record = layer.store.head("execution", snap_digest)
+    if isinstance(head_record, Mapping):
+        return dict(head_record)
+    legacy_record = layer.store.get("execution", snap_digest)
+    if isinstance(legacy_record, Mapping):
+        return dict(legacy_record)
+    return None
+
+
+def reconcile_authorized_execution(
+    layer: EvidenceLayer,
+    verdict_or_digest: AuthorizationVerdict | str,
+    *,
+    resolution: str,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    """Explicitly resolve an 'UNCERTAIN' or 'IN_FLIGHT' execution record after external verification."""
+    if resolution not in _RECONCILIATION_RESOLUTIONS:
+        raise ValueError(
+            f"Unsupported resolution {resolution!r}; expected one of {sorted(_RECONCILIATION_RESOLUTIONS)}."
+        )
+    snap_digest = (
+        verdict_or_digest.snapshot_digest
+        if isinstance(verdict_or_digest, AuthorizationVerdict)
+        else str(verdict_or_digest)
+    )
+    with layer.store.transaction(mode="IMMEDIATE"):
+        existing = get_execution_state(layer, snap_digest)
+        if not isinstance(existing, Mapping):
+            raise ValueError(f"No execution state recorded for verdict {snap_digest!r}.")
+        cur_state = existing.get("state")
+        if cur_state not in {"UNCERTAIN", "IN_FLIGHT"}:
+            raise ValueError(
+                f"Execution state {cur_state!r} for verdict {snap_digest!r} cannot be reconciled; "
+                "expected 'UNCERTAIN' or 'IN_FLIGHT'."
+            )
+        next_seq = int(existing.get("transition_seq", 0)) + 1
+        if resolution == "CONFIRM_COMPLETED":
+            next_state, next_consumed = "COMPLETED", True
+        elif resolution == "MARK_ABORTED":
+            next_state, next_consumed = "ABORTED", True
+        else:  # CONFIRM_ABORTED_ALLOW_RETRY
+            next_state, next_consumed = "ABORTED_RETRYABLE", False
+
+        reconciled = {
+            "snapshot_digest": snap_digest,
+            "operation_id": existing.get("operation_id"),
+            "payload_digest": existing.get("payload_digest"),
+            "ledger_state_digest": existing.get("ledger_state_digest"),
+            "idempotency_key": existing.get("idempotency_key"),
+            "one_shot": bool(existing.get("one_shot", True)),
+            "attempt_count": int(existing.get("attempt_count", 1)),
+            "transition_seq": next_seq,
+            "state": next_state,
+            "consumed": next_consumed,
+            "reconciled_from": cur_state,
+            "reconciled_resolution": resolution,
+            "notes": notes,
+        }
+        layer.store.put("execution", digest(reconciled), reconciled, head=snap_digest)
+        return dict(reconciled)
+
+
 def execute_authorized_operation(
     layer: EvidenceLayer,
     verdict: AuthorizationVerdict,
@@ -987,10 +1080,37 @@ def execute_authorized_operation(
     allow_unkeyed: bool = False,
     one_shot: bool = True,
 ) -> Any:
-    """Atomically verify an AuthorizationVerdict under a SQLite write lock and execute *action*."""
+    """Execute *action(verdict)* using a 3-phase persisted intent/state protocol.
+
+    Phase 1 (SQLite IMMEDIATE tx): Verify verdict & existing state, then commit
+    an `'IN_FLIGHT'` (`consumed=True`) record with a deterministic `idempotency_key`
+    BEFORE invoking the external callback.
+    Phase 2 (outside SQLite tx): Invoke `action(verdict)`.
+    Phase 3 (new SQLite IMMEDIATE tx): Persist `'COMPLETED'` on success or
+    `'UNCERTAIN'` (`consumed=True`) on callback exception so SQLite rollback
+    never un-consumes a potentially executed external side effect.
+    """
     if not callable(action):
         raise TypeError("action must be callable")
+
+    # Phase 1: Verify and commit execution intent before any external callback runs
     with layer.store.transaction(mode="IMMEDIATE"):
+        snap_digest = getattr(verdict, "snapshot_digest", None)
+        existing = get_execution_state(layer, snap_digest) if isinstance(snap_digest, str) and snap_digest else None
+        if isinstance(existing, Mapping):
+            cur_state = existing.get("state")
+            if cur_state == "UNCERTAIN":
+                raise PermissionError(
+                    f"AuthorizationVerdict {snap_digest!r} is in UNCERTAIN state after a prior failure; "
+                    "reconcile execution state before retrying."
+                )
+            if cur_state == "IN_FLIGHT":
+                raise PermissionError(f"AuthorizationVerdict {snap_digest!r} is currently IN_FLIGHT.")
+            if cur_state == "ABORTED":
+                raise PermissionError(f"AuthorizationVerdict {snap_digest!r} was permanently ABORTED.")
+            if one_shot and existing.get("consumed"):
+                raise PermissionError(f"AuthorizationVerdict {snap_digest!r} was already consumed.")
+
         if not verify_authorization_verdict(
             verdict,
             layer=layer,
@@ -999,21 +1119,69 @@ def execute_authorized_operation(
             payload_digest=payload_digest,
             signing_key=signing_key,
             allow_unkeyed=allow_unkeyed,
-            allow_consumed=not one_shot,
+            allow_consumed=not one_shot or (isinstance(existing, Mapping) and existing.get("state") == "ABORTED_RETRYABLE"),
         ):
             raise PermissionError(
-                f"AuthorizationVerdict {getattr(verdict, 'snapshot_digest', None)!r} "
-                "failed verification or was superseded/consumed."
+                f"AuthorizationVerdict {snap_digest!r} failed verification or was superseded/consumed."
             )
-        if one_shot:
-            layer.store.put(
-                "execution",
-                verdict.snapshot_digest,
-                {
-                    "snapshot_digest": verdict.snapshot_digest,
-                    "operation_id": verdict.operation_id,
-                    "consumed": True,
-                },
-                head=verdict.snapshot_digest,
-            )
-        return action(verdict)
+
+        prev_attempts = int(existing.get("attempt_count", 0)) if isinstance(existing, Mapping) else 0
+        prev_seq = int(existing.get("transition_seq", 0)) if isinstance(existing, Mapping) else 0
+        attempt_count = prev_attempts + 1
+        seq_in_flight = prev_seq + 1
+        idempotency_key = compute_execution_idempotency_key(verdict)
+        ledger_state_digest = verdict.decision_snapshot.get("ledger_state_digest")
+
+        in_flight_record = {
+            "snapshot_digest": verdict.snapshot_digest,
+            "operation_id": verdict.operation_id,
+            "payload_digest": verdict.payload_digest,
+            "ledger_state_digest": ledger_state_digest,
+            "idempotency_key": idempotency_key,
+            "one_shot": bool(one_shot),
+            "attempt_count": attempt_count,
+            "transition_seq": seq_in_flight,
+            "state": "IN_FLIGHT",
+            "consumed": True,
+        }
+        layer.store.put("execution", digest(in_flight_record), in_flight_record, head=verdict.snapshot_digest)
+
+    # Phase 2: Run external callback outside the SQLite transaction so failures cannot roll back consumption
+    try:
+        result = action(verdict)
+    except Exception as exc:
+        # Phase 3a: Record UNCERTAIN state (remains consumed and blocks blind retries)
+        with layer.store.transaction(mode="IMMEDIATE"):
+            uncertain_record = {
+                "snapshot_digest": verdict.snapshot_digest,
+                "operation_id": verdict.operation_id,
+                "payload_digest": verdict.payload_digest,
+                "ledger_state_digest": ledger_state_digest,
+                "idempotency_key": idempotency_key,
+                "one_shot": bool(one_shot),
+                "attempt_count": attempt_count,
+                "transition_seq": seq_in_flight + 1,
+                "state": "UNCERTAIN",
+                "consumed": True,
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+            }
+            layer.store.put("execution", digest(uncertain_record), uncertain_record, head=verdict.snapshot_digest)
+        raise
+
+    # Phase 3b: Record COMPLETED state
+    with layer.store.transaction(mode="IMMEDIATE"):
+        completed_record = {
+            "snapshot_digest": verdict.snapshot_digest,
+            "operation_id": verdict.operation_id,
+            "payload_digest": verdict.payload_digest,
+            "ledger_state_digest": ledger_state_digest,
+            "idempotency_key": idempotency_key,
+            "one_shot": bool(one_shot),
+            "attempt_count": attempt_count,
+            "transition_seq": seq_in_flight + 1,
+            "state": "COMPLETED",
+            "consumed": bool(one_shot),
+        }
+        layer.store.put("execution", digest(completed_record), completed_record, head=verdict.snapshot_digest)
+    return result

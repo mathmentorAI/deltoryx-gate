@@ -17,7 +17,10 @@ from claimlayer.semantic.models import EvidenceRef, SourceDocument, StructuredQu
 from claimlayer.v4.authorization import (
     ClauseRelation,
     authorize_operation,
+    compute_execution_idempotency_key,
     execute_authorized_operation,
+    get_execution_state,
+    reconcile_authorized_execution,
     resolve_scope_and_precedence,
     verify_authorization_verdict,
 )
@@ -1315,3 +1318,335 @@ def test_single_admissibility_core_unifies_rule_derived_units_across_ask_and_aut
         v_none = authorize_operation(l_unassessed, entity="Orion", required_predicates=("cure_period",))
         assert v_none.status == "ESCALATE"
         assert "UNASSESSED_READER_RELIABILITY" in {i.code for i in v_none.issues}
+
+
+def test_relational_association_rejects_cross_clause_cross_subject_and_table_swaps():
+    custom_vocab = Vocabulary(
+        name="relational-test",
+        version="4.0",
+        entities=(("Orion", ()), ("Vega", ())),
+        predicates=(
+            PredicateSpec(
+                "cure_period",
+                FieldSpec("quantity", dimensions=("duration_calendar_days",)),
+                assertion_kinds=("requirement",),
+            ),
+            PredicateSpec(
+                "reporting_period",
+                FieldSpec("quantity", dimensions=("duration_calendar_days",)),
+                assertion_kinds=("requirement",),
+            ),
+        ),
+        scope_keys=("clause_id", "event_id"),
+        require_explicit_condition_status=True,
+    )
+    with tempfile.TemporaryDirectory() as td:
+        # 1A. Auditor exact case: cross-clause / cross-subject swap
+        doc_a = SourceDocument(
+            "clause_a.txt",
+            "Orion reporting period is 23 days and Vega cure period is 41 days.",
+            authority_rank=TIER_PRIMARY,
+            weight=1.0,
+        )
+        layer_a = EvidenceLayer(
+            Path(td) / "a.db", project_id="rel_a", vocabulary=custom_vocab, policy=B2B_DEFAULT_ACCEPTANCE_POLICY
+        )
+        layer_a.ingest(doc_a)
+        unit_a = _admit_single(
+            layer_a,
+            doc_a,
+            {
+                "entity": "Orion",
+                "predicate": "cure_period",
+                "value": "23",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+            },
+        )
+        f_a = verify_extraction_fidelity(doc_a.text, unit_a, vocabulary=custom_vocab)
+        assert "RELATIONAL_ASSOCIATION_MISMATCH" in {f.code for f in f_a}
+        v_a = authorize_operation(layer_a, entity="Orion", required_predicates=("cure_period",))
+        assert v_a.status == "RETRY"
+        assert "RELATIONAL_ASSOCIATION_MISMATCH" in {i.code for i in v_a.issues}
+        ask_a = layer_a.ask(StructuredQuery("Orion", "cure_period"))
+        assert ask_a["abstain"] is True
+        assert ask_a["excluded"][0]["reason"] == "fidelity:RELATIONAL_ASSOCIATION_MISMATCH"
+
+        # 1B. Auditor exact case: single subject, swapped predicate across coordinated clauses
+        doc_b = SourceDocument(
+            "clause_b.txt",
+            "Orion cure period is 41 days and reporting period is 23 days.",
+            authority_rank=TIER_PRIMARY,
+            weight=1.0,
+        )
+        layer_b = EvidenceLayer(
+            Path(td) / "b.db", project_id="rel_b", vocabulary=custom_vocab, policy=B2B_DEFAULT_ACCEPTANCE_POLICY
+        )
+        layer_b.ingest(doc_b)
+        unit_b_bad = _admit_single(
+            layer_b,
+            doc_b,
+            {
+                "entity": "Orion",
+                "predicate": "cure_period",
+                "value": "23",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+            },
+        )
+        f_b_bad = verify_extraction_fidelity(doc_b.text, unit_b_bad, vocabulary=custom_vocab)
+        assert "RELATIONAL_ASSOCIATION_MISMATCH" in {f.code for f in f_b_bad}
+        v_b_bad = authorize_operation(layer_b, entity="Orion", required_predicates=("cure_period",))
+        assert v_b_bad.status == "RETRY"
+        assert "RELATIONAL_ASSOCIATION_MISMATCH" in {i.code for i in v_b_bad.issues}
+
+        # Correct value (41 days) on the exact same document passes cleanly
+        layer_b_ok = EvidenceLayer(
+            Path(td) / "b_ok.db", project_id="rel_b_ok", vocabulary=custom_vocab, policy=B2B_DEFAULT_ACCEPTANCE_POLICY
+        )
+        layer_b_ok.ingest(doc_b)
+        _admit_single(
+            layer_b_ok,
+            doc_b,
+            {
+                "entity": "Orion",
+                "predicate": "cure_period",
+                "value": "41",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+            },
+        )
+        v_b_ok = authorize_operation(layer_b_ok, entity="Orion", required_predicates=("cure_period",))
+        assert v_b_ok.status == "PASS"
+        assert v_b_ok.resolved_values["cure_period"] == {"value": "41", "unit": "calendar_days"}
+
+        # 1C. Pipe-delimited table cross-column and cross-row swaps rejected; aligned tuple passes
+        doc_tbl = SourceDocument(
+            "schedule.md",
+            (
+                "| Party | Cure Period | Reporting Period |\n"
+                "| --- | --- | --- |\n"
+                "| Orion | 41 calendar days | 23 calendar days |\n"
+                "| Vega | 23 calendar days | 15 calendar days |"
+            ),
+            authority_rank=TIER_PRIMARY,
+            weight=1.0,
+        )
+        layer_tbl_bad = EvidenceLayer(
+            Path(td) / "tbl_bad.db", project_id="tbl_bad", vocabulary=custom_vocab, policy=B2B_DEFAULT_ACCEPTANCE_POLICY
+        )
+        layer_tbl_bad.ingest(doc_tbl)
+        _admit_single(
+            layer_tbl_bad,
+            doc_tbl,
+            {
+                "entity": "Orion",
+                "predicate": "cure_period",
+                "value": "23",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+            },
+        )
+        v_tbl_bad = authorize_operation(layer_tbl_bad, entity="Orion", required_predicates=("cure_period",))
+        assert v_tbl_bad.status == "RETRY"
+        assert "RELATIONAL_ASSOCIATION_MISMATCH" in {i.code for i in v_tbl_bad.issues}
+
+        layer_tbl_ok = EvidenceLayer(
+            Path(td) / "tbl_ok.db", project_id="tbl_ok", vocabulary=custom_vocab, policy=B2B_DEFAULT_ACCEPTANCE_POLICY
+        )
+        layer_tbl_ok.ingest(doc_tbl)
+        _admit_single(
+            layer_tbl_ok,
+            doc_tbl,
+            {
+                "entity": "Orion",
+                "predicate": "cure_period",
+                "value": "41",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+            },
+            quote="| Orion | 41 calendar days | 23 calendar days |",
+        )
+        v_tbl_ok = authorize_operation(layer_tbl_ok, entity="Orion", required_predicates=("cure_period",))
+        assert v_tbl_ok.status == "PASS"
+
+
+def test_external_execution_protocol_persists_intent_blocks_uncertain_retry_and_reconciles(tmp_path):
+    key = "exec-protocol-secret"
+    payload = {"action": "enforce_cure", "days": 23}
+    doc = SourceDocument("msa.txt", "Orion cure period is 23 days.", authority_rank=TIER_PRIMARY, weight=1.0)
+    layer = EvidenceLayer(
+        tmp_path / "exec_proto.db",
+        project_id="exec_proto",
+        vocabulary=B2B_CONTRACTS_VOCABULARY,
+        policy=B2B_DEFAULT_ACCEPTANCE_POLICY,
+    )
+    layer.ingest(doc)
+    _admit_single(
+        layer,
+        doc,
+        {
+            "entity": "Orion",
+            "predicate": "cure_period",
+            "value": "23",
+            "unit": "calendar_days",
+            "assertion_kind": "requirement",
+            "condition_status": "unconditional",
+        },
+    )
+    verdict = authorize_operation(
+        layer,
+        entity="Orion",
+        required_predicates=("cure_period",),
+        operation_id="op-ext-1",
+        payload=payload,
+        signing_key=key,
+    )
+    assert verdict.status == "PASS"
+    expected_idem = compute_execution_idempotency_key(verdict)
+
+    effects: list[str] = []
+
+    def failing_external_callback(v):
+        # Verify IN_FLIGHT state is already persisted and blocks verification mid-flight
+        assert get_execution_state(layer, v)["state"] == "IN_FLIGHT"
+        assert verify_authorization_verdict(
+            v, layer=layer, operation_id="op-ext-1", payload=payload, signing_key=key
+        ) is False
+        effects.append("external effect")
+        raise RuntimeError("network timeout after external side effect")
+
+    with pytest.raises(RuntimeError, match="network timeout after external side effect"):
+        execute_authorized_operation(
+            layer,
+            verdict,
+            failing_external_callback,
+            operation_id="op-ext-1",
+            payload=payload,
+            signing_key=key,
+        )
+
+    # Consumption MUST survive callback exception; verdict is INVALID immediately (no SQLite rollback!)
+    assert verify_authorization_verdict(
+        verdict, layer=layer, operation_id="op-ext-1", payload=payload, signing_key=key
+    ) is False
+    assert verify_authorization_verdict(
+        verdict, layer=layer, operation_id="op-ext-1", payload=payload, signing_key=key, allow_consumed=True
+    ) is False
+
+    exec_state = get_execution_state(layer, verdict)
+    assert exec_state is not None
+    assert exec_state["state"] == "UNCERTAIN"
+    assert exec_state["consumed"] is True
+    assert exec_state["attempt_count"] == 1
+    assert exec_state["idempotency_key"] == expected_idem
+    assert exec_state["error_type"] == "RuntimeError"
+
+    # Blind retry MUST fail closed without running callback again
+    with pytest.raises(PermissionError, match="UNCERTAIN"):
+        execute_authorized_operation(
+            layer,
+            verdict,
+            lambda v: effects.append("external effect"),
+            operation_id="op-ext-1",
+            payload=payload,
+            signing_key=key,
+        )
+    assert effects == ["external effect"]
+
+    # Explicit reconciliation confirming no external effect occurred allows safe retry with same idempotency_key
+    reconciled = reconcile_authorized_execution(
+        layer,
+        verdict,
+        resolution="CONFIRM_ABORTED_ALLOW_RETRY",
+        notes="Confirmed via downstream ledger that idempotency_key was never committed.",
+    )
+    assert reconciled["state"] == "ABORTED_RETRYABLE"
+    assert reconciled["consumed"] is False
+    assert reconciled["idempotency_key"] == expected_idem
+
+    result = execute_authorized_operation(
+        layer,
+        verdict,
+        lambda v: {"ok": True, "idem": get_execution_state(layer, v)["idempotency_key"]},
+        operation_id="op-ext-1",
+        payload=payload,
+        signing_key=key,
+    )
+    assert result == {"ok": True, "idem": expected_idem}
+    final_state = get_execution_state(layer, verdict)
+    assert final_state["state"] == "COMPLETED"
+    assert final_state["consumed"] is True
+    assert final_state["attempt_count"] == 2
+    assert final_state["idempotency_key"] == expected_idem
+
+    # Replay after COMPLETED still blocked
+    with pytest.raises(PermissionError, match="already consumed"):
+        execute_authorized_operation(
+            layer,
+            verdict,
+            lambda v: "duplicate",
+            operation_id="op-ext-1",
+            payload=payload,
+            signing_key=key,
+        )
+
+    # Also test CONFIRM_COMPLETED and MARK_ABORTED transitions from UNCERTAIN
+    verdict2 = authorize_operation(
+        layer,
+        entity="Orion",
+        required_predicates=("cure_period",),
+        operation_id="op-ext-2",
+        payload={"action": "confirm_path"},
+        signing_key=key,
+    )
+    with pytest.raises(RuntimeError):
+        execute_authorized_operation(
+            layer,
+            verdict2,
+            lambda v: (_ for _ in ()).throw(RuntimeError("post-send failure")),
+            operation_id="op-ext-2",
+            payload={"action": "confirm_path"},
+            signing_key=key,
+        )
+    rec2 = reconcile_authorized_execution(layer, verdict2, resolution="CONFIRM_COMPLETED")
+    assert rec2["state"] == "COMPLETED"
+    assert rec2["consumed"] is True
+    with pytest.raises(PermissionError):
+        execute_authorized_operation(
+            layer,
+            verdict2,
+            lambda v: "duplicate",
+            operation_id="op-ext-2",
+            payload={"action": "confirm_path"},
+            signing_key=key,
+        )
+
+    verdict3 = authorize_operation(
+        layer,
+        entity="Orion",
+        required_predicates=("cure_period",),
+        operation_id="op-ext-3",
+        payload={"action": "abort_path"},
+        signing_key=key,
+    )
+    with pytest.raises(RuntimeError):
+        execute_authorized_operation(
+            layer,
+            verdict3,
+            lambda v: (_ for _ in ()).throw(RuntimeError("terminal abort")),
+            operation_id="op-ext-3",
+            payload={"action": "abort_path"},
+            signing_key=key,
+        )
+    rec3 = reconcile_authorized_execution(layer, verdict3, resolution="MARK_ABORTED")
+    assert rec3["state"] == "ABORTED"
+    assert rec3["consumed"] is True
+    assert verify_authorization_verdict(
+        verdict3, layer=layer, operation_id="op-ext-3", payload={"action": "abort_path"}, signing_key=key, allow_consumed=True
+    ) is False

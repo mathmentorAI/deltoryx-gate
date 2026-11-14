@@ -89,9 +89,14 @@ La correspondencia texto-grafo en `claimlayer.v4.correspondence` (`verify_respon
    - Menciones ambiguas sin marcador de polaridad claro quedan en estado pendiente (`CONDITION_CORRESPONDENCE_UNRESOLVED`, `status="unknown"`) salvo resolución explícita mediante `SemanticEvaluatorConfig` (`open_semantics`).
 
 3. **Descomposición por cláusulas, polaridad de conclusión y afirmaciones no numéricas (`ResponseClauseClaim`)**:
-   - Divide sub-cláusulas discursivas y separa fórmulas, descargos/limitaciones de fecha (`no se puede determinar la edad exacta`), condiciones y afirmaciones.
+   - Divide sub-cláusulas discursivas (incluidos sujetos coordinados con valores distintos) y separa fórmulas, descargos/limitaciones de fecha (`no se puede determinar la edad exacta`), condiciones y afirmaciones.
    - Detecta inversión de polaridad sobre la conclusión sin quedar enmascarada por descargos de limitación (`CONCLUSION_POLARITY_INVERTED`) y detecta afirmaciones fácticas no numéricas introducidas fuera del léxico verificado del documento/pregunta/grafo (`UNSUPPORTED_FACTUAL_ADDITION`, con delegación opcional a `open_semantics` -> `RESPONSE_CORRESPONDENCE_PENDING_SEMANTIC`).
 
-4. **Patrones estructurales composicionales y evaluación por perturbaciones**:
+4. **Verificación relacional por tuplas (`GraphRelationTuple`, `ResponseRelationTuple`, `build_supported_graph_relations`)**:
+   - Modela las relaciones soportadas del grafo como tuplas estructuradas `(subject, predicate, slot_family, value/interval, unit, temporal_anchor, source_entity, event_tokens)` distinguiendo familias tipadas (`calendar_date`, `duration_or_age`, `monetary_amount`, `percentage_or_rate`, `quantity`).
+   - Rechaza (`RELATIONAL_VALUE_MISMATCH`, `RETRY`) intercambios de rol/año (*"tenía 1933 años en 13"*, *"tenía 13 años en 2026"*, *"compró su primera acción en 2026"*), reasignaciones de sustantivo contado (*"compró 106 acciones en 1933"*), e intercambios entre entidades específicas (*"Factura A es 600 USD y Factura B es 400 USD"* o *"Anexo A indica 800 USD pero Anexo B indica 500 USD"* aunque el subtotal o conflicto global coincida).
+   - Menciones numéricas ambiguas o no tipadas (*"Warren Buffet 13 1933"*) permanecen en estado pendiente (`RELATIONAL_CORRESPONDENCE_UNRESOLVED`, `status="unknown"`), salvo resolución explícita mediante `SemanticEvaluatorConfig` (`open_semantics`).
+
+5. **Patrones estructurales composicionales y evaluación por perturbaciones**:
    - Acepta paráfrasis legítimas de atribución documental, estimación/aproximación (`estimación`, `unos ...`, `en torno a`, `rondaría`) y granularidad de calendario (`faltan el día y el mes para precisar su edad`).
-   - `claim-layer/benchmarks/v4_repair_cycle_demo.py` (`run_perturbation_benchmark`) y `tests/test_v4_repair_cycle.py` (`test_17`–`test_21`) miden `false_accept_rate` sobre perturbaciones adversariales y `false_reject_rate` sobre paráfrasis válidas.
+   - `claim-layer/benchmarks/v4_repair_cycle_demo.py` (`run_perturbation_benchmark`) y `tests/test_v4_repair_cycle.py` (`test_17`–`test_24`) miden `false_accept_rate` sobre perturbaciones adversariales y `false_reject_rate` sobre paráfrasis válidas.

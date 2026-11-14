@@ -1318,7 +1318,11 @@ def evaluate_response(
                 issue_status = str(issue.get("status") or "refuted")
                 if issue_status not in ("refuted", "unknown"):
                     issue_status = "refuted"
-                is_sem_pending = code in ("RESPONSE_CORRESPONDENCE_PENDING_SEMANTIC", "CONDITION_CORRESPONDENCE_UNRESOLVED")
+                is_sem_pending = code in (
+                    "RESPONSE_CORRESPONDENCE_PENDING_SEMANTIC",
+                    "CONDITION_CORRESPONDENCE_UNRESOLVED",
+                    "RELATIONAL_CORRESPONDENCE_UNRESOLVED",
+                )
                 ob_id = f"mandatory::correspondence::{code.lower()}::{idx}"
                 chk = VerifierResult(
                     obligation_id=ob_id,

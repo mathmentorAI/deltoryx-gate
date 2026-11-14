@@ -314,6 +314,34 @@ def run_perturbation_benchmark() -> dict[str, Any]:
             ),
             False,
         ),
+        (
+            "role_swap_age_year",
+            c1,
+            (
+                "Según el texto, Warren Buffet tenía 1933 años en 13 (aproximadamente 106 años en 2026); "
+                "faltan el día y el mes para precisar su edad."
+            ),
+            False,
+        ),
+        (
+            "predicate_noun_reassignment_shares",
+            c1,
+            (
+                "Según el texto, Warren Buffet compró 106 acciones en 1933 (aproximadamente 106 años en 2026); "
+                "faltan el día y el mes para precisar su edad."
+            ),
+            False,
+        ),
+        (
+            "entity_value_swap_invoices",
+            c2,
+            (
+                "Según el texto, Factura A es 600 USD y Factura B es 400 USD, por lo que el subtotal parcial "
+                "de las facturas listadas es 1000 USD sin constancia de completitud de población, "
+                "salvo en caso de disputa activa."
+            ),
+            False,
+        ),
         # Valid paraphrases (MUST be accepted with response_correspondence_verified=True)
         (
             "valid_paraphrase_temporal_est_and_granularity",
@@ -348,6 +376,16 @@ def run_perturbation_benchmark() -> dict[str, Any]:
             (
                 "Según el pasaje facilitado, el subtotal parcial de las facturas listadas es 1000 USD "
                 "(400 + 600 = 1000), sin constancia de completitud de población, a menos que haya disputa activa."
+            ),
+            True,
+        ),
+        (
+            "valid_paraphrase_subtotal_with_correct_item_relations",
+            c2,
+            (
+                "De acuerdo con el texto, Factura A es 400 USD y Factura B es 600 USD, por lo que el subtotal parcial "
+                "de las facturas listadas es 1000 USD sin constancia de completitud de población, "
+                "salvo en caso de disputa activa."
             ),
             True,
         ),

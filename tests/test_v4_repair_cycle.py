@@ -30,6 +30,7 @@ from claimlayer.v4 import (
     evaluate_response,
     review_response,
     verify_response_equations,
+    verify_response_graph_correspondence,
     verify_review_freshness,
 )
 
@@ -1128,6 +1129,62 @@ def test_20_valid_paraphrases_accepted_across_domains() -> None:
     assert rv_cond.assessment.response_correspondence_verified is True
 
 
+def _build_invoice_subtotal_fixture() -> tuple[SourceDocument, JustificationGraph, str]:
+    doc = _doc(
+        "d_inv",
+        "Factura A es 400 USD y Factura B es 600 USD, salvo en caso de disputa activa.",
+        weight=0.95,
+    )
+    i1 = ClaimNode(
+        claim_id="inv_a",
+        kind="extraction",
+        subject="Factura A",
+        predicate="charge",
+        value=400,
+        unit="USD",
+        event_id="evt-a",
+        conditions=({"field": "exception", "value": "salvo en caso de disputa activa"},),
+        condition_status="conditional",
+        evidence=(_ref(doc, "Factura A es 400 USD"),),
+        structural_reliability=0.95,
+    )
+    i2 = ClaimNode(
+        claim_id="inv_b",
+        kind="extraction",
+        subject="Factura B",
+        predicate="charge",
+        value=600,
+        unit="USD",
+        event_id="evt-b",
+        conditions=({"field": "exception", "value": "salvo en caso de disputa activa"},),
+        condition_status="conditional",
+        evidence=(_ref(doc, "Factura B es 600 USD"),),
+        structural_reliability=0.95,
+    )
+    conc = ClaimNode(
+        claim_id="tot_inv",
+        kind="derivation",
+        subject="Facturas",
+        predicate="total_amount",
+        value=1000,
+        unit="USD",
+        conditions=({"field": "exception", "value": "salvo en caso de disputa activa"},),
+        condition_status="conditional",
+    )
+    step = InferenceStep(
+        step_id="s_agg",
+        operation="agg_sum",
+        premises=("inv_a", "inv_b"),
+        conclusion_id="tot_inv",
+    )
+    graph = JustificationGraph(
+        claims={"inv_a": i1, "inv_b": i2, "tot_inv": conc},
+        steps=(step,),
+        conclusion_id="tot_inv",
+    )
+    return doc, graph, "¿Cuál es el total de facturas?"
+
+
 def test_21_transformation_perturbation_matrix_zero_false_accept_and_zero_false_reject() -> None:
     doc_age = _doc(
         "d_buffett",
@@ -1147,6 +1204,7 @@ def test_21_transformation_perturbation_matrix_zero_false_accept_and_zero_false_
     )
     q_age = "¿Cuántos años tiene si estamos en 2026?"
     doc_cond, graph_cond, q_cond = _build_conditional_refund_fixture()
+    doc_inv, graph_inv, q_inv = _build_invoice_subtotal_fixture()
 
     cases = [
         # (name, q, resp, ev, graph, expected_accept)
@@ -1199,6 +1257,30 @@ def test_21_transformation_perturbation_matrix_zero_false_accept_and_zero_false_
             False,
         ),
         (
+            "role_swap_age_year",
+            q_age,
+            "Según el texto, Warren Buffet tenía 1933 años en 13 (aproximadamente 106 años en 2026); faltan el día y el mes para precisar su edad.",
+            {"d_buffett": doc_age},
+            graph_age,
+            False,
+        ),
+        (
+            "predicate_noun_reassignment_shares",
+            q_age,
+            "Según el texto, Warren Buffet compró 106 acciones en 1933 (aproximadamente 106 años en 2026); faltan el día y el mes para precisar su edad.",
+            {"d_buffett": doc_age},
+            graph_age,
+            False,
+        ),
+        (
+            "entity_value_swap_invoices",
+            q_inv,
+            "Según el documento, Factura A es 600 USD y Factura B es 400 USD, por lo que el subtotal parcial de las facturas es 1000 USD sin constancia de completitud de población, salvo en caso de disputa activa.",
+            {"d_inv": doc_inv},
+            graph_inv,
+            False,
+        ),
+        (
             "valid_age_paraphrase_1",
             q_age,
             "A partir del pasaje facilitado, la estimación para Warren Buffet es de unos 106 años en 2026; faltan el día y el mes para precisar su edad.",
@@ -1230,6 +1312,22 @@ def test_21_transformation_perturbation_matrix_zero_false_accept_and_zero_false_
             graph_cond,
             True,
         ),
+        (
+            "valid_paraphrase_invoices_correct",
+            q_inv,
+            "De acuerdo con el texto, Factura A es 400 USD y Factura B es 600 USD, por lo que el subtotal parcial de las facturas es 1000 USD sin constancia de completitud de población, salvo en caso de disputa activa.",
+            {"d_inv": doc_inv},
+            graph_inv,
+            True,
+        ),
+        (
+            "valid_paraphrase_buffett_event_anchored",
+            q_age,
+            "Según el pasaje, cuando tenía 13 años en 1933, Warren Buffet compró su primera acción, por lo que rondaría los 106 años en 2026; faltan el día y el mes para precisar su edad.",
+            {"d_buffett": doc_age},
+            graph_age,
+            True,
+        ),
     ]
 
     false_accepts = 0
@@ -1249,3 +1347,159 @@ def test_21_transformation_perturbation_matrix_zero_false_accept_and_zero_false_
     false_reject_rate = false_rejects / positive_total
     assert false_accept_rate == 0.0
     assert false_reject_rate == 0.0
+
+
+def test_22_relational_role_swap_and_noun_reassignment_rejected() -> None:
+    doc = _doc(
+        "d_buffett",
+        "Warren Buffet compró su primera acción cuando tenía 13 años y era 1933.",
+        weight=0.95,
+    )
+    graph = _build_anchor_age_graph(
+        subject="Warren Buffet",
+        anchor_age=13,
+        anchor_year=1933,
+        reference_year=2026,
+        claimed_age=106,
+        quote_age="tenía 13 años",
+        quote_year="era 1933",
+        doc=doc,
+        approximate=False,
+    )
+    q = "¿Cuántos años tiene si estamos en 2026?"
+
+    adversarial = [
+        "Según el texto, Warren Buffet tenía 1933 años en 13 (aproximadamente 106 años en 2026); faltan fechas completas.",
+        "Según el texto, Warren Buffet compró 106 acciones en 1933; tendría aproximadamente 106 años en 2026, sin fechas completas.",
+        "Según el texto, Warren Buffet tenía 13 años en 2026; estimación de unos 106 años, faltan fechas completas.",
+        "Según el texto, Warren Buffet tenía 106 años en 1933; tendría aproximadamente 106 años en 2026, faltan fechas completas.",
+        "Según el texto, Warren Buffet compró su primera acción en 2026; estimación de unos 106 años en 2026, faltan fechas completas.",
+    ]
+    for bad in adversarial:
+        rv = review_response(q, bad, {"d_buffett": doc}, graph)
+        assert rv.disposition == "RETRY", f"Expected RETRY for: {bad!r}"
+        assert rv.assessment.response_correspondence_verified is False
+        assert any(i.code == "RELATIONAL_VALUE_MISMATCH" for i in rv.issues), (
+            f"Expected RELATIONAL_VALUE_MISMATCH for {bad!r}, got {[i.code for i in rv.issues]}"
+        )
+
+    valid = (
+        "Según el texto, cuando tenía 13 años en 1933, Warren Buffet compró su primera acción; "
+        "tendría aproximadamente 106 años en 2026, pero faltan el día y el mes para precisar su edad."
+    )
+    rv_ok = review_response(q, valid, {"d_buffett": doc}, graph)
+    assert rv_ok.disposition == "ACCEPT"
+    assert rv_ok.assessment.response_correspondence_verified is True
+    assert rv_ok.issues == ()
+
+
+def test_23_invoice_entity_value_swap_rejected_even_when_total_matches() -> None:
+    doc_inv, graph_inv, q_inv = _build_invoice_subtotal_fixture()
+
+    swapped = (
+        "Según el texto, Factura A es 600 USD y Factura B es 400 USD, por lo que el subtotal parcial de las facturas es 1000 USD "
+        "sin constancia de completitud de población, salvo en caso de disputa activa."
+    )
+    corr_bad = verify_response_graph_correspondence(
+        swapped,
+        graph_inv,
+        question=q_inv,
+        documents={"d_inv": doc_inv},
+    )
+    assert corr_bad["correspondence_ok"] is False
+    assert corr_bad["relational_mismatch_in_response"] is True
+
+    rv_bad = review_response(q_inv, swapped, {"d_inv": doc_inv}, graph_inv)
+    assert rv_bad.disposition == "RETRY"
+    assert rv_bad.assessment.response_correspondence_verified is False
+    assert any(i.code == "RELATIONAL_VALUE_MISMATCH" for i in rv_bad.issues)
+
+    valid = (
+        "Según el texto, Factura A es 400 USD y Factura B es 600 USD, por lo que el subtotal parcial de las facturas es 1000 USD "
+        "sin constancia de completitud de población, salvo en caso de disputa activa."
+    )
+    rv_ok = review_response(q_inv, valid, {"d_inv": doc_inv}, graph_inv)
+    assert rv_ok.disposition == "ACCEPT"
+    assert rv_ok.assessment.response_correspondence_verified is True
+
+    cycle = RepairOrchestrator(budget=RepairBudget(max_iterations=3)).run(
+        question=q_inv,
+        initial_response=swapped,
+        evidence={"d_inv": doc_inv},
+        graph_or_adapter=graph_inv,
+        repair_agent=ScriptedRepairAgent([valid]),
+    )
+    assert cycle.accepted is True
+    assert cycle.final_disposition == "ACCEPT"
+    assert cycle.iterations_used == 2
+    assert any(i.code == "RELATIONAL_VALUE_MISMATCH" for i in cycle.attempts[0].review.issues)
+
+    # Conflict disclosure must also bind values strictly to each source entity (Anexo A vs Anexo B)
+    d1 = _doc("d1", "Anexo A indica que el límite de responsabilidad es 500 USD.", weight=0.95)
+    d2 = _doc("d2", "Anexo B indica que el límite de responsabilidad es 800 USD.", weight=0.95)
+    c1 = ClaimNode(claim_id="cap_a", kind="extraction", subject="Contrato", predicate="liability_cap", value=500, unit="USD", evidence=(_ref(d1, "límite de responsabilidad es 500 USD"),), structural_reliability=0.95)
+    c2 = ClaimNode(claim_id="cap_b", kind="extraction", subject="Contrato", predicate="liability_cap", value=800, unit="USD", evidence=(_ref(d2, "límite de responsabilidad es 800 USD"),), structural_reliability=0.95)
+    c_conc = ClaimNode(claim_id="cap_conc", kind="derivation", subject="Contrato", predicate="liability_cap", value=500, unit="USD")
+    c_step = InferenceStep(step_id="s_id", operation="quantities", premises=("cap_a",), conclusion_id="cap_conc")
+    c_graph = JustificationGraph(claims={"cap_a": c1, "cap_b": c2, "cap_conc": c_conc}, steps=(c_step,), conclusion_id="cap_conc")
+    swapped_conflict = "Según los textos, existe un conflicto sin resolver respecto al Contrato: Anexo A indica 800 USD pero Anexo B indica 500 USD."
+    rv_c_swap = review_response("¿Cuál es el límite de responsabilidad del Contrato?", swapped_conflict, {"d1": d1, "d2": d2}, c_graph)
+    assert rv_c_swap.disposition == "RETRY"
+    assert any(i.code == "RELATIONAL_VALUE_MISMATCH" for i in rv_c_swap.issues)
+
+
+def test_24_unparseable_relational_clause_stays_pending_unless_semantically_resolved() -> None:
+    doc = _doc(
+        "d_buffett",
+        "Warren Buffet compró su primera acción cuando tenía 13 años y era 1933.",
+        weight=0.95,
+    )
+    graph = _build_anchor_age_graph(
+        subject="Warren Buffet",
+        anchor_age=13,
+        anchor_year=1933,
+        reference_year=2026,
+        claimed_age=106,
+        quote_age="tenía 13 años",
+        quote_year="era 1933",
+        doc=doc,
+        approximate=False,
+    )
+    q = "¿Cuántos años tiene si estamos en 2026?"
+    ambiguous = "Según el texto, Warren Buffet 13 1933 y rondaría los 106 años en 2026; faltan fechas completas."
+
+    rv_default = review_response(q, ambiguous, {"d_buffett": doc}, graph)
+    assert rv_default.disposition != "ACCEPT"
+    assert rv_default.assessment.response_correspondence_verified is False
+    assert any(i.code == "RELATIONAL_CORRESPONDENCE_UNRESOLVED" for i in rv_default.issues)
+
+    seen_checks: list[str] = []
+
+    def _refute_rel(**kwargs: object) -> dict[str, str]:
+        seen_checks.append(str(kwargs.get("check")))
+        if kwargs.get("check") == "relational_correspondence":
+            return {"status": "refuted"}
+        return {"status": "unknown"}
+
+    prof_refute = DomainProfile(
+        profile_id="rel_refute",
+        semantic_evaluator=SemanticEvaluatorConfig(enabled=True, callable_evaluator=_refute_rel),
+    )
+    rv_refuted = review_response(q, ambiguous, {"d_buffett": doc}, graph, domain_profile=prof_refute)
+    assert "relational_correspondence" in seen_checks
+    assert rv_refuted.disposition == "RETRY"
+    assert rv_refuted.assessment.response_correspondence_verified is False
+    assert any(i.code == "RELATIONAL_VALUE_MISMATCH" for i in rv_refuted.issues)
+
+    def _verify_rel(**kwargs: object) -> dict[str, str]:
+        if kwargs.get("check") == "relational_correspondence":
+            return {"status": "verified"}
+        return {"status": "unknown"}
+
+    prof_verify = DomainProfile(
+        profile_id="rel_verify",
+        semantic_evaluator=SemanticEvaluatorConfig(enabled=True, callable_evaluator=_verify_rel),
+    )
+    rv_verified = review_response(q, ambiguous, {"d_buffett": doc}, graph, domain_profile=prof_verify)
+    assert rv_verified.disposition == "ACCEPT"
+    assert rv_verified.assessment.response_correspondence_verified is True

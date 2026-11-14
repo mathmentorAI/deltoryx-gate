@@ -439,6 +439,20 @@ _REPAIR_SPEC_TABLE: dict[str, dict[str, Any]] = {
         "allowed": ("rephrase_using_grounded_terms",),
         "forbidden": ("add_ungrounded_factual_claims",),
     },
+    "RELATIONAL_VALUE_MISMATCH": {
+        "repairable": True,
+        "problem": "The response assigns a value, unit, counted noun, or temporal anchor to the wrong entity, role, or slot relative to the evidence graph.",
+        "instruction": "Bind each number, unit, entity, counted object, and temporal anchor strictly to the same role and entity supported by the evidence and derivation graph.",
+        "allowed": ("restate_exact_entity_role_value_relations", "attribute_each_value_to_its_documented_entity_and_date"),
+        "forbidden": ("swap_entity_values", "swap_value_and_year_roles", "reassign_counted_nouns_across_slots"),
+    },
+    "RELATIONAL_CORRESPONDENCE_UNRESOLVED": {
+        "repairable": True,
+        "problem": "A relational claim pairing values or entities in the response could not be syntactically bound to a verified graph relation.",
+        "instruction": "Express the relationship between entities, quantities, and dates explicitly using the exact predicates, units, and roles present in the evidence.",
+        "allowed": ("clarify_entity_predicate_value_binding", "rephrase_using_grounded_terms"),
+        "forbidden": ("leave_numeric_entity_pairing_ambiguous", "add_ungrounded_factual_claims"),
+    },
     "ARITHMETIC_MISMATCH": {
         "repairable": True,
         "problem": "Derived arithmetic value does not match premise operands.",

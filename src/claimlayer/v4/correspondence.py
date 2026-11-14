@@ -80,6 +80,64 @@ class StructuredCondition:
 
 
 @dataclass(frozen=True)
+class GraphRelationTuple:
+    """Normalized structured relation supported by the JustificationGraph and evidence."""
+
+    claim_id: str
+    subject: str | None
+    predicate: str | None
+    slot_family: str  # "calendar_date" | "duration_or_age" | "monetary_amount" | "percentage_or_rate" | "quantity"
+    value: Decimal | None
+    interval: tuple[Decimal, Decimal] | None
+    unit: str | None
+    temporal_anchor: int | None
+    source_entity: str | None = None
+    event_tokens: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "claim_id": self.claim_id,
+            "subject": self.subject,
+            "predicate": self.predicate,
+            "slot_family": self.slot_family,
+            "value": str(self.value) if self.value is not None else None,
+            "interval": [str(self.interval[0]), str(self.interval[1])] if self.interval is not None else None,
+            "unit": self.unit,
+            "temporal_anchor": self.temporal_anchor,
+            "source_entity": self.source_entity,
+            "event_tokens": list(self.event_tokens),
+        }
+
+
+@dataclass(frozen=True)
+class ResponseRelationTuple:
+    """Structured numeric/entity relation extracted from a response sub-clause."""
+
+    clause_text: str
+    subject: str | None
+    slot_family: str
+    value: Decimal | None
+    unit: str | None
+    temporal_anchor: int | None
+    status: str  # "verified" | "refuted" | "unknown"
+    matched_claim_id: str | None = None
+    reason: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "clause_text": self.clause_text,
+            "subject": self.subject,
+            "slot_family": self.slot_family,
+            "value": str(self.value) if self.value is not None else None,
+            "unit": self.unit,
+            "temporal_anchor": self.temporal_anchor,
+            "status": self.status,
+            "matched_claim_id": self.matched_claim_id,
+            "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True)
 class ResponseClauseClaim:
     """Single clause-level claim decomposed from a natural-language response."""
 
@@ -90,6 +148,7 @@ class ResponseClauseClaim:
     numbers: tuple[Decimal, ...]
     is_grounded: bool
     ungrounded_tokens: tuple[str, ...]
+    relations: tuple[ResponseRelationTuple, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -100,6 +159,7 @@ class ResponseClauseClaim:
             "numbers": [str(n) for n in self.numbers],
             "is_grounded": self.is_grounded,
             "ungrounded_tokens": list(self.ungrounded_tokens),
+            "relations": [r.to_dict() for r in self.relations],
         }
 
 
@@ -363,10 +423,28 @@ _EPISTEMIC_META_TOKENS = frozenset({
     "divergent", "unresolved", "inconclusive", "combined", "answer", "question", "today", "now", "currently",
 })
 
+_FINITE_CLAIM_VERB_ALTS = (
+    r"es|son|(?!era\s+\d{4})era|fueron|fue|est[aá]|est[aá]n|tiene|tienen|ten[ií]a|tendr[ií]a|"
+    r"trabaja|vive|naci[oó]|muri[oó]|falleci[oó]|posee|ostenta|act[uú]a|participa|dirige|"
+    r"compr[oó]|obtuvo|inici[oó]|firm[oó]|report[oó]|indica|indican|se[ñn]ala|asciende|alcanza|"
+    r"corresponde|aplica|equivale|suman|"
+    r"is|are|was|were|has|have|had|works|lives|born|died|owns|leads|bought|indicates|equals|totals"
+)
+
 _CONJ_VERB_SPLIT_RE = re.compile(
-    r"\s+(?:y|e|and)\s+(?=(?:es|son|era|fueron|fue|est[aá]|est[aá]n|tiene|tienen|trabaja|vive|"
-    r"naci[oó]|muri[oó]|falleci[oó]|posee|ostenta|act[uú]a|participa|dirige|"
-    r"is|are|was|were|has|have|works|lives|born|died|owns|leads)\b)",
+    rf"\s+(?:y|e|and)\s+(?=(?:{_FINITE_CLAIM_VERB_ALTS})\b)",
+    re.IGNORECASE,
+)
+
+_COORD_SUBJ_VERB_SPLIT_RE = re.compile(
+    rf"(?:\s+(?:y|e|and|pero|sino|mientras\s+que|whereas|while)\s+|,\s+)"
+    rf"(?=(?:(?:el|la|los|las|un|una|the|this|that)\s+)?[A-Za-zÀ-ÿ0-9_-]{{2,}}"
+    rf"(?:\s+[A-Za-zÀ-ÿ0-9_-]{{1,20}}){{0,3}}\s+(?:{_FINITE_CLAIM_VERB_ALTS})\b)",
+    re.IGNORECASE,
+)
+
+_LEFT_HAS_VERB_OR_NUM_RE = re.compile(
+    rf"(?:\b(?:{_FINITE_CLAIM_VERB_ALTS}|era)\b|\d)",
     re.IGNORECASE,
 )
 
@@ -440,13 +518,41 @@ def _split_clauses(text: str) -> list[str]:
     return [p.strip() for p in parts if p and p.strip()]
 
 
+def _split_coord_subject_verb(segment: str) -> list[str]:
+    pieces: list[str] = []
+    cur_start = 0
+    for m in _COORD_SUBJ_VERB_SPLIT_RE.finditer(segment):
+        left = segment[cur_start : m.start()].strip(" ,;:")
+        right = segment[m.end() :].strip(" ,;:")
+        if not left or not right:
+            continue
+        # Never split conjoined subjects before a single shared verb ("Factura A y Factura B suman 1000 USD")
+        if not _LEFT_HAS_VERB_OR_NUM_RE.search(left):
+            continue
+        # Never split inside numeric ranges ("entre 60 y 84")
+        if re.search(r"\b(?:entre|between|de|from)\s+\d+(?:[.,]\d+)?$", left, re.IGNORECASE):
+            continue
+        # Preserve subordinate "Cuando <anchor>, <main event>" when right adds no numeric value
+        is_comma = segment[m.start() : m.end()].lstrip().startswith(",")
+        if is_comma and re.match(r"^(?:cuando|cuando\s+el|if|when|since|dado\s+que)\b", left, re.IGNORECASE):
+            if not _NUMBER_TOKEN_RE.search(right):
+                continue
+        pieces.append(left)
+        cur_start = m.end()
+    tail = segment[cur_start:].strip(" ,;:")
+    if tail:
+        pieces.append(tail)
+    return pieces
+
+
 def _split_claim_subclauses(clause: str) -> list[str]:
     out: list[str] = []
     for disc_piece in _DISCOURSE_SPLIT_RE.split(clause):
-        for piece in _CONJ_VERB_SPLIT_RE.split(disc_piece):
-            cleaned = piece.strip(" ,;:")
-            if cleaned:
-                out.append(cleaned)
+        for verb_piece in _CONJ_VERB_SPLIT_RE.split(disc_piece):
+            for coord_piece in _split_coord_subject_verb(verb_piece):
+                cleaned = coord_piece.strip(" ,;:")
+                if cleaned:
+                    out.append(cleaned)
     return out
 
 
@@ -501,6 +607,13 @@ def _clause_asserts_exactness(clause: str) -> bool:
 def _clause_is_explanatory_formula_or_disclaimer(clause: str) -> bool:
     low = clause.lower()
     if _NEGATED_LIMIT_CONTEXT_RE.search(low) or _MISSING_PRECISION_DISCLOSURE_RE.search(low):
+        return True
+    norm = _strip_accents(low)
+    if not _NUMBER_TOKEN_RE.search(clause) and (
+        _SAFE_DISCLAIMER_NEGATION_RE.search(low)
+        or "depende unicamente del documento" in norm
+        or "no ha sido verificada" in norm
+    ):
         return True
     if re.search(r"(c[aá]lculo|formula|f[oó]rmula|calculation|compute|operaci[oó]n)\s+(?:es|is)\s+[-+\d(]", low):
         return True
@@ -1105,6 +1218,962 @@ def _build_grounding_lexicon(
     return exact_lex, stem_lex | meta_stems, doc_q_exact
 
 
+_DATE_PREDICATE_NAMES = frozenset({
+    "anchor_date", "anchor_year", "reference_date", "reference_year",
+    "start_date", "end_date", "birth_date", "date", "year",
+})
+_AGE_DURATION_PREDICATE_NAMES = frozenset({
+    "age", "anchor_age", "duration", "duration_months", "notice_period", "sla_days",
+})
+_MONETARY_PREDICATE_NAMES = frozenset({
+    "charge", "amount", "total_amount", "subtotal", "refund", "approved_refund",
+    "liability_cap", "revenue", "combined_revenue", "base_revenue", "extra_revenue",
+    "price", "cost", "fee", "payout",
+})
+_TEMPORAL_UNITS = frozenset({"years", "months", "days", "calendar_days", "business_days", "hours", "minutes"})
+_MONETARY_UNITS = frozenset({"USD", "EUR", "GBP"})
+_RATE_UNITS = frozenset({"percent", "%", "bps"})
+
+_NON_COUNTED_POST_NUM_WORDS = frozenset({
+    "indica", "indican", "senala", "senalan", "muestra", "muestran", "aplica", "aplicable",
+    "equivale", "corresponde", "representa", "supera", "excede", "aproximados", "aproximadas",
+    "exactos", "exactas", "totales", "parciales", "netos", "brutos", "vigente", "vigentes",
+    "disponible", "disponibles", "respectivamente", "respectively", "roughly", "approximately",
+    "indicates", "shows", "applies", "applicable", "equals", "represents", "exceeds",
+})
+
+_DATE_PRE_CONTEXT_RE = re.compile(
+    r"(?:\b(?:en(?:\s+el\s+a[ñn]o)?|del\s+a[ñn]o|el\s+a[ñn]o|a[ñn]o|"
+    r"para(?:\s+el\s+a[ñn]o)?|hacia|desde|hasta|durante|era|fue(?:\s+en)?|"
+    r"fecha|nacido\s+en|naci[oó]\s+en|"
+    r"in(?:\s+the\s+year)?|by|during|since|from|year|born\s+in)\s+)$",
+    re.IGNORECASE,
+)
+
+_COPULA_OR_PRED_VERB_RE = re.compile(
+    r"\b(?:es|son|era|eran|fue|fueron|ser[ií]a|tiene|tienen|ten[ií]a|tendr[ií]a|"
+    r"indica|se[ñn]ala|asciende|alcanza|equivale|corresponde|aplica|suma|suman|"
+    r"is|are|was|were|would\s+be|has|have|had|indicates|equals|totals)\b",
+    re.IGNORECASE,
+)
+
+_AGGREGATE_PHRASE_RE = re.compile(
+    r"\b(?:total|subtotal|suma|suman|combinad[oa]s?|conjunto|partidas|elementos|"
+    r"entre\s+amb[oa]s|both|combined|sum|totals)\b",
+    re.IGNORECASE,
+)
+
+_SOURCE_LEAD_ENTITY_RE = re.compile(
+    r"^\s*([A-ZÁÉÍÓÚÑ][A-Za-zÀ-ÿ0-9_-]*(?:\s+[A-ZÁÉÍÓÚÑ0-9][A-Za-zÀ-ÿ0-9_-]*){0,2})\s+"
+    r"(?:indica|se[ñn]ala|report[oóa]|establece|menciona|indicates|states|reports)\b"
+)
+
+_UNIT_WORD_MAP: dict[str, tuple[str, str]] = {}
+for _u_canon, _u_syns in _UNIT_SYNONYMS.items():
+    if _u_canon in _TEMPORAL_UNITS:
+        _u_slot = "duration_or_age"
+    elif _u_canon in _MONETARY_UNITS:
+        _u_slot = "monetary_amount"
+    elif _u_canon in _RATE_UNITS:
+        _u_slot = "percentage_or_rate"
+    else:
+        _u_slot = "quantity"
+    for _u_syn in _u_syns:
+        _UNIT_WORD_MAP[_norm_token(_u_syn)] = (_u_canon, _u_slot)
+_UNIT_WORD_MAP["$"] = ("USD", "monetary_amount")
+_UNIT_WORD_MAP["€"] = ("EUR", "monetary_amount")
+_UNIT_WORD_MAP["£"] = ("GBP", "monetary_amount")
+_UNIT_WORD_MAP["%"] = ("percent", "percentage_or_rate")
+_UNIT_WORD_MAP["año"] = ("years", "duration_or_age")
+_UNIT_WORD_MAP["años"] = ("years", "duration_or_age")
+_UNIT_WORD_MAP["dia"] = ("calendar_days", "duration_or_age")
+_UNIT_WORD_MAP["dias"] = ("calendar_days", "duration_or_age")
+_UNIT_WORD_MAP["dolar"] = ("USD", "monetary_amount")
+_UNIT_WORD_MAP["dolares"] = ("USD", "monetary_amount")
+_UNIT_WORD_MAP["days"] = ("calendar_days", "duration_or_age")
+
+
+def _norm_phrase(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    cleaned = re.sub(r"\s+", " ", _strip_accents(raw.lower())).strip()
+    return cleaned or None
+
+
+def _extract_year_int(raw: Any) -> int | None:
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, Decimal)):
+        n = int(raw)
+        if 1500 <= n <= 2150 and Decimal(raw) == n:
+            return n
+        return None
+    s = str(raw).strip()
+    m_iso = re.match(r"^(\d{4})-\d{2}(?:-\d{2})?$", s)
+    if m_iso:
+        return int(m_iso.group(1))
+    m_yr = re.match(r"^(1[5-9]\d{2}|20\d{2}|21\d{2})(?:\.0+)?$", s)
+    if m_yr:
+        return int(m_yr.group(1))
+    return None
+
+
+def _sentence_around_ref(doc_text: str, start: int, end: int) -> str:
+    if not doc_text:
+        return ""
+    left = max(
+        doc_text.rfind(".", 0, start),
+        doc_text.rfind(";", 0, start),
+        doc_text.rfind("\n", 0, start),
+    )
+    right_candidates = [pos for pos in (doc_text.find(".", end), doc_text.find(";", end), doc_text.find("\n", end)) if pos != -1]
+    right = min(right_candidates) if right_candidates else len(doc_text)
+    return doc_text[left + 1 : right].strip()
+
+
+def _extract_event_tokens_from_sentence(sentence: str, subject: str | None) -> tuple[str, ...]:
+    if not sentence:
+        return ()
+    subj_words = set()
+    if subject:
+        subj_words = {_norm_token(t) for t in re.findall(r"[A-Za-zÀ-ÿ0-9]+", subject)}
+    age_predicate_words = {"tenia", "tiene", "tener", "edad", "age", "old"}
+    out: list[str] = []
+    for raw_tok in re.findall(r"[A-Za-zÀ-ÿ]+", sentence):
+        nt = _norm_token(raw_tok)
+        if (
+            len(nt) < 4
+            or nt in _FUNCTION_WORDS
+            or nt in _EPISTEMIC_META_TOKENS
+            or nt in _COMMON_STOPWORDS
+            or nt in _UNIT_WORD_MAP
+            or nt in subj_words
+            or nt in age_predicate_words
+        ):
+            continue
+        out.append(nt)
+    return tuple(dict.fromkeys(out))
+
+
+def build_supported_graph_relations(
+    graph: JustificationGraph,
+    documents: Mapping[str, SourceDocument] | None = None,
+    *,
+    include_conflict_alternatives: bool = False,
+) -> list[GraphRelationTuple]:
+    """Build normalized structured relation tuples ``(subject, slot_family, value, unit, temporal_anchor)`` from the graph."""
+    conc_id = graph.conclusion_id
+    anc_ids = graph.ancestor_claims(conc_id)
+    node_ids = [conc_id, *sorted(aid for aid in anc_ids if aid != conc_id)]
+    if include_conflict_alternatives:
+        seen_ids = set(node_ids)
+        docs_map = documents or {}
+        for nid in sorted(graph.claims):
+            if nid in seen_ids:
+                continue
+            cand = graph.claims[nid]
+            if cand.structural_reliability is not None and cand.structural_reliability < 0.5:
+                continue
+            if cand.evidence and all(
+                docs_map.get(ev.document_id) is None
+                or getattr(docs_map.get(ev.document_id), "attribution", None) == "source_statement"
+                for ev in cand.evidence
+            ):
+                node_ids.append(nid)
+                seen_ids.add(nid)
+
+    # First pass: inspect temporal inference steps for anchor/reference years
+    node_anchors: dict[str, int] = {}
+    extra_tuples: list[GraphRelationTuple] = []
+    conc = graph.claims.get(conc_id)
+    default_subj = _norm_phrase(conc.subject) if conc is not None else None
+    if not default_subj:
+        for nid in node_ids:
+            if nid in graph.claims and graph.claims[nid].subject:
+                default_subj = _norm_phrase(graph.claims[nid].subject)
+                break
+
+    for step in graph.steps:
+        params = step.parameters or {}
+        anchor_yr = _extract_year_int(params.get("anchor_date") or params.get("anchor_year"))
+        ref_yr = _extract_year_int(params.get("reference_date") or params.get("reference_year"))
+        if anchor_yr is None:
+            for pid in step.premises:
+                pn = graph.claims.get(pid)
+                if pn is not None and (pn.predicate or "").lower() in _DATE_PREDICATE_NAMES:
+                    y = _extract_year_int(pn.value)
+                    if y is not None:
+                        anchor_yr = y
+                        break
+        if anchor_yr is not None:
+            for pid in step.premises:
+                node_anchors.setdefault(pid, anchor_yr)
+        step_subj = _norm_phrase(graph.claims[step.conclusion_id].subject) if step.conclusion_id in graph.claims else default_subj
+        if ref_yr is not None:
+            cnode = graph.claims.get(step.conclusion_id)
+            if cnode is not None and isinstance(cnode.value, (int, float, Decimal)) and not cnode.approximate:
+                node_anchors.setdefault(step.conclusion_id, ref_yr)
+            elif cnode is not None and (cnode.predicate or "").lower() in {"age", "anchor_age"} and not isinstance(cnode.value, Mapping):
+                # Point-valued derived age for reference_year applies to ref_yr even when marked approximate
+                node_anchors.setdefault(step.conclusion_id, ref_yr)
+            extra_tuples.append(GraphRelationTuple(
+                claim_id=f"{step.step_id}::reference_date",
+                subject=step_subj,
+                predicate="reference_date",
+                slot_family="calendar_date",
+                value=Decimal(ref_yr),
+                interval=None,
+                unit=None,
+                temporal_anchor=ref_yr,
+            ))
+            if anchor_yr is not None and ref_yr >= anchor_yr:
+                extra_tuples.append(GraphRelationTuple(
+                    claim_id=f"{step.step_id}::elapsed_years",
+                    subject=step_subj,
+                    predicate="elapsed_duration",
+                    slot_family="duration_or_age",
+                    value=Decimal(ref_yr - anchor_yr),
+                    interval=None,
+                    unit="years",
+                    temporal_anchor=ref_yr,
+                ))
+        for k_dt in ("start_date", "end_date"):
+            yr_k = _extract_year_int(params.get(k_dt))
+            if yr_k is not None:
+                extra_tuples.append(GraphRelationTuple(
+                    claim_id=f"{step.step_id}::{k_dt}",
+                    subject=step_subj,
+                    predicate=k_dt,
+                    slot_family="calendar_date",
+                    value=Decimal(yr_k),
+                    interval=None,
+                    unit=None,
+                    temporal_anchor=yr_k,
+                ))
+
+    tuples: list[GraphRelationTuple] = []
+    for nid in node_ids:
+        node = graph.claims.get(nid)
+        if node is None:
+            continue
+        pred_low = (node.predicate or "").lower().strip()
+        raw_unit = node.unit
+        norm_unit = _UNIT_WORD_MAP.get(_norm_token(raw_unit), (raw_unit, ""))[0] if raw_unit else None
+        val_dec = _to_dec(node.value)
+        interval_dec: tuple[Decimal, Decimal] | None = None
+        if val_dec is None and isinstance(node.value, Mapping) and "min" in node.value and "max" in node.value:
+            lo_d, hi_d = _to_dec(node.value["min"]), _to_dec(node.value["max"])
+            if lo_d is not None and hi_d is not None:
+                interval_dec = (lo_d, hi_d)
+
+        if pred_low in _DATE_PREDICATE_NAMES:
+            slot_family = "calendar_date"
+            norm_unit = None
+            yr_val = _extract_year_int(node.value)
+            if val_dec is None and yr_val is not None:
+                val_dec = Decimal(yr_val)
+            anchor = yr_val if yr_val is not None else node_anchors.get(nid)
+        elif pred_low in _AGE_DURATION_PREDICATE_NAMES or (norm_unit in _TEMPORAL_UNITS):
+            slot_family = "duration_or_age"
+            anchor = node_anchors.get(nid)
+        elif norm_unit in _MONETARY_UNITS or pred_low in _MONETARY_PREDICATE_NAMES:
+            slot_family = "monetary_amount"
+            anchor = node_anchors.get(nid)
+        elif norm_unit in _RATE_UNITS:
+            slot_family = "percentage_or_rate"
+            anchor = node_anchors.get(nid)
+        else:
+            yr_val = _extract_year_int(node.value) if norm_unit is None else None
+            if yr_val is not None:
+                slot_family = "calendar_date"
+                anchor = yr_val
+            else:
+                slot_family = "quantity"
+                anchor = node_anchors.get(nid)
+
+        subj_norm = _norm_phrase(node.subject) or default_subj
+        source_ent: str | None = None
+        ev_tokens: list[str] = []
+        for ev in node.evidence:
+            doc_obj = (documents or {}).get(ev.document_id)
+            if doc_obj is None:
+                continue
+            m_src = _SOURCE_LEAD_ENTITY_RE.match(doc_obj.text)
+            if m_src:
+                cand_src = _norm_phrase(m_src.group(1))
+                if cand_src and cand_src != subj_norm:
+                    source_ent = cand_src
+            if node.kind == "extraction" and anchor is not None:
+                sent = _sentence_around_ref(doc_obj.text, ev.start, ev.end)
+                ev_tokens.extend(_extract_event_tokens_from_sentence(sent, node.subject))
+
+        tuples.append(GraphRelationTuple(
+            claim_id=nid,
+            subject=subj_norm,
+            predicate=pred_low or None,
+            slot_family=slot_family,
+            value=val_dec,
+            interval=interval_dec,
+            unit=norm_unit,
+            temporal_anchor=anchor,
+            source_entity=source_ent,
+            event_tokens=tuple(dict.fromkeys(ev_tokens)),
+        ))
+
+    tuples.extend(extra_tuples)
+    return tuples
+
+
+def _units_compatible(obs_unit: str | None, graph_unit: str | None, unit_registry: UnitRegistry | None) -> bool:
+    if obs_unit is None or graph_unit is None:
+        return True
+    if _norm_token(obs_unit) == _norm_token(graph_unit):
+        return True
+    o_canon = _UNIT_WORD_MAP.get(_norm_token(obs_unit), (obs_unit, ""))[0]
+    g_canon = _UNIT_WORD_MAP.get(_norm_token(graph_unit), (graph_unit, ""))[0]
+    if _norm_token(o_canon) == _norm_token(g_canon):
+        return True
+    if unit_registry is not None:
+        try:
+            return unit_registry.lookup(o_canon).dimension == unit_registry.lookup(g_canon).dimension
+        except Exception:
+            pass
+    # Compatible within time duration dimension vs unrelated counted nouns / currencies
+    if o_canon in _TEMPORAL_UNITS and g_canon in _TEMPORAL_UNITS:
+        return True
+    return False
+
+
+def _find_entity_spans(text: str, known_entities: Sequence[str]) -> list[tuple[int, int, str]]:
+    norm_text = _strip_accents(text.lower())
+    raw_spans: list[tuple[int, int, str]] = []
+    # Match longer entity names first to avoid prefix shadows
+    for ent in sorted(set(known_entities), key=len, reverse=True):
+        if len(ent) < 3:
+            continue
+        for m in re.finditer(rf"(?<![A-Za-z0-9_]){re.escape(ent)}(?![A-Za-z0-9_])", norm_text):
+            if any(not (m.end() <= s or m.start() >= e) for s, e, _ in raw_spans):
+                continue
+            raw_spans.append((m.start(), m.end(), ent))
+    raw_spans.sort(key=lambda item: item[0])
+    return raw_spans
+
+
+def _partition_segment_by_entities(segment: str, leaf_entities: Sequence[str]) -> list[str]:
+    spans = _find_entity_spans(segment, leaf_entities)
+    distinct_ents = []
+    for _, _, ent in spans:
+        if ent not in distinct_ents:
+            distinct_ents.append(ent)
+    if len(distinct_ents) < 2:
+        return [segment]
+
+    # Collect unique anchor occurrences when the entity switches
+    boundaries: list[tuple[int, int, str]] = []
+    prev_ent = None
+    for s, e, ent in spans:
+        if ent != prev_ent:
+            boundaries.append((s, e, ent))
+            prev_ent = ent
+    if len(boundaries) < 2:
+        return [segment]
+
+    # Check if there is at least one numeric assertion between consecutive distinct entities
+    pieces: list[str] = []
+    cur_start = 0
+    for idx in range(len(boundaries) - 1):
+        _, e_cur, _ = boundaries[idx]
+        s_next, _, _ = boundaries[idx + 1]
+        between = segment[e_cur:s_next]
+        # Only split if left chunk already contains a number or a distinct clause boundary
+        left_chunk = segment[cur_start:s_next]
+        if _NUMBER_TOKEN_RE.search(between) or _NUMBER_TOKEN_RE.search(segment[cur_start : boundaries[idx][0]]):
+            # Prefer cutting right after any coordinator/punctuation just before s_next
+            cut = s_next
+            m_sep = re.search(r"(?:[;,]|\s+(?:y|e|and|pero|but|mientras\s+que|whereas|while))\s*$", segment[cur_start:s_next], re.IGNORECASE)
+            if m_sep:
+                cut = cur_start + m_sep.start()
+            part = segment[cur_start:cut].strip(" ,;:")
+            if part:
+                pieces.append(part)
+            cur_start = s_next
+    tail = segment[cur_start:].strip(" ,;:")
+    if tail:
+        pieces.append(tail)
+    return pieces if len(pieces) >= 2 else [segment]
+
+
+def _classify_number_slot(
+    seg: str,
+    start: int,
+    end: int,
+    val: Decimal,
+    *,
+    is_range_lo_or_hi: bool = False,
+) -> tuple[str, str | None]:
+    before = seg[:start]
+    after = seg[end:]
+
+    # 1. Currency prefix ("$500")
+    m_cur_pre = re.search(r"([$€£])\s*$", before)
+    if m_cur_pre:
+        sym = m_cur_pre.group(1)
+        canon, slot = _UNIT_WORD_MAP[sym]
+        return slot, canon
+
+    # 2. Explicit measurement unit immediately after ("13 años", "500 USD", "10 %")
+    m_unit = re.match(
+        r"^\s*(?:de\s+)?(d[ií]as\s+h[aá]biles|d[ií]as\s+laborables|d[ií]as\s+naturales|"
+        r"business\s+days?|working\s+days?|calendar\s+days?|por\s+ciento|"
+        r"[A-Za-zÀ-ÿ]+|[$€£%])",
+        after,
+        re.IGNORECASE,
+    )
+    if m_unit:
+        raw_u = re.sub(r"\s+", " ", m_unit.group(1)).strip()
+        nu = _norm_token(raw_u)
+        if nu in _UNIT_WORD_MAP:
+            canon, slot = _UNIT_WORD_MAP[nu]
+            return slot, canon
+
+    # 3. Date / temporal anchor preposition before ("en 2026", "en 13", "era 1933")
+    if _DATE_PRE_CONTEXT_RE.search(before):
+        return "calendar_date", None
+
+    # 4. Shared trailing unit via coordination ("400 y 600 USD")
+    m_coord_u = re.match(
+        r"^\s*(?:y|e|a|and|to|-)\s+-?\d+(?:[.,]\d+)?\s*(d[ií]as\s+h[aá]biles|d[ií]as\s+naturales|[A-Za-zÀ-ÿ]+|[$€£%])",
+        after,
+        re.IGNORECASE,
+    )
+    if m_coord_u:
+        nu2 = _norm_token(re.sub(r"\s+", " ", m_coord_u.group(1)))
+        if nu2 in _UNIT_WORD_MAP:
+            canon, slot = _UNIT_WORD_MAP[nu2]
+            return slot, canon
+
+    # 5. Non-unit counted noun immediately after ("106 acciones")
+    m_noun = re.match(r"^\s+(?:de\s+)?([A-Za-zÀ-ÿ]{3,})\b", after, re.IGNORECASE)
+    if m_noun:
+        noun_raw = m_noun.group(1)
+        noun_norm = _norm_token(noun_raw)
+        if (
+            noun_norm not in _UNIT_WORD_MAP
+            and noun_norm not in _FUNCTION_WORDS
+            and noun_norm not in _EPISTEMIC_META_TOKENS
+            and noun_norm not in _NON_COUNTED_POST_NUM_WORDS
+            and not _COPULA_OR_PRED_VERB_RE.fullmatch(noun_raw)
+        ):
+            # Check not preceded by "de las/los/la/el" (e.g. "1000 de las facturas")
+            if not re.match(r"^\s+de\s+(?:el|la|los|las|this|the)\b", after, re.IGNORECASE):
+                return f"counted_noun:{_stem_key(noun_norm)}", noun_norm
+
+    # 6. Unambiguous predicate linking copula (only if seg has a linking verb & predicate keyword)
+    seg_norm = _strip_accents(seg.lower())
+    if _COPULA_OR_PRED_VERB_RE.search(seg) and len(_extract_clause_numbers(seg)) == 1:
+        if any(k in seg_norm for k in ("edad", "age")):
+            return "duration_or_age", "years"
+        if any(k in seg_norm for k in ("reembolso", "refund", "importe", "monto", "total", "subtotal", "limite", "cap", "ingreso", "revenue", "cargo", "charge")):
+            return "monetary_amount", None
+
+    if is_range_lo_or_hi:
+        yr_chk = _extract_year_int(val)
+        if yr_chk is not None:
+            return "calendar_date", None
+
+    return "untyped_number", None
+
+
+def _verify_subclause_relations(
+    sub_cl: str,
+    graph_relations: list[GraphRelationTuple],
+    default_subj: str | None,
+    verified_raw_equations: Sequence[str],
+    *,
+    unit_registry: UnitRegistry | None = None,
+    semantic_evaluator: Any = None,
+) -> tuple[list[ResponseRelationTuple], list[dict[str, Any]]]:
+    """Verify relational structure ``(subject, slot_family, value, unit, temporal_anchor)`` inside a clause."""
+    cleaned = sub_cl
+    for raw_eq in sorted(verified_raw_equations, key=len, reverse=True):
+        if raw_eq and raw_eq in cleaned:
+            cleaned = cleaned.replace(raw_eq, " ")
+
+    # Specific leaf subjects and source entities (exclude purely aggregate conclusion subject when finer leaf subjects exist)
+    all_ent_names: list[str] = []
+    leaf_ent_names: list[str] = []
+    for gr in graph_relations:
+        for nm in (gr.subject, gr.source_entity):
+            if nm and nm not in all_ent_names:
+                all_ent_names.append(nm)
+                if gr.claim_id != graph_relations[0].claim_id or len({g.subject for g in graph_relations if g.subject}) == 1:
+                    leaf_ent_names.append(nm)
+    # Build set of entity strings present on tuples (keep conclusion aggregate/container subject out when finer leaf/source entities exist)
+    def_subj_norm = _norm_phrase(default_subj)
+    distinct_subjects = {g.subject for g in graph_relations if g.subject}
+    has_source_entities = any(bool(g.source_entity) for g in graph_relations)
+    specific_subjects: set[str] = set()
+    for gr in graph_relations:
+        if gr.source_entity:
+            specific_subjects.add(gr.source_entity)
+        if gr.subject and gr.subject != def_subj_norm:
+            specific_subjects.add(gr.subject)
+        elif gr.subject and not has_source_entities and len(distinct_subjects) > 1 and gr.claim_id != graph_relations[0].claim_id:
+            specific_subjects.add(gr.subject)
+    # If all nodes share a single subject (e.g. Warren Buffet), include it in entity detection
+    if not specific_subjects and def_subj_norm:
+        specific_subjects.add(def_subj_norm)
+    specific_subjects.discard("")
+
+    partition_targets = sorted(specific_subjects | {e for e in all_ent_names if e}, key=len, reverse=True)
+    raw_segments = _partition_segment_by_entities(cleaned, partition_targets)
+    segments: list[str] = []
+    _agg_tail_split_re = re.compile(
+        r",\s*(?=(?:por\s+lo\s+que|as[ií]\s+que|de\s+modo\s+que|de\s+manera\s+que|"
+        r"sumando|totalizando|lo\s+que\s+suma|therefore|totalling|totaling|"
+        r"(?:el|la|los|las|un|una)?\s*(?:subtotal|total)\b))",
+        re.IGNORECASE,
+    )
+    for rseg in raw_segments:
+        sub_parts = _agg_tail_split_re.split(rseg)
+        if len(sub_parts) > 1 and all(re.search(r"\d", p) for p in sub_parts):
+            segments.extend(p.strip() for p in sub_parts if p.strip())
+        else:
+            segments.append(rseg)
+
+    # Precompute exclusive event tokens mapped to a single temporal_anchor across graph tuples
+    token_anchors: dict[str, set[int]] = {}
+    for gr in graph_relations:
+        if gr.temporal_anchor is not None:
+            for tok in gr.event_tokens:
+                token_anchors.setdefault(tok, set()).add(gr.temporal_anchor)
+    exclusive_event_tokens: dict[str, int] = {
+        tok: next(iter(ancs)) for tok, ancs in token_anchors.items() if len(ancs) == 1
+    }
+
+    extracted_rels: list[ResponseRelationTuple] = []
+    issues: list[dict[str, Any]] = []
+    def_subj_norm = _norm_phrase(default_subj)
+
+    for seg in segments:
+        seg_spans = _find_entity_spans(seg, partition_targets)
+        seg_matched_ents = list(dict.fromkeys(ent for _, _, ent in seg_spans))
+        specific_matched = [e for e in seg_matched_ents if e in specific_subjects]
+        if len(specific_matched) == 1:
+            seg_subject: str | None = specific_matched[0]
+            multi_entity = False
+        elif len(specific_matched) > 1:
+            seg_subject = def_subj_norm
+            multi_entity = True
+        else:
+            seg_subject = seg_matched_ents[0] if len(seg_matched_ents) == 1 else def_subj_norm
+            multi_entity = False
+
+        has_agg_kw = bool(_AGGREGATE_PHRASE_RE.search(_strip_accents(seg.lower())))
+        conc_subj_norm = def_subj_norm
+        is_agg_seg = bool(
+            has_agg_kw
+            and (multi_entity or not specific_matched or seg_subject == conc_subj_norm)
+        )
+
+        # Extract range spans first so individual bounds aren't double-checked as bare numbers
+        range_entries: list[tuple[int, int, Decimal, Decimal, str, str | None]] = []
+        for m_r in _RANGE_PATTERN_RE.finditer(seg):
+            g = m_r.groups()
+            lo_r, hi_r = None, None
+            if g[0] is not None and g[1] is not None:
+                lo_r, hi_r = _to_dec(g[0]), _to_dec(g[1])
+            elif g[2] is not None and g[3] is not None:
+                lo_r, hi_r = _to_dec(g[2]), _to_dec(g[3])
+            elif g[4] is not None and g[5] is not None:
+                lo_r, hi_r = _to_dec(g[4]), _to_dec(g[5])
+            elif g[6] is not None and g[7] is not None:
+                ctr, tol = _to_dec(g[6]), _to_dec(g[7])
+                if ctr is not None and tol is not None and tol >= 0:
+                    lo_r, hi_r = ctr - tol, ctr + tol
+            if lo_r is not None and hi_r is not None and lo_r <= hi_r:
+                r_slot, r_unit = _classify_number_slot(seg, m_r.start(), m_r.end(), hi_r, is_range_lo_or_hi=True)
+                range_entries.append((m_r.start(), m_r.end(), lo_r, hi_r, r_slot, r_unit))
+
+        num_entries: list[tuple[int, int, Decimal, str, str | None]] = []
+        for m_n in _NUMBER_TOKEN_RE.finditer(seg):
+            if any(rs <= m_n.start() and m_n.end() <= re_ for rs, re_, *_ in range_entries):
+                continue
+            d_val = _to_dec(m_n.group(1))
+            if d_val is None:
+                continue
+            slot, unit = _classify_number_slot(seg, m_n.start(), m_n.end(), d_val)
+            num_entries.append((m_n.start(), m_n.end(), d_val, slot, unit))
+
+        # Determine calendar anchor year(s) mentioned inside this segment
+        seg_anchor_years: list[int] = []
+        for _, _, d_val, slot, _ in num_entries:
+            if slot == "calendar_date" and d_val == int(d_val):
+                seg_anchor_years.append(int(d_val))
+        unique_seg_years = set(seg_anchor_years)
+        single_anchor_year = next(iter(unique_seg_years)) if len(unique_seg_years) == 1 else None
+
+        # Check event-token temporal mismatch inside this segment (e.g. "compró su primera acción en 2026")
+        if single_anchor_year is not None and exclusive_event_tokens:
+            seg_ev_toks = [
+                _norm_token(t)
+                for t in re.findall(r"[A-Za-zÀ-ÿ]+", seg)
+                if _norm_token(t) in exclusive_event_tokens
+            ]
+            # Require >=2 distinct event tokens whose anchor disagrees when no duration/age conclusion explains single_anchor_year
+            mismatched_ev_toks = [t for t in dict.fromkeys(seg_ev_toks) if exclusive_event_tokens[t] != single_anchor_year]
+            has_age_for_year = any(s == "duration_or_age" for _, _, _, s, _ in num_entries)
+            if len(mismatched_ev_toks) >= 2 and not has_age_for_year:
+                expected_yr = exclusive_event_tokens[mismatched_ev_toks[0]]
+                reason = (
+                    f"Event tokens {mismatched_ev_toks} belong to temporal anchor {expected_yr}, "
+                    f"not {single_anchor_year}, in '{seg}'."
+                )
+                rel = ResponseRelationTuple(
+                    clause_text=seg,
+                    subject=seg_subject,
+                    slot_family="event_temporal_anchor",
+                    value=Decimal(single_anchor_year),
+                    unit=None,
+                    temporal_anchor=single_anchor_year,
+                    status="refuted",
+                    reason=reason,
+                )
+                extracted_rels.append(rel)
+                issues.append({
+                    "code": "RELATIONAL_VALUE_MISMATCH",
+                    "status": "refuted",
+                    "reason": reason,
+                    "severity": "error",
+                    "clause": sub_cl,
+                    "relation": rel.to_dict(),
+                })
+
+        # Select entity-filtered relation pool when seg_subject targets a specific leaf/source entity
+        entity_specific_mode = (
+            seg_subject is not None
+            and seg_subject in specific_subjects
+            and len(distinct_subjects) > 1
+            and not is_agg_seg
+            and not multi_entity
+        ) or (
+            seg_subject is not None
+            and any(gr.source_entity == seg_subject for gr in graph_relations)
+            and not multi_entity
+        )
+        scoped_pool = (
+            [gr for gr in graph_relations if gr.subject == seg_subject or gr.source_entity == seg_subject]
+            if entity_specific_mode
+            else graph_relations
+        )
+
+        # Verify range entries
+        for _, _, lo_r, hi_r, r_slot, r_unit in range_entries:
+            matched_tuple: GraphRelationTuple | None = None
+            for gr in scoped_pool:
+                if gr.interval is not None:
+                    if abs(gr.interval[0] - lo_r) <= Decimal("0.01") and abs(gr.interval[1] - hi_r) <= Decimal("0.01"):
+                        if _units_compatible(r_unit, gr.unit, unit_registry) and (
+                            r_slot == "untyped_number" or r_slot == gr.slot_family
+                        ):
+                            matched_tuple = gr
+                            break
+            if matched_tuple is not None:
+                extracted_rels.append(ResponseRelationTuple(
+                    clause_text=seg,
+                    subject=seg_subject,
+                    slot_family=r_slot,
+                    value=None,
+                    unit=r_unit,
+                    temporal_anchor=single_anchor_year,
+                    status="verified",
+                    matched_claim_id=matched_tuple.claim_id,
+                ))
+            else:
+                reason = f"Interval [{lo_r}, {hi_r}] ({r_slot}/{r_unit}) in '{seg}' does not match supported graph relations."
+                rel = ResponseRelationTuple(
+                    clause_text=seg,
+                    subject=seg_subject,
+                    slot_family=r_slot,
+                    value=None,
+                    unit=r_unit,
+                    temporal_anchor=single_anchor_year,
+                    status="refuted",
+                    reason=reason,
+                )
+                extracted_rels.append(rel)
+                issues.append({
+                    "code": "RELATIONAL_VALUE_MISMATCH",
+                    "status": "refuted",
+                    "reason": reason,
+                    "severity": "error",
+                    "clause": sub_cl,
+                    "relation": rel.to_dict(),
+                })
+
+        # Verify each point numeric mention inside seg
+        for _, _, val, obs_slot, obs_unit in num_entries:
+            # 1) Untyped bare numbers cannot silently count as verified
+            if obs_slot == "untyped_number":
+                sem_status = "unknown"
+                if (
+                    semantic_evaluator is not None
+                    and getattr(semantic_evaluator, "enabled", False)
+                    and getattr(semantic_evaluator, "callable_evaluator", None) is not None
+                ):
+                    try:
+                        sem_res = semantic_evaluator.callable_evaluator(
+                            check="relational_correspondence",
+                            clause=seg,
+                            subject=seg_subject,
+                            value=str(val),
+                            supported_relations=[gr.to_dict() for gr in scoped_pool],
+                        )
+                        if isinstance(sem_res, Mapping) and sem_res.get("status") in ("verified", "refuted", "unknown"):
+                            sem_status = str(sem_res["status"])
+                    except Exception:
+                        sem_status = "unknown"
+                if sem_status == "verified":
+                    extracted_rels.append(ResponseRelationTuple(
+                        clause_text=seg,
+                        subject=seg_subject,
+                        slot_family=obs_slot,
+                        value=val,
+                        unit=obs_unit,
+                        temporal_anchor=single_anchor_year,
+                        status="verified",
+                        reason="Resolved by semantic evaluator.",
+                    ))
+                elif sem_status == "refuted":
+                    reason = f"Untyped relation for value {val} in '{seg}' refuted semantically."
+                    rel = ResponseRelationTuple(
+                        clause_text=seg,
+                        subject=seg_subject,
+                        slot_family=obs_slot,
+                        value=val,
+                        unit=obs_unit,
+                        temporal_anchor=single_anchor_year,
+                        status="refuted",
+                        reason=reason,
+                    )
+                    extracted_rels.append(rel)
+                    issues.append({
+                        "code": "RELATIONAL_VALUE_MISMATCH",
+                        "status": "refuted",
+                        "reason": reason,
+                        "severity": "error",
+                        "clause": sub_cl,
+                        "relation": rel.to_dict(),
+                    })
+                else:
+                    reason = (
+                        f"Numeric relation for value {val} in '{seg}' lacks explicit role/unit binding "
+                        "and requires semantic verification."
+                    )
+                    rel = ResponseRelationTuple(
+                        clause_text=seg,
+                        subject=seg_subject,
+                        slot_family=obs_slot,
+                        value=val,
+                        unit=obs_unit,
+                        temporal_anchor=single_anchor_year,
+                        status="unknown",
+                        reason=reason,
+                    )
+                    extracted_rels.append(rel)
+                    issues.append({
+                        "code": "RELATIONAL_CORRESPONDENCE_UNRESOLVED",
+                        "status": "unknown",
+                        "reason": reason,
+                        "severity": "warning",
+                        "clause": sub_cl,
+                        "relation": rel.to_dict(),
+                    })
+                continue
+
+            # 2) Typed or counted_noun numeric assertion: match against scoped_pool
+            val_candidates = [
+                gr for gr in scoped_pool
+                if gr.value is not None and abs(gr.value - val) <= Decimal("0.01")
+            ]
+
+            if not val_candidates:
+                if entity_specific_mode:
+                    reason = (
+                        f"Entity '{seg_subject}' is paired with value {val} ({obs_slot}) in '{seg}', "
+                        f"which conflicts with supported relations for '{seg_subject}'."
+                    )
+                    code = "RELATIONAL_VALUE_MISMATCH"
+                else:
+                    reason = (
+                        f"Value {val} ({obs_slot}) in '{seg}' does not match any supported graph relation "
+                        f"for '{seg_subject or 'conclusion'}'."
+                    )
+                    code = "RELATIONAL_VALUE_MISMATCH"
+                rel = ResponseRelationTuple(
+                    clause_text=seg,
+                    subject=seg_subject,
+                    slot_family=obs_slot,
+                    value=val,
+                    unit=obs_unit,
+                    temporal_anchor=single_anchor_year,
+                    status="refuted",
+                    reason=reason,
+                )
+                extracted_rels.append(rel)
+                issues.append({
+                    "code": code,
+                    "status": "refuted",
+                    "reason": reason,
+                    "severity": "error",
+                    "clause": sub_cl,
+                    "relation": rel.to_dict(),
+                })
+                continue
+
+            # Check counted_noun reassignment ("106 acciones") vs node slot/unit
+            if obs_slot.startswith("counted_noun:"):
+                noun_stem = obs_slot.split(":", 1)[1]
+                noun_ok = [
+                    gr for gr in val_candidates
+                    if gr.slot_family == "quantity"
+                    and (
+                        (gr.unit and _stem_key(_norm_token(gr.unit)) == noun_stem)
+                        or (gr.predicate and noun_stem in _norm_token(gr.predicate))
+                    )
+                ]
+                if not noun_ok:
+                    reason = (
+                        f"Value {val} is bound to counted noun '{obs_unit}' in '{seg}', "
+                        f"which mismatches graph role(s) {[gr.slot_family for gr in val_candidates]}."
+                    )
+                    rel = ResponseRelationTuple(
+                        clause_text=seg,
+                        subject=seg_subject,
+                        slot_family=obs_slot,
+                        value=val,
+                        unit=obs_unit,
+                        temporal_anchor=single_anchor_year,
+                        status="refuted",
+                        reason=reason,
+                    )
+                    extracted_rels.append(rel)
+                    issues.append({
+                        "code": "RELATIONAL_VALUE_MISMATCH",
+                        "status": "refuted",
+                        "reason": reason,
+                        "severity": "error",
+                        "clause": sub_cl,
+                        "relation": rel.to_dict(),
+                    })
+                    continue
+                val_candidates = noun_ok
+
+            # Check slot_family role compatibility ("1933 años" vs calendar_date 1933, "en 13" vs duration_or_age 13)
+            slot_ok = [gr for gr in val_candidates if gr.slot_family == obs_slot]
+            if not slot_ok:
+                reason = (
+                    f"Value {val} is used in role '{obs_slot}' in '{seg}', "
+                    f"whereas the graph supports role(s) {[gr.slot_family for gr in val_candidates]}."
+                )
+                rel = ResponseRelationTuple(
+                    clause_text=seg,
+                    subject=seg_subject,
+                    slot_family=obs_slot,
+                    value=val,
+                    unit=obs_unit,
+                    temporal_anchor=single_anchor_year,
+                    status="refuted",
+                    reason=reason,
+                )
+                extracted_rels.append(rel)
+                issues.append({
+                    "code": "RELATIONAL_VALUE_MISMATCH",
+                    "status": "refuted",
+                    "reason": reason,
+                    "severity": "error",
+                    "clause": sub_cl,
+                    "relation": rel.to_dict(),
+                })
+                continue
+
+            # Check unit compatibility
+            unit_ok = [gr for gr in slot_ok if _units_compatible(obs_unit, gr.unit, unit_registry)]
+            if not unit_ok:
+                reason = (
+                    f"Unit '{obs_unit}' on value {val} in '{seg}' is incompatible with "
+                    f"graph unit(s) {[gr.unit for gr in slot_ok]}."
+                )
+                rel = ResponseRelationTuple(
+                    clause_text=seg,
+                    subject=seg_subject,
+                    slot_family=obs_slot,
+                    value=val,
+                    unit=obs_unit,
+                    temporal_anchor=single_anchor_year,
+                    status="refuted",
+                    reason=reason,
+                )
+                extracted_rels.append(rel)
+                issues.append({
+                    "code": "RELATIONAL_VALUE_MISMATCH",
+                    "status": "refuted",
+                    "reason": reason,
+                    "severity": "error",
+                    "clause": sub_cl,
+                    "relation": rel.to_dict(),
+                })
+                continue
+
+            # Check temporal_anchor compatibility when a non-date assertion co-occurs with a single year
+            if obs_slot != "calendar_date" and single_anchor_year is not None:
+                anchor_ok = [
+                    gr for gr in unit_ok
+                    if gr.temporal_anchor is None or gr.temporal_anchor == single_anchor_year
+                ]
+                if not anchor_ok:
+                    expected_anchors = sorted({gr.temporal_anchor for gr in unit_ok if gr.temporal_anchor is not None})
+                    reason = (
+                        f"Assertion for value {val} ({obs_slot}) is anchored to year {single_anchor_year} in '{seg}', "
+                        f"but graph supports temporal anchor(s) {expected_anchors}."
+                    )
+                    rel = ResponseRelationTuple(
+                        clause_text=seg,
+                        subject=seg_subject,
+                        slot_family=obs_slot,
+                        value=val,
+                        unit=obs_unit,
+                        temporal_anchor=single_anchor_year,
+                        status="refuted",
+                        reason=reason,
+                    )
+                    extracted_rels.append(rel)
+                    issues.append({
+                        "code": "RELATIONAL_VALUE_MISMATCH",
+                        "status": "refuted",
+                        "reason": reason,
+                        "severity": "error",
+                        "clause": sub_cl,
+                        "relation": rel.to_dict(),
+                    })
+                    continue
+                unit_ok = anchor_ok
+
+            matched_gr = unit_ok[0]
+            extracted_rels.append(ResponseRelationTuple(
+                clause_text=seg,
+                subject=seg_subject,
+                slot_family=obs_slot,
+                value=val,
+                unit=obs_unit,
+                temporal_anchor=single_anchor_year,
+                status="verified",
+                matched_claim_id=matched_gr.claim_id,
+            ))
+
+    return extracted_rels, issues
+
+
 def _is_graph_conclusion_negative(graph: JustificationGraph) -> bool:
     conc = graph.claims[graph.conclusion_id]
     if isinstance(conc.value, bool) and conc.value is False:
@@ -1123,14 +2192,18 @@ def _decompose_and_verify_clauses(
     exact_lex: set[str],
     stem_lex: set[str],
     subj: str | None,
+    graph_relations: list[GraphRelationTuple],
+    verified_raw_equations: Sequence[str],
     *,
+    unit_registry: UnitRegistry | None = None,
     has_material_conflict: bool,
     semantic_evaluator: Any = None,
-) -> tuple[bool, list[ResponseClauseClaim], list[dict[str, Any]]]:
-    """Decompose text into clauses, check conclusion polarity inversion & ungrounded non-numeric claims."""
+) -> tuple[bool, list[ResponseClauseClaim], list[ResponseRelationTuple], list[dict[str, Any]]]:
+    """Decompose text into clauses, check conclusion polarity inversion, relational tuples & ungrounded claims."""
     conc_negative = _is_graph_conclusion_negative(graph)
     conc = graph.claims[graph.conclusion_id]
     clause_claims: list[ResponseClauseClaim] = []
+    all_relations: list[ResponseRelationTuple] = []
     issues: list[dict[str, Any]] = []
     conclusion_polarity_inverted = False
 
@@ -1237,6 +2310,19 @@ def _decompose_and_verify_clauses(
                         "ungrounded_tokens": list(dedup_ungrounded),
                     })
 
+            sub_rels: list[ResponseRelationTuple] = []
+            if role != "formula" and not is_formula and graph_relations:
+                sub_rels, rel_issues = _verify_subclause_relations(
+                    sub_cl,
+                    graph_relations,
+                    subj,
+                    verified_raw_equations,
+                    unit_registry=unit_registry,
+                    semantic_evaluator=semantic_evaluator,
+                )
+                all_relations.extend(sub_rels)
+                issues.extend(rel_issues)
+
             clause_claims.append(ResponseClauseClaim(
                 clause_text=sub_cl,
                 role=role,
@@ -1245,9 +2331,10 @@ def _decompose_and_verify_clauses(
                 numbers=cl_nums,
                 is_grounded=is_grounded,
                 ungrounded_tokens=dedup_ungrounded,
+                relations=tuple(sub_rels),
             ))
 
-    return conclusion_polarity_inverted, clause_claims, issues
+    return conclusion_polarity_inverted, clause_claims, all_relations, issues
 
 
 def verify_response_graph_correspondence(
@@ -1586,14 +2673,23 @@ def verify_response_graph_correspondence(
             "severity": "error",
         })
 
-    # 9. Claim-by-claim decomposition: conclusion polarity + non-numeric & numeric additions
-    conclusion_polarity_inverted, clause_claims, clause_issues = _decompose_and_verify_clauses(
+    # 9. Claim-by-claim decomposition: conclusion polarity + relational tuples + non-numeric & numeric additions
+    graph_relations = build_supported_graph_relations(
+        graph,
+        documents,
+        include_conflict_alternatives=bool(has_material_conflict or conflict_disclosed),
+    )
+    verified_raw_eqs = [ec.raw_equation for ec in equation_checks if ec.status == "verified"]
+    conclusion_polarity_inverted, clause_claims, relation_checks, clause_issues = _decompose_and_verify_clauses(
         clauses,
         graph,
         target_vals_to_match,
         exact_lex,
         stem_lex,
         subj,
+        graph_relations,
+        verified_raw_eqs,
+        unit_registry=unit_registry,
         has_material_conflict=has_material_conflict,
         semantic_evaluator=semantic_evaluator,
     )
@@ -1641,6 +2737,9 @@ def verify_response_graph_correspondence(
             "severity": "error",
         })
 
+    relational_mismatch_in_response = any(
+        iss.get("code") == "RELATIONAL_VALUE_MISMATCH" for iss in issues
+    )
     correspondence_ok = len(issues) == 0
     return {
         "response_checked": True,
@@ -1653,12 +2752,15 @@ def verify_response_graph_correspondence(
         "condition_dropped_in_response": condition_dropped,
         "condition_polarity_inverted": condition_polarity_inverted,
         "conclusion_polarity_inverted": conclusion_polarity_inverted,
+        "relational_mismatch_in_response": relational_mismatch_in_response,
         "qualified_as_subtotal": qualified_as_subtotal,
         "presents_subtotal_as_total": presents_subtotal_as_total,
         "conflict_disclosed": conflict_disclosed,
         "has_missing_precision_disclosure": bool(_MISSING_PRECISION_DISCLOSURE_RE.search(text)),
         "equation_checks": [ec.to_dict() for ec in equation_checks],
         "structured_conditions": [sc.to_dict() for sc in observed_conds],
+        "supported_relations": [gr.to_dict() for gr in graph_relations],
+        "relation_checks": [rel.to_dict() for rel in relation_checks],
         "clause_claims": [cc.to_dict() for cc in clause_claims],
         "issues": tuple(issues),
     }

@@ -158,6 +158,35 @@ class EvidenceLayer:
     def field_evidences(self) -> dict[str, dict[str, dict[str, Any]]]:
         return {uid: rec for uid, _, rec in self.store.heads('field_evidence') if rec}
 
+    def snapshot(self) -> dict[str, Any]:
+        """Capture a consistent single-transaction snapshot of documents, units, and read state."""
+        raw = self.store.snapshot()
+        heads = raw['heads']
+        docs = {doc_id: SourceDocument(**rec) for doc_id, _, rec in heads.get('document', [])}
+        doc_revs = {
+            (rec['document_id'], rev): SourceDocument(**rec)
+            for rev, rec in raw['document_revisions'].items()
+        }
+        units = [EvidenceUnit.from_record(rec) for _, _, rec in heads.get('unit', [])]
+        read_status_heads = heads.get('doc_read_status', [])
+        unread = tuple(sorted(name for name, _, st in read_status_heads if st and st.get('unread')))
+        read_errors: list[dict[str, Any]] = []
+        for _, _, st in read_status_heads:
+            if st and st.get('errors'):
+                read_errors.extend(st['errors'])
+        field_evidences = {uid: rec for uid, _, rec in heads.get('field_evidence', []) if rec}
+        rejections = [{'rejection_id': rid, **rec} for rid, rec in raw['rejections']]
+        return {
+            'configuration': self.configuration,
+            'documents': docs,
+            'document_revisions': doc_revs,
+            'units': units,
+            'unread_documents': unread,
+            'read_errors': tuple(read_errors),
+            'field_evidences': field_evidences,
+            'rejections': rejections,
+        }
+
     def ingest(self, documents):
         """Store sources; if a reader is configured, record its proposals and admit conforming units."""
         if isinstance(documents, SourceDocument):

@@ -12,11 +12,16 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from decimal import Decimal, InvalidOperation
+import hashlib
+import hmac
 import math
+import os
+import re
 from typing import Any, Mapping, Sequence
 
 from ..semantic.models import EvidenceRef, SourceDocument, canonical, digest, instant
 from .engine import EvidenceLayer, _noisy_or, _q_index
+from .epistemics import DEFAULT_PROFILE, EpistemicProfile
 from .fidelity import FieldEvidence, FidelityFinding, verify_extraction_fidelity
 from .models import AcceptancePolicy, EvidenceUnit
 from .vocabulary import UnmappedProposal, Vocabulary, label_key, value_relation
@@ -62,15 +67,19 @@ class AuthorizationVerdict:
     operation_id: str | None = None
     payload_digest: str | None = None
     snapshot_digest: str | None = None
+    decision_snapshot: Mapping[str, Any] = field(default_factory=dict)
+    signature: str | None = None
 
 
 def _is_active_at(valid_from: str | None, valid_until: str | None, as_of: str | None) -> bool:
     if as_of is None:
         return True
-    ref = instant(as_of)
-    if valid_from is not None and instant(valid_from) > ref:
+    at = instant(as_of)
+    start = instant(valid_from)
+    end = instant(valid_until)
+    if start is not None and at < start:
         return False
-    if valid_until is not None and instant(valid_until) < ref:
+    if end is not None and at > end:
         return False
     return True
 
@@ -147,6 +156,48 @@ def _eval_condition(
     return "pending"
 
 
+def _filter_admissible_units(
+    units: Sequence[EvidenceUnit],
+    *,
+    target_entity: str,
+    predicates: set[str] | frozenset[str],
+    policy: AcceptancePolicy,
+    profile: EpistemicProfile = DEFAULT_PROFILE,
+    as_of: str | None = None,
+    query_scope: Mapping[str, str] | None = None,
+    documents: Mapping[str, SourceDocument] | None = None,
+    excluded_unit_ids: set[str] | frozenset[str] = frozenset(),
+) -> list[EvidenceUnit]:
+    """Single shared admissibility filter used by both fidelity checks and scope resolution."""
+    eligible: list[EvidenceUnit] = []
+    scope_map = query_scope or {}
+    for u in units:
+        if u.unit_id in excluded_unit_ids:
+            continue
+        p = u.proposition
+        if label_key(p["entity"]) != target_entity:
+            continue
+        if p["predicate"] not in predicates:
+            continue
+        if p.get("assertion_kind") not in policy.allowed_assertion_kinds:
+            continue
+        if not _is_active_at(p.get("valid_from"), p.get("valid_until"), as_of):
+            continue
+        if not _scope_matches(p.get("scope", {}), scope_map):
+            continue
+        if not profile.admissible(u.basis):
+            continue
+        if documents:
+            if any(
+                ref.document_id in documents
+                and documents[ref.document_id].attribution not in policy.allowed_source_attributions
+                for ref in u.evidence
+            ):
+                continue
+        eligible.append(u)
+    return eligible
+
+
 def resolve_scope_and_precedence(
     units: Sequence[EvidenceUnit],
     *,
@@ -161,6 +212,7 @@ def resolve_scope_and_precedence(
     source_weights: Mapping[str, float] | None = None,
     documents: Mapping[str, SourceDocument] | Sequence[SourceDocument] | None = None,
     policy: AcceptancePolicy | None = None,
+    profile: EpistemicProfile = DEFAULT_PROFILE,
 ) -> dict[str, Any]:
     """Resolve governing value for `(entity, predicate)` with scope/condition overlap & clause precedence."""
     q_scope = dict(query_scope or {})
@@ -174,14 +226,16 @@ def resolve_scope_and_precedence(
     else:
         doc_map = {}
 
-    matching = [
-        u
-        for u in units
-        if label_key(u.proposition["entity"]) == target_entity
-        and u.proposition["predicate"] == predicate
-        and _is_active_at(u.proposition.get("valid_from"), u.proposition.get("valid_until"), as_of)
-        and _scope_matches(u.proposition.get("scope", {}), q_scope)
-    ]
+    matching = _filter_admissible_units(
+        units,
+        target_entity=target_entity,
+        predicates={predicate},
+        policy=pol,
+        profile=profile,
+        as_of=as_of,
+        query_scope=q_scope,
+        documents=doc_map,
+    )
 
     if not matching:
         return {"status": "NO_EVIDENCE", "value": None, "winning_units": (), "issues": ()}
@@ -304,7 +358,8 @@ def resolve_scope_and_precedence(
             )
         else:
             doc_w = 1.0
-        return max(0.0, min(1.0, doc_w * float(u.structural_reliability)))
+        basis_w = profile.weight(u.basis)
+        return max(0.0, min(1.0, min(doc_w, float(u.structural_reliability), basis_w)))
 
     def _unit_dependence(u: EvidenceUnit) -> frozenset[str]:
         if not u.evidence:
@@ -520,6 +575,14 @@ def _resolve_bound_limits(
     return lo, hi, target_unit
 
 
+def _canonical_bound_entry(entry: Any) -> Any:
+    if isinstance(entry, Mapping):
+        return {str(k): entry[k] for k in sorted(entry)}
+    if isinstance(entry, (tuple, list)):
+        return list(entry)
+    return entry
+
+
 def authorize_operation(
     layer: EvidenceLayer,
     *,
@@ -538,16 +601,50 @@ def authorize_operation(
     operation_id: str | None = None,
     payload: Any | None = None,
     payload_digest: str | None = None,
+    signing_key: str | bytes | None = None,
 ) -> AuthorizationVerdict:
-    """Run the two-stage operational authorization gate over a v4 EvidenceLayer."""
+    """Run the two-stage operational authorization gate over an atomic v4 EvidenceLayer snapshot."""
     epistemic_issues: list[AuthorizationIssue] = []
     policy_issues: list[AuthorizationIssue] = []
 
-    if payload is not None and payload_digest is None:
-        payload_digest = digest(payload)
+    effective_payload_digest: str | None = None
+    if payload is not None:
+        computed_payload_digest = digest(payload)
+        effective_payload_digest = computed_payload_digest
+        if payload_digest is not None and (
+            not isinstance(payload_digest, str) or payload_digest != computed_payload_digest
+        ):
+            epistemic_issues.append(
+                AuthorizationIssue(
+                    code="PAYLOAD_DIGEST_MISMATCH",
+                    stage="epistemic_integrity",
+                    disposition="ESCALATE",
+                    message=(
+                        f"Declared payload_digest {payload_digest!r} does not match "
+                        f"computed payload digest {computed_payload_digest!r}."
+                    ),
+                    detail={"declared": payload_digest, "computed": computed_payload_digest},
+                )
+            )
+    elif payload_digest is not None:
+        if isinstance(payload_digest, str) and re.fullmatch(r"[0-9a-f]{64}", payload_digest):
+            effective_payload_digest = payload_digest
+        else:
+            epistemic_issues.append(
+                AuthorizationIssue(
+                    code="INVALID_PAYLOAD_DIGEST",
+                    stage="epistemic_integrity",
+                    disposition="ESCALATE",
+                    message=f"Declared payload_digest {payload_digest!r} is not a valid 64-char SHA-256 hex digest.",
+                    detail={"declared": payload_digest},
+                )
+            )
+
+    # Atomic single-transaction state read
+    state = layer.snapshot()
 
     # ---- Stage 1: Epistemic Integrity ----
-    combined_read_errors = list(layer.read_errors)
+    combined_read_errors = list(state["read_errors"])
     if ingest_summary and ingest_summary.get("read_errors"):
         combined_read_errors.extend(ingest_summary["read_errors"])
     if combined_read_errors:
@@ -562,7 +659,7 @@ def authorize_operation(
         )
 
     combined_unread = sorted(
-        set(layer.unread_documents)
+        set(state["unread_documents"])
         | set(ingest_summary.get("unread_documents", ()) if ingest_summary else ())
     )
     if combined_unread:
@@ -578,7 +675,7 @@ def authorize_operation(
 
     # Check rejections on required predicates (unmapped / ambiguous translations must block authorization)
     target_entity = label_key(layer.vocabulary.entity(entity))
-    for rej in layer.rejections():
+    for rej in state["rejections"]:
         hint_pred = rej.get("hint", {}).get("predicate")
         if hint_pred in required_predicates:
             epistemic_issues.append(
@@ -592,47 +689,51 @@ def authorize_operation(
                 )
             )
 
-    # Fidelity checks and stale-revision checks on all admitted units matching entity & required predicates
-    all_units = layer.units
-    stored_fe_map = layer.field_evidences
-    doc_cache: dict[tuple[str, str], SourceDocument] = {}
-    layer_docs = {d.document_id: d for d in layer.documents}
-    stale_unit_ids: set[str] = set()
+    # Single shared admissible unit candidate pool for both fidelity verification and resolution
+    all_units: list[EvidenceUnit] = state["units"]
+    stored_fe_map: dict[str, dict[str, dict[str, Any]]] = state["field_evidences"]
+    layer_docs: dict[str, SourceDocument] = state["documents"]
+    doc_revs: dict[tuple[str, str], SourceDocument] = state["document_revisions"]
 
-    for u in all_units:
-        if label_key(u.proposition["entity"]) != target_entity:
-            continue
-        if u.proposition["predicate"] not in required_predicates:
-            continue
-        if u.proposition.get("assertion_kind") not in layer.policy.allowed_assertion_kinds:
-            continue
+    candidate_units = _filter_admissible_units(
+        all_units,
+        target_entity=target_entity,
+        predicates=set(required_predicates),
+        policy=layer.policy,
+        profile=layer.profile,
+        as_of=as_of,
+        query_scope=query_scope,
+        documents=layer_docs,
+    )
+    ineligible_unit_ids: set[str] = set()
+
+    for u in candidate_units:
         if not u.evidence:
+            if u.origin != "rule_derived":
+                ineligible_unit_ids.add(u.unit_id)
             continue
 
         cited_doc: SourceDocument | None = None
         for ref in u.evidence:
             cache_key = (ref.document_id, ref.revision)
-            if cache_key not in doc_cache:
-                try:
-                    doc_cache[cache_key] = layer._document(ref.document_id, ref.revision, current=False)
-                except ValueError as exc:
-                    stale_unit_ids.add(u.unit_id)
-                    epistemic_issues.append(
-                        AuthorizationIssue(
-                            code="MISSING_EVIDENCE_DOCUMENT",
-                            stage="epistemic_integrity",
-                            disposition="RETRY",
-                            predicate=u.proposition["predicate"],
-                            message=f"Evidence document '{ref.document_id}' revision '{ref.revision}' unavailable: {exc}",
-                            detail={"unit_id": u.unit_id, "document_id": ref.document_id, "revision": ref.revision},
-                        )
+            if cache_key not in doc_revs:
+                ineligible_unit_ids.add(u.unit_id)
+                epistemic_issues.append(
+                    AuthorizationIssue(
+                        code="MISSING_EVIDENCE_DOCUMENT",
+                        stage="epistemic_integrity",
+                        disposition="RETRY",
+                        predicate=u.proposition["predicate"],
+                        message=f"Evidence document '{ref.document_id}' revision '{ref.revision}' unavailable.",
+                        detail={"unit_id": u.unit_id, "document_id": ref.document_id, "revision": ref.revision},
                     )
-                    continue
+                )
+                continue
             if cited_doc is None:
-                cited_doc = doc_cache[cache_key]
+                cited_doc = doc_revs[cache_key]
             current_doc = layer_docs.get(ref.document_id)
             if current_doc is None or current_doc.revision != ref.revision:
-                stale_unit_ids.add(u.unit_id)
+                ineligible_unit_ids.add(u.unit_id)
                 epistemic_issues.append(
                     AuthorizationIssue(
                         code="STALE_EVIDENCE_REVISION",
@@ -651,7 +752,7 @@ def authorize_operation(
                     )
                 )
 
-        if cited_doc is None or u.unit_id in stale_unit_ids:
+        if cited_doc is None or u.unit_id in ineligible_unit_ids:
             continue
 
         # Merge stored FieldEvidence from layer with caller-provided overrides
@@ -662,6 +763,7 @@ def authorize_operation(
                 try:
                     fe_by_field[fname] = FieldEvidence(fname, EvidenceRef(**ref_dict))
                 except (TypeError, ValueError) as exc:
+                    ineligible_unit_ids.add(u.unit_id)
                     epistemic_issues.append(
                         AuthorizationIssue(
                             code="INVALID_FIELD_EVIDENCE",
@@ -682,24 +784,30 @@ def authorize_operation(
             u,
             field_evidence=merged_fe,
             require_field_evidence=require_field_evidence,
+            vocabulary=layer.vocabulary,
         )
-        for ff in f_findings:
-            epistemic_issues.append(
-                AuthorizationIssue(
-                    code=ff.code,
-                    stage="epistemic_integrity",
-                    disposition="RETRY",
-                    predicate=u.proposition["predicate"],
-                    message=ff.message,
-                    detail={"unit_id": u.unit_id, "field": ff.field, "detail": ff.detail},
+        if f_findings:
+            ineligible_unit_ids.add(u.unit_id)
+            for ff in f_findings:
+                epistemic_issues.append(
+                    AuthorizationIssue(
+                        code=ff.code,
+                        stage="epistemic_integrity",
+                        disposition="RETRY",
+                        predicate=u.proposition["predicate"],
+                        message=ff.message,
+                        detail={"unit_id": u.unit_id, "field": ff.field, "detail": ff.detail},
+                    )
                 )
-            )
+
+    verified_eligible_units = [u for u in candidate_units if u.unit_id not in ineligible_unit_ids]
 
     # ---- Stage 2: Scope/Precedence Resolution & Policy Gate ----
     resolved_values: dict[str, Any] = {}
+    winning_unit_ids_by_pred: dict[str, list[str]] = {}
     for pred in required_predicates:
         res = resolve_scope_and_precedence(
-            all_units,
+            verified_eligible_units,
             entity=entity,
             predicate=pred,
             vocabulary=layer.vocabulary,
@@ -711,7 +819,9 @@ def authorize_operation(
             source_weights=source_weights,
             documents=layer_docs,
             policy=layer.policy,
+            profile=layer.profile,
         )
+        winning_unit_ids_by_pred[pred] = [u.unit_id for u in res.get("winning_units", ())]
         for iss in res.get("issues", ()):
             if iss.stage == "epistemic_integrity":
                 epistemic_issues.append(iss)
@@ -785,33 +895,154 @@ def authorize_operation(
     else:
         status = "PASS"
 
-    snapshot_digest = digest(
-        {
-            "configuration": layer.configuration,
-            "entity": target_entity,
-            "required_predicates": list(required_predicates),
-            "query_scope": dict(query_scope or {}),
-            "query_conditions": dict(query_conditions or {}),
-            "resolved_values": resolved_values,
-            "status": status,
-            "operation_id": operation_id,
-            "payload_digest": payload_digest,
-        }
-    )
+    final_resolved_values = dict(resolved_values) if status == "PASS" else {}
+
+    decision_snapshot: dict[str, Any] = {
+        "configuration": state["configuration"],
+        "entity": target_entity,
+        "required_predicates": list(required_predicates),
+        "as_of": as_of,
+        "query_scope": {str(k): query_scope[k] for k in sorted(query_scope)} if query_scope else {},
+        "query_conditions": (
+            {str(k): query_conditions[k] for k in sorted(query_conditions)} if query_conditions else {}
+        ),
+        "clause_relations": [asdict(r) for r in clause_relations],
+        "require_field_evidence": list(require_field_evidence),
+        "numeric_bounds": (
+            {str(k): _canonical_bound_entry(numeric_bounds[k]) for k in sorted(numeric_bounds)}
+            if numeric_bounds
+            else {}
+        ),
+        "source_tiers_override": {str(k): int(source_tiers[k]) for k in sorted(source_tiers)} if source_tiers else {},
+        "source_weights_override": (
+            {str(k): float(source_weights[k]) for k in sorted(source_weights)} if source_weights else {}
+        ),
+        "documents": [
+            {
+                "document_id": d.document_id,
+                "revision": d.revision,
+                "authority_rank": d.authority_rank,
+                "weight": d.weight,
+                "dependence_group": d.dependence_group,
+                "attribution": d.attribution,
+            }
+            for _, d in sorted(layer_docs.items())
+        ],
+        "eligible_unit_ids": [u.unit_id for u in verified_eligible_units],
+        "winning_unit_ids": {pred: winning_unit_ids_by_pred[pred] for pred in sorted(winning_unit_ids_by_pred)},
+        "read_state": {
+            "unread_documents": combined_unread,
+            "read_errors": combined_read_errors,
+        },
+        "resolved_values": final_resolved_values,
+        "status": status,
+        "issues": [asdict(i) for i in all_issues],
+        "operation_id": operation_id,
+        "payload_digest": effective_payload_digest,
+    }
+    snapshot_digest = digest(decision_snapshot)
+
+    active_key = signing_key if signing_key is not None else os.environ.get("CLAIMLAYER_SIGNING_KEY")
+    signature: str | None = None
+    if active_key is not None and active_key != "" and active_key != b"":
+        key_bytes = active_key.encode("utf-8") if isinstance(active_key, str) else active_key
+        signature = hmac.new(key_bytes, snapshot_digest.encode("utf-8"), hashlib.sha256).hexdigest()
 
     return AuthorizationVerdict(
         status=status,
         allowed=(status == "PASS"),
         requires_human=(status == "ESCALATE"),
-        resolved_values=resolved_values,
+        resolved_values=final_resolved_values,
         issues=all_issues,
         metrics={
             "epistemic_issues": len(epistemic_issues),
             "policy_issues": len(policy_issues),
-            "predicates_resolved": len(resolved_values),
+            "predicates_resolved": len(final_resolved_values),
             "predicates_required": len(required_predicates),
         },
         operation_id=operation_id,
-        payload_digest=payload_digest,
+        payload_digest=effective_payload_digest,
         snapshot_digest=snapshot_digest,
+        decision_snapshot=decision_snapshot,
+        signature=signature,
     )
+
+
+def verify_authorization_verdict(
+    verdict: AuthorizationVerdict,
+    *,
+    layer: EvidenceLayer | None = None,
+    operation_id: str | None = None,
+    payload: Any | None = None,
+    payload_digest: str | None = None,
+    signing_key: str | bytes | None = None,
+    allow_unkeyed: bool = False,
+) -> bool:
+    """Verify authenticity, snapshot integrity, and operation/payload binding for an executor."""
+    if not isinstance(verdict, AuthorizationVerdict):
+        return False
+    if verdict.status != "PASS" or verdict.allowed is not True or verdict.requires_human is not False:
+        return False
+    if not verdict.decision_snapshot or not verdict.snapshot_digest:
+        return False
+
+    snap_dict = dict(verdict.decision_snapshot)
+    if snap_dict.get("status") != verdict.status:
+        return False
+    if snap_dict.get("operation_id") != verdict.operation_id:
+        return False
+    if snap_dict.get("payload_digest") != verdict.payload_digest:
+        return False
+    if canonical(snap_dict.get("resolved_values")) != canonical(verdict.resolved_values):
+        return False
+    try:
+        if digest(snap_dict) != verdict.snapshot_digest:
+            return False
+    except (TypeError, ValueError):
+        return False
+
+    if operation_id is not None and verdict.operation_id != operation_id:
+        return False
+
+    if payload is not None:
+        try:
+            computed = digest(payload)
+        except (TypeError, ValueError):
+            return False
+        if verdict.payload_digest != computed:
+            return False
+        if payload_digest is not None and payload_digest != computed:
+            return False
+    elif payload_digest is not None:
+        if verdict.payload_digest != payload_digest:
+            return False
+
+    if layer is not None:
+        current_state = layer.snapshot()
+        if snap_dict.get("configuration") != current_state["configuration"]:
+            return False
+        expected_docs = [
+            {
+                "document_id": d.document_id,
+                "revision": d.revision,
+                "authority_rank": d.authority_rank,
+                "weight": d.weight,
+                "dependence_group": d.dependence_group,
+                "attribution": d.attribution,
+            }
+            for _, d in sorted(current_state["documents"].items())
+        ]
+        if snap_dict.get("documents") != expected_docs:
+            return False
+
+    active_key = signing_key if signing_key is not None else os.environ.get("CLAIMLAYER_SIGNING_KEY")
+    if active_key is not None and active_key != "" and active_key != b"":
+        if not isinstance(verdict.signature, str):
+            return False
+        key_bytes = active_key.encode("utf-8") if isinstance(active_key, str) else active_key
+        expected_sig = hmac.new(key_bytes, verdict.snapshot_digest.encode("utf-8"), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(verdict.signature, expected_sig)
+
+    if not allow_unkeyed:
+        return False
+    return verdict.signature is None

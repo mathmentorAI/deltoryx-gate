@@ -58,9 +58,68 @@ class VerificationStore:
 
     def heads(self, kind):
         with self.connect() as db:
-            rows = db.execute('SELECT name,record_id FROM semantic_heads WHERE project_id=? AND kind=? ORDER BY name',
-                              (self.project_id, kind)).fetchall()
-        return [(name, rid, self.get(kind, rid)) for name, rid in rows]
+            rows = db.execute(
+                'SELECT h.name, h.record_id, r.payload, r.checksum '
+                'FROM semantic_heads h '
+                'JOIN semantic_records r ON r.project_id=h.project_id AND r.kind=h.kind AND r.record_id=h.record_id '
+                'WHERE h.project_id=? AND h.kind=? ORDER BY h.name',
+                (self.project_id, kind),
+            ).fetchall()
+        out = []
+        for name, rid, raw_payload, checksum in rows:
+            payload = json.loads(raw_payload)
+            if digest(payload) != checksum:
+                raise ValueError('Corrupted semantic record')
+            out.append((name, rid, payload))
+        return out
+
+    def snapshot(self):
+        """Read all current heads, document revisions, and rejections in one SQLite transaction."""
+        with self.connect() as db:
+            head_rows = db.execute(
+                'SELECT h.kind, h.name, h.record_id, r.payload, r.checksum '
+                'FROM semantic_heads h '
+                'JOIN semantic_records r ON r.project_id=h.project_id AND r.kind=h.kind AND r.record_id=h.record_id '
+                'WHERE h.project_id=? ORDER BY h.kind, h.name',
+                (self.project_id,),
+            ).fetchall()
+            doc_rows = db.execute(
+                'SELECT record_id, payload, checksum FROM semantic_records '
+                'WHERE project_id=? AND kind=? ORDER BY rowid',
+                (self.project_id, 'document'),
+            ).fetchall()
+            rej_rows = db.execute(
+                'SELECT record_id, payload, checksum FROM semantic_records '
+                'WHERE project_id=? AND kind=? ORDER BY rowid',
+                (self.project_id, 'rejection'),
+            ).fetchall()
+
+        heads_by_kind = {}
+        for kind, name, rid, raw_payload, checksum in head_rows:
+            payload = json.loads(raw_payload)
+            if digest(payload) != checksum:
+                raise ValueError('Corrupted semantic record')
+            heads_by_kind.setdefault(kind, []).append((name, rid, payload))
+
+        document_revisions = {}
+        for rev, raw_payload, checksum in doc_rows:
+            payload = json.loads(raw_payload)
+            if digest(payload) != checksum:
+                raise ValueError('Corrupted semantic record')
+            document_revisions[rev] = payload
+
+        rejections = []
+        for rid, raw_payload, checksum in rej_rows:
+            payload = json.loads(raw_payload)
+            if digest(payload) != checksum:
+                raise ValueError('Corrupted semantic record')
+            rejections.append((rid, payload))
+
+        return {
+            'heads': heads_by_kind,
+            'document_revisions': document_revisions,
+            'rejections': rejections,
+        }
 
     def legacy_present(self):
         with self.connect() as db:

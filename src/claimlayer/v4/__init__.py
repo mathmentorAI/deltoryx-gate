@@ -12,6 +12,7 @@ from .authorization import (
     ClauseRelation,
     authorize_operation,
     resolve_scope_and_precedence,
+    verify_authorization_verdict,
 )
 from .domains import (
     B2B_CONTRACTS_VOCABULARY,
@@ -45,6 +46,6 @@ __all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'Vocabulary', 'PredicateSpec', 'Fi
            'TIER_PRIMARY', 'TIER_ANNEX', 'TIER_EXTERNAL', 'propose_vocabulary', 'build_vocabulary', 'with_entities',
            'verify_draft', 'triage', 'segment_text', 'LANES', 'draft_vocabulary',
            'AuthorizationIssue', 'AuthorizationVerdict', 'ClauseRelation', 'authorize_operation',
-           'resolve_scope_and_precedence', 'FieldEvidence', 'FidelityFinding', 'check_clause_boundary_completeness',
+           'resolve_scope_and_precedence', 'verify_authorization_verdict', 'FieldEvidence', 'FidelityFinding', 'check_clause_boundary_completeness',
            'evaluate_dual_readers', 'render_canonical_claim', 'verify_extraction_fidelity', 'B2B_CONTRACTS_VOCABULARY',
            'B2B_DEFAULT_ACCEPTANCE_POLICY', 'SECURITIZATION_VOCABULARY', 'SECURITIZATION_ACCEPTANCE_POLICY']

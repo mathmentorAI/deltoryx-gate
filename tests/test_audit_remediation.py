@@ -16,13 +16,20 @@ from claimlayer.v4 import (
     AcceptancePolicy,
     B2B_CONTRACTS_VOCABULARY,
     B2B_DEFAULT_ACCEPTANCE_POLICY,
+    ClauseRelation,
     EvidenceLayer,
     EvidenceRef,
     FieldEvidence,
+    FieldSpec,
     LLMProposalReader,
+    PredicateSpec,
+    STANDARD_UNITS,
     SourceDocument,
+    Unit,
+    Vocabulary,
     authorize_operation,
     resolve_scope_and_precedence,
+    verify_authorization_verdict,
     verify_extraction_fidelity,
 )
 from claimlayer.verifiers.quote_quantity import extract_quantities
@@ -724,3 +731,593 @@ def test_b2b_live_eval_methodology_invariants():
     aligned = b2b_eval._align_dual_reader_cases(gold, rec_a, rec_b)
     assert len(aligned) == 2
     assert b2b_eval.evaluate_dual_readers(aligned)["disagreement_rate"] > 0.0
+
+
+# ---------------------------------------------------------------------------
+# 9. Finding A: strict unit compatibility in v4 numeric fidelity
+# ---------------------------------------------------------------------------
+
+def _ingest_single_unit(
+    layer: EvidenceLayer,
+    doc: SourceDocument,
+    proposal: dict,
+    *,
+    basis: str = "explicit",
+    structural_reliability: float = 1.0,
+) -> dict:
+    return layer.ingest_units(
+        [
+            {
+                "proposal": proposal,
+                "basis": basis,
+                "evidence": [EvidenceRef(doc.document_id, doc.revision, 0, len(doc.text), doc.text)],
+            }
+        ],
+        attestor="reader-a",
+        structural_reliability=structural_reliability,
+    )
+
+
+@pytest.mark.parametrize(
+    ("doc_text", "proposed_unit", "proposed_val"),
+    [
+        ("Orion filing charge is 23 USD.", "calendar_days", "23"),
+        ("Orion cure period is 23 business days.", "calendar_days", "23"),
+    ],
+)
+def test_v4_rejects_incompatible_units_on_same_magnitude(doc_text, proposed_unit, proposed_val):
+    doc = SourceDocument("msa.txt", doc_text, authority_rank=100, weight=0.95)
+    layer = _b2b_layer()
+    layer.ingest(doc)
+    summary = _ingest_single_unit(
+        layer,
+        doc,
+        {
+            "entity": "Orion",
+            "predicate": "cure_period",
+            "value": proposed_val,
+            "unit": proposed_unit,
+            "assertion_kind": "requirement",
+            "condition_status": "unconditional",
+        },
+    )
+    assert summary["units_admitted"] == 1
+    findings = verify_extraction_fidelity(doc_text, layer.units[0])
+    assert "VALUE_NOT_IN_EVIDENCE" in {f.code for f in findings}
+
+    verdict = authorize_operation(layer, entity="Orion", required_predicates=("cure_period",))
+    assert verdict.status == "RETRY"
+    assert verdict.allowed is False
+    assert verdict.resolved_values == {}
+    assert "VALUE_NOT_IN_EVIDENCE" in {i.code for i in verdict.issues}
+
+
+@pytest.mark.parametrize(
+    ("doc_text", "proposed_unit", "proposed_val"),
+    [
+        ("Orion cure period is 23 business days.", "business_days", "23"),
+        ("Orion cure period is 23 days.", "calendar_days", "23"),
+        ("Orion cure period is 2 weeks.", "calendar_days", "14"),
+    ],
+)
+def test_v4_accepts_compatible_and_convertible_units(doc_text, proposed_unit, proposed_val):
+    doc = SourceDocument("msa.txt", doc_text, authority_rank=100, weight=0.95)
+    layer = _b2b_layer()
+    layer.ingest(doc)
+    _ingest_single_unit(
+        layer,
+        doc,
+        {
+            "entity": "Orion",
+            "predicate": "cure_period",
+            "value": proposed_val,
+            "unit": proposed_unit,
+            "assertion_kind": "requirement",
+            "condition_status": "unconditional",
+        },
+    )
+    findings = verify_extraction_fidelity(doc_text, layer.units[0])
+    assert findings == []
+
+    verdict = authorize_operation(layer, entity="Orion", required_predicates=("cure_period",))
+    assert verdict.status == "PASS"
+    assert verdict.allowed is True
+    assert verdict.resolved_values == {"cure_period": {"value": proposed_val, "unit": proposed_unit}}
+
+
+def test_v4_custom_vocabulary_unit_fidelity_and_rejection():
+    custom_units = STANDARD_UNITS.extend(
+        [
+            Unit("pallet", "package_count", "1", ("pallet", "pallets")),
+            Unit("crate", "package_count", "2", ("crate", "crates")),
+            Unit("parcel", "parcel_count", "1", ("parcel", "parcels")),
+        ]
+    )
+    custom_vocab = Vocabulary(
+        "logistics",
+        "1",
+        (PredicateSpec("delivery_qty", FieldSpec("quantity", dimensions=("package_count",))),),
+        units=custom_units,
+    )
+
+    doc_ok = SourceDocument("ship.txt", "Deliver 4 crates to Orion.", authority_rank=100, weight=0.95)
+    layer_ok = EvidenceLayer(vocabulary=custom_vocab, policy=B2B_DEFAULT_ACCEPTANCE_POLICY)
+    layer_ok.ingest(doc_ok)
+    _ingest_single_unit(
+        layer_ok,
+        doc_ok,
+        {
+            "entity": "Orion",
+            "predicate": "delivery_qty",
+            "value": "8",
+            "unit": "pallet",
+            "assertion_kind": "requirement",
+            "condition_status": "unconditional",
+        },
+    )
+    assert verify_extraction_fidelity(doc_ok.text, layer_ok.units[0], vocabulary=custom_vocab) == []
+    verdict_ok = authorize_operation(layer_ok, entity="Orion", required_predicates=("delivery_qty",))
+    assert verdict_ok.status == "PASS"
+    assert verdict_ok.allowed is True
+
+    doc_bad = SourceDocument("ship_bad.txt", "Deliver 4 parcels to Orion.", authority_rank=100, weight=0.95)
+    layer_bad = EvidenceLayer(vocabulary=custom_vocab, policy=B2B_DEFAULT_ACCEPTANCE_POLICY)
+    layer_bad.ingest(doc_bad)
+    _ingest_single_unit(
+        layer_bad,
+        doc_bad,
+        {
+            "entity": "Orion",
+            "predicate": "delivery_qty",
+            "value": "4",
+            "unit": "pallet",
+            "assertion_kind": "requirement",
+            "condition_status": "unconditional",
+        },
+    )
+    bad_findings = verify_extraction_fidelity(doc_bad.text, layer_bad.units[0], vocabulary=custom_vocab)
+    assert "VALUE_NOT_IN_EVIDENCE" in {f.code for f in bad_findings}
+    verdict_bad = authorize_operation(layer_bad, entity="Orion", required_predicates=("delivery_qty",))
+    assert verdict_bad.status == "RETRY"
+    assert verdict_bad.allowed is False
+    assert verdict_bad.resolved_values == {}
+
+
+# ---------------------------------------------------------------------------
+# 10. Finding B: unified admissibility across fidelity and resolution
+# ---------------------------------------------------------------------------
+
+def test_v4_excluded_assertion_kind_source_attribution_and_temporal_validity_never_bypass_fidelity():
+    text = "Orion cure period is 23 days."
+
+    # 1) Excluded assertion_kind=("fact",) with allowed_assertion_kinds=("requirement",)
+    policy_req = AcceptancePolicy(tau=0.70, delta=0.20, allowed_assertion_kinds=("requirement",))
+    doc1 = SourceDocument("msa.txt", text, authority_rank=100, weight=0.95)
+    layer1 = _b2b_layer(policy=policy_req)
+    layer1.ingest(doc1)
+    _ingest_single_unit(
+        layer1,
+        doc1,
+        {
+            "entity": "Orion",
+            "predicate": "cure_period",
+            "value": "777",
+            "unit": "calendar_days",
+            "assertion_kind": "fact",
+            "condition_status": "unconditional",
+        },
+    )
+    verdict1 = authorize_operation(layer1, entity="Orion", required_predicates=("cure_period",))
+    assert verdict1.status == "RETRY"
+    assert verdict1.allowed is False
+    assert verdict1.resolved_values == {}
+    assert "MISSING_REQUIRED_PREDICATE" in {i.code for i in verdict1.issues}
+
+    # 2) Excluded source attribution
+    policy_attr = AcceptancePolicy(tau=0.70, delta=0.20, allowed_source_attributions=("controlling_instrument",))
+    doc2 = SourceDocument("note.txt", text, authority_rank=100, weight=0.95, attribution="informational")
+    layer2 = _b2b_layer(policy=policy_attr)
+    layer2.ingest(doc2)
+    _ingest_single_unit(
+        layer2,
+        doc2,
+        {
+            "entity": "Orion",
+            "predicate": "cure_period",
+            "value": "777",
+            "unit": "calendar_days",
+            "assertion_kind": "requirement",
+            "condition_status": "unconditional",
+        },
+    )
+    verdict2 = authorize_operation(layer2, entity="Orion", required_predicates=("cure_period",))
+    assert verdict2.status == "RETRY"
+    assert verdict2.allowed is False
+    assert verdict2.resolved_values == {}
+
+    # 3) Expired temporal validity relative to as_of
+    doc3 = SourceDocument("msa_old.txt", text, authority_rank=100, weight=0.95)
+    layer3 = _b2b_layer()
+    layer3.ingest(doc3)
+    _ingest_single_unit(
+        layer3,
+        doc3,
+        {
+            "entity": "Orion",
+            "predicate": "cure_period",
+            "value": "777",
+            "unit": "calendar_days",
+            "assertion_kind": "requirement",
+            "condition_status": "unconditional",
+            "valid_from": "2024-01-01",
+            "valid_until": "2024-12-31",
+        },
+    )
+    verdict3 = authorize_operation(
+        layer3,
+        entity="Orion",
+        required_predicates=("cure_period",),
+        as_of="2025-06-01",
+    )
+    assert verdict3.status == "RETRY"
+    assert verdict3.allowed is False
+    assert verdict3.resolved_values == {}
+
+    # 4) Positive control: admitted assertion_kind, attribution, and active window pass cleanly
+    policy_both = AcceptancePolicy(
+        tau=0.70,
+        delta=0.20,
+        allowed_assertion_kinds=("requirement",),
+        allowed_source_attributions=("controlling_instrument",),
+    )
+    doc4 = SourceDocument("msa_valid.txt", text, authority_rank=100, weight=0.95, attribution="controlling_instrument")
+    layer4 = _b2b_layer(policy=policy_both)
+    layer4.ingest(doc4)
+    _ingest_single_unit(
+        layer4,
+        doc4,
+        {
+            "entity": "Orion",
+            "predicate": "cure_period",
+            "value": "23",
+            "unit": "calendar_days",
+            "assertion_kind": "requirement",
+            "condition_status": "unconditional",
+            "valid_from": "2025-01-01",
+            "valid_until": "2025-12-31",
+        },
+    )
+    verdict4 = authorize_operation(
+        layer4,
+        entity="Orion",
+        required_predicates=("cure_period",),
+        as_of="2025-06-01",
+    )
+    assert verdict4.status == "PASS"
+    assert verdict4.allowed is True
+    assert verdict4.resolved_values == {"cure_period": {"value": "23", "unit": "calendar_days"}}
+
+
+# ---------------------------------------------------------------------------
+# 11. Finding C: complete snapshot_digest over inputs and document revisions
+# ---------------------------------------------------------------------------
+
+def test_v4_snapshot_digest_binds_as_of_bounds_relations_tiers_and_doc_revisions():
+    def _build_and_authorize(
+        *,
+        doc_text: str = "Orion cure period is 23 days.",
+        as_of: str = "2025-01-01",
+        bounds: dict | None = None,
+        relations: tuple[ClauseRelation, ...] = (),
+        tiers: dict | None = None,
+    ):
+        doc = SourceDocument("msa.txt", doc_text, authority_rank=100, weight=0.95)
+        layer = _b2b_layer()
+        layer.ingest(doc)
+        _ingest_single_unit(
+            layer,
+            doc,
+            {
+                "entity": "Orion",
+                "predicate": "cure_period",
+                "value": "23",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+            },
+        )
+        return authorize_operation(
+            layer,
+            entity="Orion",
+            required_predicates=("cure_period",),
+            as_of=as_of,
+            numeric_bounds=bounds if bounds is not None else {"cure_period": (None, 100.0)},
+            clause_relations=relations,
+            source_tiers=tiers if tiers is not None else {"msa.txt": 100},
+        )
+
+    v_base = _build_and_authorize()
+    v_repeat = _build_and_authorize()
+    assert v_base.status == "PASS"
+    assert v_base.snapshot_digest == v_repeat.snapshot_digest
+
+    variants = [
+        ("as_of", _build_and_authorize(as_of="2026-01-01")),
+        ("numeric_bounds", _build_and_authorize(bounds={"cure_period": (None, 200.0)})),
+        ("clause_relations", _build_and_authorize(relations=(ClauseRelation("amends_clause", "2", "1"),))),
+        ("source_tiers", _build_and_authorize(tiers={"msa.txt": 80})),
+        ("doc_revision", _build_and_authorize(doc_text="Section 1: Orion cure period is 23 days.")),
+    ]
+    seen_digests = {v_base.snapshot_digest}
+    for label, v_other in variants:
+        assert v_other.status == "PASS", f"Expected PASS for {label}"
+        assert v_other.resolved_values == v_base.resolved_values
+        assert v_other.snapshot_digest not in seen_digests, f"snapshot_digest collision on {label}"
+        seen_digests.add(v_other.snapshot_digest)
+
+
+# ---------------------------------------------------------------------------
+# 12. Finding D: payload_digest verification & HMAC-SHA256 verdict verification
+# ---------------------------------------------------------------------------
+
+def test_v4_payload_digest_mismatch_and_hmac_verification():
+    from dataclasses import replace as dc_replace
+
+    doc = SourceDocument("msa.txt", "Orion cure period is 23 days.", authority_rank=100, weight=0.95)
+    layer = _b2b_layer()
+    layer.ingest(doc)
+    _ingest_single_unit(
+        layer,
+        doc,
+        {
+            "entity": "Orion",
+            "predicate": "cure_period",
+            "value": "23",
+            "unit": "calendar_days",
+            "assertion_kind": "requirement",
+            "condition_status": "unconditional",
+        },
+    )
+
+    v_mismatch = authorize_operation(
+        layer,
+        entity="Orion",
+        required_predicates=("cure_period",),
+        operation_id="op-mismatch",
+        payload={"days": 23},
+        payload_digest="FAKE",
+    )
+    assert v_mismatch.status == "ESCALATE"
+    assert v_mismatch.allowed is False
+    assert v_mismatch.resolved_values == {}
+    assert v_mismatch.payload_digest != "FAKE"
+    assert "PAYLOAD_DIGEST_MISMATCH" in {i.code for i in v_mismatch.issues}
+
+    v_invalid = authorize_operation(
+        layer,
+        entity="Orion",
+        required_predicates=("cure_period",),
+        operation_id="op-invalid",
+        payload=None,
+        payload_digest="FAKE",
+    )
+    assert v_invalid.status == "ESCALATE"
+    assert v_invalid.allowed is False
+    assert v_invalid.resolved_values == {}
+    assert v_invalid.payload_digest is None
+    assert "INVALID_PAYLOAD_DIGEST" in {i.code for i in v_invalid.issues}
+
+    key = b"secret-signing-key-v4"
+    v_signed = authorize_operation(
+        layer,
+        entity="Orion",
+        required_predicates=("cure_period",),
+        operation_id="op-1",
+        payload={"days": 23},
+        signing_key=key,
+    )
+    assert v_signed.status == "PASS"
+    assert v_signed.allowed is True
+    assert v_signed.signature is not None
+    assert (
+        verify_authorization_verdict(
+            v_signed,
+            layer=layer,
+            operation_id="op-1",
+            payload={"days": 23},
+            signing_key=key,
+        )
+        is True
+    )
+
+    # Mutations must fail closed
+    assert (
+        verify_authorization_verdict(
+            v_signed,
+            layer=layer,
+            operation_id="op-1",
+            payload={"days": 24},
+            signing_key=key,
+        )
+        is False
+    )
+    assert (
+        verify_authorization_verdict(
+            v_signed,
+            layer=layer,
+            operation_id="op-2",
+            payload={"days": 23},
+            signing_key=key,
+        )
+        is False
+    )
+    assert (
+        verify_authorization_verdict(
+            v_signed,
+            layer=layer,
+            operation_id="op-1",
+            payload={"days": 23},
+            signing_key=b"wrong-key",
+        )
+        is False
+    )
+    assert (
+        verify_authorization_verdict(
+            v_signed,
+            layer=layer,
+            operation_id="op-1",
+            payload={"days": 23},
+            signing_key=None,
+            allow_unkeyed=False,
+        )
+        is False
+    )
+    v_forged = dc_replace(v_signed, signature="f" * 64)
+    assert (
+        verify_authorization_verdict(
+            v_forged,
+            layer=layer,
+            operation_id="op-1",
+            payload={"days": 23},
+            signing_key=key,
+        )
+        is False
+    )
+
+    mutated_layer = _b2b_layer()
+    mutated_doc = SourceDocument("msa.txt", "Orion cure period is 99 days.", authority_rank=100, weight=0.95)
+    mutated_layer.ingest(mutated_doc)
+    assert (
+        verify_authorization_verdict(
+            v_signed,
+            layer=mutated_layer,
+            operation_id="op-1",
+            payload={"days": 23},
+            signing_key=key,
+        )
+        is False
+    )
+
+
+# ---------------------------------------------------------------------------
+# 13. Finding E: word fraction + percent must not multiply by 100
+# ---------------------------------------------------------------------------
+
+def test_v3_word_fractions_followed_by_percent_do_not_double_scale():
+    q1 = extract_quantities("one half percent")
+    assert len(q1) == 1
+    assert q1[0].magnitude == Decimal("0.5")
+    assert q1[0].unit == "PERCENT"
+
+    q2 = extract_quantities("one-half of a percent")
+    assert len(q2) == 1
+    assert q2[0].magnitude == Decimal("0.5")
+    assert q2[0].unit == "PERCENT"
+
+    q3 = extract_quantities("one quarter of one percent")
+    assert len(q3) == 1
+    assert q3[0].magnitude == Decimal("0.25")
+    assert q3[0].unit == "PERCENT"
+
+    # End-to-end v3 verification
+    src = Source(id="s1", text="The servicing fee is one half percent.", tier="authoritative")
+    ledger = Ledger(sources=[src])
+    ok = verify(
+        [Assertion(subject="Acme", predicate="servicing_fee", value="0.5%", source_id="s1", quote=src.text)],
+        ledger,
+        Policy(min_support=0.5),
+    )
+    bad = verify(
+        [Assertion(subject="Acme", predicate="servicing_fee", value="50%", source_id="s1", quote=src.text)],
+        ledger,
+        Policy(min_support=0.5),
+    )
+    assert ok.status == "PASS"
+    assert bad.status == "RETRY"
+
+    # Positive control: standalone fraction without explicit percent/unit remains a percentage ratio
+    standalone = extract_quantities("one half of the portfolio")
+    assert len(standalone) == 1
+    assert standalone[0].magnitude == Decimal("50")
+    assert standalone[0].unit == "PERCENT"
+
+
+# ---------------------------------------------------------------------------
+# 14. b2b_live_eval static oracle, record fields, and Reader B independence
+# ---------------------------------------------------------------------------
+
+def test_b2b_live_eval_static_oracle_record_fields_and_reader_b_independence():
+    from dataclasses import replace as dc_replace
+    import benchmarks.b2b_live_eval as b2b_eval
+
+    dev_cases = b2b_eval._build_dev_cases()
+    test_cases = b2b_eval._build_test_cases()
+    for c in dev_cases + test_cases:
+        if c.expected_allowed:
+            assert len(c.expected_resolved_values) > 0, f"{c.case_id} missing static expected_resolved_values"
+
+    # Verify _canonical_unit_record preserves assertion_kind and temporal validity fields
+    doc = SourceDocument("d.txt", "Acme cure period is 30 days.", authority_rank=100, weight=0.95)
+    layer = _b2b_layer()
+    layer.ingest(doc)
+    _ingest_single_unit(
+        layer,
+        doc,
+        {
+            "entity": "Acme",
+            "predicate": "cure_period",
+            "value": "30",
+            "unit": "calendar_days",
+            "assertion_kind": "requirement",
+            "condition_status": "unconditional",
+            "valid_from": "2025-01-01",
+            "valid_until": "2025-12-31",
+        },
+    )
+    rec = b2b_eval._canonical_unit_record("c1", layer.units[0])
+    assert rec["assertion_kind"] == "requirement"
+    assert rec["valid_from"] == "2025-01-01"
+    assert rec["valid_until"] == "2025-12-31"
+
+    # Inject hallucinated Reader B proposal on dev; Reader A reliability & sample size must not change
+    base_report = b2b_eval.run_benchmark(live=False)
+    orig_build_dev = b2b_eval._build_dev_cases
+
+    def _dev_with_reader_b_hallucination():
+        cases = orig_build_dev()
+        out = []
+        for c in cases:
+            if c.case_id == "dev_01_clean_pass":
+                mut_b = {k: list(v) for k, v in c.reader_b_output.items()}
+                mut_b["dev1_msa"].append(
+                    {
+                        "entity": "ApexCorp",
+                        "predicate": "cure_period",
+                        "value": 999,
+                        "unit": "days",
+                        "assertion_kind": "requirement",
+                        "condition_status": "unconditional",
+                        "quote": "ApexCorp standard payment terms are 30 days.",
+                        "field_evidence": {"entity": "ApexCorp", "value": "30 days"},
+                    }
+                )
+                out.append(dc_replace(c, reader_b_output=mut_b))
+            else:
+                out.append(c)
+        return out
+
+    b2b_eval._build_dev_cases = _dev_with_reader_b_hallucination
+    try:
+        mut_report = b2b_eval.run_benchmark(live=False)
+    finally:
+        b2b_eval._build_dev_cases = orig_build_dev
+
+    assert mut_report["reader_a_dev_measured_reliability"] == pytest.approx(
+        base_report["reader_a_dev_measured_reliability"]
+    )
+    assert mut_report["reader_a_dev_sample_size"] == base_report["reader_a_dev_sample_size"] == 10
+    assert (
+        mut_report["layer2_dual_reader_extraction"]["dev"]["disagreement_rate"]
+        > base_report["layer2_dual_reader_extraction"]["dev"]["disagreement_rate"]
+    )
+    assert "calibration_note" in mut_report

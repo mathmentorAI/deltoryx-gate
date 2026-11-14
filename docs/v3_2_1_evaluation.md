@@ -113,3 +113,20 @@ write/read authority. The same-user CLI alone does not provide that isolation.
 Unkeyed receipts reject by default unless reverified against trusted ledger state;
 `allow_unkeyed=True` establishes internal consistency only. Authenticated offline
 verification requires a protected signing key.
+
+## v4 classification of the 18 remaining external v3 failures
+
+The 92/110 external score reflects v3 surface string/policy evaluation without an
+operator-declared domain `Vocabulary` or v4 typed propositions. Classifying the 18
+remaining v3 failures (`16` false PASS, `2` false rejections) against v4
+(`Vocabulary` + `verify_extraction_fidelity` + `authorize_operation`):
+
+| Failure group | Cases | v4 boundary behavior | Classification |
+|---|---|---|---|
+| Rights, negation, exceptions, conditions | `g2-A4a`–`g2-A4g` (7) | `EvidenceUnit.proposition` types `assertion_kind`, `polarity`, `condition_status`, `conditions`, and `exceptions`; `verify_extraction_fidelity` checks `UNCAPTURED_CONDITION`, `POLARITY_MISMATCH`, `BOUND_OPERATOR_MISMATCH`, `TRUNCATED_CLAUSE_CONTEXT`, and `CONDITION_NOT_IN_FIELD_EVIDENCE`; `authorize_operation` fails closed on `UNREPRESENTABLE_CONDITION`, `UNKNOWN_CONDITION`, `PENDING_CONDITION`, or `UNRESOLVED_CONFLICT` | Handled deterministically once extracted into typed propositions; uncaptured informal conditions without lexical cues remain an upstream reader boundary |
+| Direction of change vs absolute value | `g2-A12b` (1) | `verify_extraction_fidelity` emits `DIRECTION_OF_CHANGE_MISMATCH`, and `_numeric_marker_present` requires `UnitRegistry` unit compatibility on typed quantities rather than bare decimal matching | Handled at the v4 fidelity boundary when modeled with typed units/change direction |
+| Identifier vs measurement with undeclared field type | `g2-A1a` (1) | Operator `Vocabulary` declares explicit `FieldSpec` types and units; `AMBIGUOUS_OR_UNMAPPED_PROPOSAL` / `VALUE_NOT_IN_EVIDENCE` / `POLICY_BOUND_UNIT_MISMATCH` prevent untyped identifier numbers from passing as currency/duration quantities | Requires operator-declared `Vocabulary` + fail closed otherwise |
+| Partial amendment scope & reporting schedule separation | `g2-C1a`, `g2-C1b`, `g2-C1d-ok`, `g2-C7c-ok` (4; includes both false rejections) | `resolve_scope_and_precedence` uses exact canonical `query_scope` matching and explicit `ClauseRelation` overrides instead of loose section matching, avoiding false overrides across distinct reporting schedules (`g2-C7c-ok`) or scopes (`g2-C1d-ok`) | Handled deterministically at the v4 scope/relation layer |
+| Predicate aliases, fee wording, priority & reserve identity | `g2-C2c`, `g2-C7a`, `g2-C7b` (3) | Operator `Vocabulary` (`PredicateSpec`, canonical `entity` / `predicate` / `scope`) and `ClauseRelation` force explicit canonical mapping; unmapped phrasings fail closed (`AMBIGUOUS_OR_UNMAPPED_PROPOSAL` / `MISSING_REQUIRED_PREDICATE`) | Handled when mapped to operator `Vocabulary`; open paraphrase normalization stays upstream |
+| Actor / object reversal | `g2-C4b` (1) | Triple `(entity, predicate, value)` proposals do not parse open-domain grammatical subject/object roles unless the operator `Vocabulary` models directed role predicates and binds them via `FieldEvidence` | Upstream NL-to-proposal formalization boundary unless directed role predicates are declared |
+| Undeclared synonym for a bounded predicate | `g2-C11a` (1) | `numeric_bounds` bind strictly to operator-declared predicate names; undeclared synonyms fail closed (`MISSING_REQUIRED_PREDICATE`) rather than guessing aliases | Intentional fail-closed boundary without explicit operator alias |

@@ -15,6 +15,7 @@ from typing import Any, Mapping, Sequence
 from ..semantic.models import EvidenceRef
 from ..verifiers.quote_quantity import extract_dates, extract_quantities
 from .models import EvidenceUnit
+from .vocabulary import STANDARD_UNITS, UnitRegistry, UnmappedProposal, Vocabulary, label_key
 
 _CONDITIONAL_MARKER_RE = re.compile(
     r"\b(?:unless|except(?:\s+for|\s+that|\s+where)?|provided\s+that|subject\s+to|"
@@ -164,10 +165,20 @@ _UNIT_TO_V4_FACTOR: dict[str, tuple[Decimal, str]] = {
 }
 
 
-def _extract_standalone_decimals(text: str) -> list[Decimal]:
-    cleaned = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", text)
+def _spans_overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
+    return a[0] < b[1] and b[0] < a[1]
+
+
+def _extract_standalone_decimals_untyped(
+    text: str,
+    occupied_spans: Sequence[tuple[int, int]],
+) -> list[Decimal]:
     out: list[Decimal] = []
-    for tok in re.findall(r"(?<![0-9.])[-+]?\d+(?:\.\d+)?(?![0-9.])", cleaned):
+    for m in re.finditer(r"(?<![0-9.])[-+]?\d+(?:,\d{3})*(?:\.\d+)?(?![0-9.])", text):
+        span = (m.start(), m.end())
+        if any(_spans_overlap(span, occ) for occ in occupied_spans):
+            continue
+        tok = m.group(0).replace(",", "")
         try:
             out.append(Decimal(tok))
         except InvalidOperation:
@@ -175,7 +186,121 @@ def _extract_standalone_decimals(text: str) -> list[Decimal]:
     return out
 
 
-def _numeric_marker_present(raw_num: Any, text: str, *, unit_hint: str | None = None) -> bool:
+_PCT_PER_ANNUM_SUFFIX_RE = re.compile(r"\s*(?:per\s+annum|p\.a\.|per\s+year|annually)(?![a-z0-9_])", re.IGNORECASE)
+_CUR_PER_YEAR_SUFFIX_RE = re.compile(r"\s*(?:per\s+year|annually|per\s+annum)(?![a-z0-9_])", re.IGNORECASE)
+_CUR_PER_MONTH_SUFFIX_RE = re.compile(r"\s*(?:per\s+month|monthly)(?![a-z0-9_])", re.IGNORECASE)
+_HOURS_PER_WEEK_SUFFIX_RE = re.compile(r"\s*(?:/\s*week|per\s+week|a\s+week)(?![a-z0-9_])", re.IGNORECASE)
+_HOURS_PER_DAY_SUFFIX_RE = re.compile(r"\s*(?:/\s*day|per\s+day|a\s+day)(?![a-z0-9_])", re.IGNORECASE)
+
+
+def _extract_typed_v4_quantities(
+    text: str,
+    units: UnitRegistry = STANDARD_UNITS,
+) -> tuple[list[tuple[Decimal, str]], list[tuple[int, int]]]:
+    """Extract (normalized_Decimal, v4_base_unit) pairs and occupied spans from prose."""
+    typed: list[tuple[Decimal, str]] = []
+    occupied: list[tuple[int, int]] = []
+
+    for q in extract_quantities(text):
+        start, end = q.span
+        tail = text[end:]
+        mapped: tuple[Decimal, str] | None = None
+
+        if q.unit == "PERCENT":
+            m = _PCT_PER_ANNUM_SUFFIX_RE.match(tail)
+            if m:
+                end += m.end()
+                mapped = (q.magnitude, "percent_per_annum")
+        elif q.unit in ("USD", "EUR"):
+            m_yr = _CUR_PER_YEAR_SUFFIX_RE.match(tail)
+            m_mo = _CUR_PER_MONTH_SUFFIX_RE.match(tail) if not m_yr else None
+            if m_yr:
+                end += m_yr.end()
+                mapped = (q.magnitude, f"{q.unit}_per_year")
+            elif m_mo:
+                end += m_mo.end()
+                mapped = (q.magnitude * Decimal("12"), f"{q.unit}_per_year")
+        elif q.unit == "HOURS":
+            m_wk = _HOURS_PER_WEEK_SUFFIX_RE.match(tail)
+            m_dy = _HOURS_PER_DAY_SUFFIX_RE.match(tail) if not m_wk else None
+            if m_wk:
+                end += m_wk.end()
+                mapped = (q.magnitude, "hours_per_week")
+            elif m_dy:
+                end += m_dy.end()
+                mapped = (q.magnitude, "hours_per_day")
+
+        if mapped is None:
+            if q.unit in _UNIT_TO_V4_FACTOR:
+                factor, base_u = _UNIT_TO_V4_FACTOR[q.unit]
+                if label_key(base_u) in units._labels:
+                    amt, reg_base = units.to_base(q.magnitude * factor, base_u, "fidelity")
+                    mapped = (Decimal(amt), reg_base)
+                else:
+                    mapped = (q.magnitude * factor, base_u)
+            elif label_key(q.unit) in units._labels:
+                amt, reg_base = units.to_base(q.magnitude, q.unit, "fidelity")
+                mapped = (Decimal(amt), reg_base)
+
+        if mapped is not None or q.unit not in ("NONE", "COUNT", None, ""):
+            occupied.append((start, end))
+        if mapped is not None:
+            typed.append(mapped)
+
+    # Scan for additional registry units (including custom Vocabulary units or snake_case names)
+    labels_by_len: list[str] = []
+    seen_labels: set[str] = set()
+    for u in units._units.values():
+        for raw_label in (u.name, *u.aliases):
+            for candidate in (raw_label, raw_label.replace("_", " ")):
+                key = candidate.strip()
+                if len(key) >= 2 and key.lower() not in seen_labels:
+                    seen_labels.add(key.lower())
+                    labels_by_len.append(key)
+    labels_by_len.sort(key=lambda s: (-len(s), s.lower()))
+
+    if labels_by_len:
+        parts: list[str] = []
+        for lbl in labels_by_len:
+            esc = re.escape(lbl).replace(r"\ ", r"\s+")
+            if lbl[-1].isalnum():
+                esc += r"(?![a-z0-9_])"
+            parts.append(esc)
+        unit_pat = re.compile(
+            r"(?<![0-9.])(?P<num>[-+]?\d+(?:,\d{3})*(?:\.\d+)?)(?:\s+|-)?"
+            r"(?P<unit>(?:" + "|".join(parts) + r"))",
+            re.IGNORECASE,
+        )
+        for m in unit_pat.finditer(text):
+            span = (m.start(), m.end())
+            if any(_spans_overlap(span, occ) for occ in occupied):
+                continue
+            num_tok = m.group("num").replace(",", "")
+            lbl_tok = re.sub(r"\s+", " ", m.group("unit").strip())
+            # Require whitespace or hyphen before purely alphabetic multi-char labels
+            raw_between = text[m.end("num") : m.start("unit")]
+            if lbl_tok[0].isalpha() and len(lbl_tok) > 1 and not raw_between:
+                continue
+            lookup_lbl = lbl_tok if label_key(lbl_tok) in units._labels else lbl_tok.replace(" ", "_")
+            if label_key(lookup_lbl) not in units._labels:
+                continue
+            try:
+                amt, base_u = units.to_base(num_tok, lookup_lbl, "fidelity")
+            except (UnmappedProposal, ValueError, InvalidOperation):
+                continue
+            occupied.append(span)
+            typed.append((Decimal(amt), base_u))
+
+    return typed, occupied
+
+
+def _numeric_marker_present(
+    raw_num: Any,
+    text: str,
+    *,
+    unit_hint: str | None = None,
+    units: UnitRegistry = STANDARD_UNITS,
+) -> bool:
     if isinstance(raw_num, bool):
         return False
     try:
@@ -184,16 +309,22 @@ def _numeric_marker_present(raw_num: Any, text: str, *, unit_hint: str | None = 
         return False
     if not target.is_finite():
         return False
-    if any(n == target for n in _extract_standalone_decimals(text)):
-        return True
-    for q in extract_quantities(text):
-        if q.magnitude == target:
-            return True
-        if unit_hint and q.unit in _UNIT_TO_V4_FACTOR:
-            factor, base_u = _UNIT_TO_V4_FACTOR[q.unit]
-            if base_u == unit_hint and (q.magnitude * factor) == target:
-                return True
-    return False
+
+    typed_qs, occupied_spans = _extract_typed_v4_quantities(text, units)
+    if unit_hint is not None:
+        if label_key(unit_hint) in units._labels:
+            try:
+                norm_amt, norm_unit = units.to_base(target, unit_hint, "fidelity")
+                target_val = Decimal(norm_amt)
+                target_unit = norm_unit
+            except (UnmappedProposal, ValueError, InvalidOperation):
+                return False
+        else:
+            target_val = target
+            target_unit = unit_hint
+        return any(base_u == target_unit and mag == target_val for mag, base_u in typed_qs)
+
+    return any(n == target for n in _extract_standalone_decimals_untyped(text, occupied_spans))
 
 
 def _tokens_present_bounded(tokens: Sequence[str], text: str) -> bool:
@@ -206,21 +337,21 @@ def _tokens_present_bounded(tokens: Sequence[str], text: str) -> bool:
     )
 
 
-def _value_markers_present(value: Any, text: str) -> bool:
+def _value_markers_present(value: Any, text: str, *, units: UnitRegistry = STANDARD_UNITS) -> bool:
     if isinstance(value, dict) and "value" in value:
-        return _numeric_marker_present(value["value"], text, unit_hint=value.get("unit"))
+        return _numeric_marker_present(value["value"], text, unit_hint=value.get("unit"), units=units)
     if isinstance(value, dict):
-        return all(_value_markers_present(v, text) for v in value.values())
+        return all(_value_markers_present(v, text, units=units) for v in value.values())
     if isinstance(value, (list, tuple)):
-        return bool(value) and all(_value_markers_present(item, text) for item in value)
+        return bool(value) and all(_value_markers_present(item, text, units=units) for item in value)
     if isinstance(value, bool):
         return True
     if isinstance(value, (int, float, Decimal)):
-        return _numeric_marker_present(value, text)
+        return _numeric_marker_present(value, text, units=units)
     if isinstance(value, str):
         stripped = value.strip()
         if re.fullmatch(r"[-+]?\d+(?:\.\d+)?", stripped):
-            return _numeric_marker_present(stripped, text)
+            return _numeric_marker_present(stripped, text, units=units)
         if re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", stripped):
             if re.search(r"(?<![0-9\-])" + re.escape(stripped) + r"(?![0-9\-])", text):
                 return True
@@ -229,7 +360,7 @@ def _value_markers_present(value: Any, text: str) -> bool:
         if not tokens:
             tokens = re.findall(r"[a-z0-9]+", stripped.lower())
         return _tokens_present_bounded(tokens, text)
-    return _value_markers_present(str(value), text)
+    return _value_markers_present(str(value), text, units=units)
 
 
 def verify_extraction_fidelity(
@@ -238,6 +369,7 @@ def verify_extraction_fidelity(
     *,
     field_evidence: Sequence[FieldEvidence] | None = None,
     require_field_evidence: Sequence[str] = (),
+    vocabulary: Vocabulary | None = None,
 ) -> list[FidelityFinding]:
     """Run independent deterministic fidelity checks on an admitted EvidenceUnit."""
     findings: list[FidelityFinding] = []
@@ -328,8 +460,9 @@ def verify_extraction_fidelity(
                 )
 
     # 4. Mandatory value grounding against cited evidence quotes (even without field_evidence)
+    unit_reg = vocabulary.units if vocabulary is not None else STANDARD_UNITS
     cited_quotes = " ".join(r.quote for r in unit.evidence)
-    val_grounded = _value_markers_present(val, cited_quotes)
+    val_grounded = _value_markers_present(val, cited_quotes, units=unit_reg)
     if not val_grounded:
         findings.append(
             FidelityFinding(
@@ -373,7 +506,7 @@ def verify_extraction_fidelity(
                         field="entity",
                     )
                 )
-        elif fe.field == "value" and not _value_markers_present(prop.get("value"), ref.quote):
+        elif fe.field == "value" and not _value_markers_present(prop.get("value"), ref.quote, units=unit_reg):
             findings.append(
                 FidelityFinding(
                     code="VALUE_NOT_IN_FIELD_EVIDENCE",

@@ -17,7 +17,7 @@ Supports:
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 import json
 import os
 import sys
@@ -61,6 +61,7 @@ class EvalCase:
     expected_status: str  # "PASS" | "RETRY" | "ESCALATE"
     reader_a_output: dict[str, list[dict[str, Any]]]
     reader_b_output: dict[str, list[dict[str, Any]]]
+    expected_resolved_values: Mapping[str, Any] = field(default_factory=dict)
 
 
 def _ref(doc: SourceDocument, substring: str) -> EvidenceRef:
@@ -160,6 +161,10 @@ def _build_dev_cases() -> list[EvalCase]:
             ),
             expected_allowed=True,
             expected_status="PASS",
+            expected_resolved_values={
+                "payment_terms": {"unit": "calendar_days", "value": "30"},
+                "liability_cap": {"unit": "USD", "value": "500000"},
+            },
             reader_a_output={
                 "dev1_msa": [
                     {
@@ -236,6 +241,9 @@ def _build_dev_cases() -> list[EvalCase]:
             ),
             expected_allowed=True,
             expected_status="PASS",
+            expected_resolved_values={
+                "payment_terms": {"unit": "calendar_days", "value": "30"},
+            },
             # Reader A drops proviso (caught by fidelity check!), Reader B captures it
             reader_a_output={
                 "dev2_msa": [
@@ -309,6 +317,9 @@ def _build_dev_cases() -> list[EvalCase]:
             ),
             expected_allowed=True,
             expected_status="PASS",
+            expected_resolved_values={
+                "payment_terms": {"unit": "calendar_days", "value": "30"},
+            },
             reader_a_output={
                 "dev3_msa": [
                     {
@@ -680,6 +691,10 @@ def _build_test_cases() -> list[EvalCase]:
             ),
             expected_allowed=True,
             expected_status="PASS",
+            expected_resolved_values={
+                "payment_terms": {"unit": "calendar_days", "value": "45"},
+                "liability_cap": {"unit": "EUR", "value": "250000"},
+            },
             reader_a_output={
                 "test1_msa": [
                     {
@@ -827,6 +842,9 @@ def _build_test_cases() -> list[EvalCase]:
             ),
             expected_allowed=True,
             expected_status="PASS",
+            expected_resolved_values={
+                "sla_uptime_target": {"unit": "percent", "value": "99.99"},
+            },
             reader_a_output={
                 "test3_msa": [
                     {
@@ -1058,6 +1076,10 @@ def _build_test_cases() -> list[EvalCase]:
             ),
             expected_allowed=True,
             expected_status="PASS",
+            expected_resolved_values={
+                "governing_law": "Delaware",
+                "auto_renewal": True,
+            },
             reader_a_output={
                 "test6_msa": [
                     {
@@ -1182,6 +1204,9 @@ def _canonical_unit_record(case_id: str, u: Any) -> dict[str, Any]:
         "document_id": u.evidence[0].document_id if u.evidence else "",
         "entity": label_key(p.get("entity", "")),
         "predicate": p.get("predicate"),
+        "assertion_kind": p.get("assertion_kind"),
+        "valid_from": p.get("valid_from"),
+        "valid_until": p.get("valid_until"),
         "scope": p.get("scope", {}),
         "value": p.get("value"),
         "unit": p.get("unit"),
@@ -1242,7 +1267,13 @@ def _eval_layer1_gold_reasoning(cases: Sequence[EvalCase], policy: AcceptancePol
             require_field_evidence=("entity", "value"),
             numeric_bounds=case.numeric_bounds,
         )
-        ok = (verdict.allowed == case.expected_allowed) and (verdict.status == case.expected_status)
+        expected_vals = dict(case.expected_resolved_values)
+        values_ok = (
+            dict(verdict.resolved_values) == {}
+            if not case.expected_allowed
+            else canonical(verdict.resolved_values) == canonical(expected_vals)
+        )
+        ok = (verdict.allowed == case.expected_allowed) and (verdict.status == case.expected_status) and values_ok
         if ok:
             correct += 1
         gold_resolved_by_case[case.case_id] = dict(verdict.resolved_values)
@@ -1300,11 +1331,11 @@ def _extract_with_reader(
             ingest_summary=summary,
             numeric_bounds=case.numeric_bounds,
         )
-        expected_vals = (gold_resolved_by_case or {}).get(case.case_id)
+        expected_vals = dict(case.expected_resolved_values)
         values_match = (
-            True
-            if (not case.expected_allowed or expected_vals is None)
-            else canonical(verdict.resolved_values) == canonical(dict(expected_vals))
+            dict(verdict.resolved_values) == {}
+            if not case.expected_allowed
+            else canonical(verdict.resolved_values) == canonical(expected_vals)
         )
         per_case_verdicts.append(
             {
@@ -1409,25 +1440,30 @@ def run_benchmark(
     cap_a = _CapturingReader(raw_reader_a)
     cap_b = _CapturingReader(raw_reader_b)
 
-    # Layer 1: Gold deterministic reasoning
+    # Layer 1: Gold deterministic reasoning (checked against static EvalCase.expected_resolved_values)
     l1_dev_full = _eval_layer1_gold_reasoning(dev_cases, B2B_DEFAULT_ACCEPTANCE_POLICY)
     l1_test_full = _eval_layer1_gold_reasoning(test_cases, B2B_DEFAULT_ACCEPTANCE_POLICY)
-    gold_dev_resolved = l1_dev_full.pop("gold_resolved_by_case")
-    gold_test_resolved = l1_test_full.pop("gold_resolved_by_case")
+    l1_dev_full.pop("gold_resolved_by_case", None)
+    l1_test_full.pop("gold_resolved_by_case", None)
 
     # Layer 2: Extract ONCE per reader per split; align by semantic key
-    ext_a_dev, _ = _extract_with_reader(cap_a, dev_cases, B2B_DEFAULT_ACCEPTANCE_POLICY, gold_dev_resolved)
-    ext_b_dev, _ = _extract_with_reader(cap_b, dev_cases, B2B_DEFAULT_ACCEPTANCE_POLICY, gold_dev_resolved)
+    ext_a_dev, _ = _extract_with_reader(cap_a, dev_cases, B2B_DEFAULT_ACCEPTANCE_POLICY)
+    ext_b_dev, _ = _extract_with_reader(cap_b, dev_cases, B2B_DEFAULT_ACCEPTANCE_POLICY)
     gold_dev = _build_gold_flat(dev_cases)
     aligned_dev = _align_dual_reader_cases(gold_dev, ext_a_dev, ext_b_dev)
     dual_dev = evaluate_dual_readers(aligned_dev)
 
-    # Empirical structural_reliability measured from Reader A exact match rate on DEV
-    dev_exact_hits = sum(1 for row in aligned_dev if row["gold"] is not None and row["reader_a"] == row["gold"])
-    measured_dev_reliability = round(dev_exact_hits / max(1, len(aligned_dev)), 4)
+    # Empirical structural_reliability measured strictly from Reader A vs Gold on DEV (independent of Reader B)
+    g_dev_map = _index_records_by_semantic_key(gold_dev)
+    a_dev_map = _index_records_by_semantic_key(ext_a_dev)
+    a_dev_keys = sorted(set(g_dev_map) | set(a_dev_map))
+    dev_exact_hits = sum(
+        1 for k in a_dev_keys if g_dev_map.get(k) is not None and a_dev_map.get(k) == g_dev_map.get(k)
+    )
+    measured_dev_reliability = round(dev_exact_hits / max(1, len(a_dev_keys)), 4)
 
-    ext_a_test, _ = _extract_with_reader(cap_a, test_cases, B2B_DEFAULT_ACCEPTANCE_POLICY, gold_test_resolved)
-    ext_b_test, _ = _extract_with_reader(cap_b, test_cases, B2B_DEFAULT_ACCEPTANCE_POLICY, gold_test_resolved)
+    ext_a_test, _ = _extract_with_reader(cap_a, test_cases, B2B_DEFAULT_ACCEPTANCE_POLICY)
+    ext_b_test, _ = _extract_with_reader(cap_b, test_cases, B2B_DEFAULT_ACCEPTANCE_POLICY)
     gold_test = _build_gold_flat(test_cases)
     aligned_test = _align_dual_reader_cases(gold_test, ext_a_test, ext_b_test)
     dual_test = evaluate_dual_readers(aligned_test)
@@ -1447,7 +1483,7 @@ def run_benchmark(
             allowed_assertion_kinds=B2B_DEFAULT_ACCEPTANCE_POLICY.allowed_assertion_kinds,
             version=f"sweep-{tau}-{delta}",
         )
-        _, v_dev = _extract_with_reader(calibrated_reader_a, dev_cases, pol, gold_dev_resolved)
+        _, v_dev = _extract_with_reader(calibrated_reader_a, dev_cases, pol)
         metrics = _risk_coverage_at(v_dev)
         dev_curve.append({"tau": tau, "delta": delta, **metrics})
 
@@ -1463,13 +1499,18 @@ def run_benchmark(
         calibrated_reader_a,
         test_cases,
         calibrated_pol,
-        gold_test_resolved,
     )
     test_at_calibrated = _risk_coverage_at(calibrated_test_verdicts)
 
     return {
         "mode": mode,
         "reader_a_dev_measured_reliability": measured_dev_reliability,
+        "reader_a_dev_sample_size": len(a_dev_keys),
+        "calibration_note": (
+            f"In-benchmark empirical exact-match estimate on {len(a_dev_keys)} DEV semantic keys, "
+            "measured independently of Reader B; production should calibrate structural_reliability "
+            "on an external held-out sample."
+        ),
         "layer1_gold_reasoning": {"dev": l1_dev_full, "test": l1_test_full},
         "layer2_dual_reader_extraction": {
             "dev": dual_dev,

@@ -850,7 +850,7 @@ def extract_quantities(
         r"\b(" + "|".join(_ONES_EN) + r")[ -]+("
         + "|".join(denominator_words) + r")s?\b", re.IGNORECASE)
     fraction_unit_suffix_re = re.compile(
-        r"(?:\s+(?:of\s+(?:an?|the)|de\s+(?:un|una|el|la)|an?))?\s*"
+        r"(?:\s+(?:of\s+(?:an?|one|the|1)|de\s+(?:un|una|el|la|1)|an?))?\s*"
         r"(?:(?P<scale>mil\s+millones|billions?|millions?|millones|mill[oó]n|thousands?|miles|mil)\b\s*(?:(?:of|de)\s+)?)?"
         r"(?P<unit>(?!(?:us\$|\$|€|£)\s*\d)" + _UNIT_PATTERN + r")?",
         re.IGNORECASE,
@@ -864,15 +864,12 @@ def extract_quantities(
         tail_unit_raw = tail_m.group("unit") if tail_m else None
         if tail_unit_raw or tail_scale:
             unit = canonicalize_unit(tail_unit_raw) if tail_unit_raw else default_unit
-            if unit == "PERCENT" and not tail_scale:
-                mag = ratio * Decimal("100")
-            else:
-                scale_factor = (
-                    _SCALE_FACTORS.get(re.sub(r"\s+", " ", tail_scale.strip().lower()), Decimal("1"))
-                    if tail_scale
-                    else Decimal("1")
-                )
-                mag = ratio * scale_factor
+            scale_factor = (
+                _SCALE_FACTORS.get(re.sub(r"\s+", " ", tail_scale.strip().lower()), Decimal("1"))
+                if tail_scale
+                else Decimal("1")
+            )
+            mag = ratio * scale_factor
             span = (m.start(), tail_m.end())
             if _overlaps(span[0], span[1]):
                 continue

@@ -169,7 +169,7 @@ def test_mcp_rejects_nonfinite_policy_and_assertion_numbers_with_invalid_params(
 
 @pytest.mark.parametrize("proposed_days", ["777", "2"])
 def test_v4_rejects_ungrounded_or_substring_value_even_without_field_evidence(proposed_days):
-    text = "The cure period is 23 days."
+    text = "The cure period for Acme is 23 days."
     doc = SourceDocument("msa.txt", text, authority_rank=100, weight=0.95)
     layer = _b2b_layer()
     layer.ingest(doc)
@@ -570,7 +570,10 @@ def test_numeric_bounds_unit_normalization_in_v3_and_v4():
         assert [i.code for i in v_days.issues] == [i.code for i in v_weeks.issues]
 
     # v4: {"max": 2, "unit": "weeks"} vs {"max": 14, "unit": "calendar_days"} behave identically
-    for text, should_pass in [("The cure period is 14 days.", True), ("The cure period is 15 days.", False)]:
+    for text, should_pass in [
+        ("The cure period for Acme is 14 days.", True),
+        ("The cure period for Acme is 15 days.", False),
+    ]:
         val = "14" if should_pass else "15"
         doc = SourceDocument("msa.txt", text, authority_rank=100, weight=0.95)
         layer = _b2b_layer()

@@ -11,6 +11,7 @@ from .authorization import (
     AuthorizationVerdict,
     ClauseRelation,
     authorize_operation,
+    execute_authorized_operation,
     resolve_scope_and_precedence,
     verify_authorization_verdict,
 )
@@ -20,7 +21,15 @@ from .domains import (
     SECURITIZATION_ACCEPTANCE_POLICY,
     SECURITIZATION_VOCABULARY,
 )
-from .engine import ENGINE_VERSION, TIER_ANNEX, TIER_EXTERNAL, TIER_PRIMARY, EvidenceLayer
+from .engine import (
+    ENGINE_VERSION,
+    TIER_ANNEX,
+    TIER_EXTERNAL,
+    TIER_PRIMARY,
+    EvidenceLayer,
+    UnitEvaluation,
+    evaluate_unit_admissibility,
+)
 from .epistemics import DEFAULT_PROFILE, EXPLICIT, EpistemicProfile
 from .fidelity import (
     FieldEvidence,
@@ -39,13 +48,15 @@ from .triage import LANES, draft_vocabulary, segment_text, triage, verify_draft
 from ..semantic.models import EvidenceRef, SourceDocument, StructuredQuery
 from ..semantic.adapters import OpenAICompatibleModel
 
-__all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'Vocabulary', 'PredicateSpec', 'FieldSpec', 'Unit', 'UnitRegistry',
+__all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'UnitEvaluation', 'evaluate_unit_admissibility',
+           'Vocabulary', 'PredicateSpec', 'FieldSpec', 'Unit', 'UnitRegistry',
            'STANDARD_UNITS', 'CONDITION_STATUSES', 'UnmappedProposal', 'EpistemicProfile', 'DEFAULT_PROFILE', 'EXPLICIT',
            'AcceptancePolicy', 'EvidenceUnit', 'TransitiveRule', 'LLMProposalReader', 'ProposalReader',
            'READER_PROMPT', 'STRICT_READER_PROMPT', 'SourceDocument', 'EvidenceRef', 'StructuredQuery', 'OpenAICompatibleModel',
            'TIER_PRIMARY', 'TIER_ANNEX', 'TIER_EXTERNAL', 'propose_vocabulary', 'build_vocabulary', 'with_entities',
            'verify_draft', 'triage', 'segment_text', 'LANES', 'draft_vocabulary',
            'AuthorizationIssue', 'AuthorizationVerdict', 'ClauseRelation', 'authorize_operation',
-           'resolve_scope_and_precedence', 'verify_authorization_verdict', 'FieldEvidence', 'FidelityFinding', 'check_clause_boundary_completeness',
+           'execute_authorized_operation', 'resolve_scope_and_precedence', 'verify_authorization_verdict',
+           'FieldEvidence', 'FidelityFinding', 'check_clause_boundary_completeness',
            'evaluate_dual_readers', 'render_canonical_claim', 'verify_extraction_fidelity', 'B2B_CONTRACTS_VOCABULARY',
            'B2B_DEFAULT_ACCEPTANCE_POLICY', 'SECURITIZATION_VOCABULARY', 'SECURITIZATION_ACCEPTANCE_POLICY']

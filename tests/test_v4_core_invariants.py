@@ -13,16 +13,18 @@ import tempfile
 
 import pytest
 
-from claimlayer.semantic.models import EvidenceRef, SourceDocument, canonical
+from claimlayer.semantic.models import EvidenceRef, SourceDocument, StructuredQuery, canonical
 from claimlayer.v4.authorization import (
     ClauseRelation,
     authorize_operation,
+    execute_authorized_operation,
     resolve_scope_and_precedence,
     verify_authorization_verdict,
 )
-from claimlayer.v4.engine import EvidenceLayer
+from claimlayer.v4.domains import B2B_CONTRACTS_VOCABULARY, B2B_DEFAULT_ACCEPTANCE_POLICY
+from claimlayer.v4.engine import TIER_PRIMARY, EvidenceLayer
 from claimlayer.v4.epistemics import EXPLICIT
-from claimlayer.v4.fidelity import verify_extraction_fidelity
+from claimlayer.v4.fidelity import FieldEvidence, verify_extraction_fidelity
 from claimlayer.v4.models import AcceptancePolicy, EvidenceUnit
 from claimlayer.v4.vocabulary import FieldSpec, PredicateSpec, Vocabulary
 
@@ -106,15 +108,15 @@ def _admit_single(
 # ---------------------------------------------------------------------------
 
 DIMENSION_SAMPLES: tuple[tuple[str, str, str], ...] = (
-    ("currency:USD", "The obligation is 23 USD.", "USD"),
-    ("currency:EUR", "The obligation is 23 EUR.", "EUR"),
-    ("duration_calendar_days", "The obligation is 23 days.", "calendar_days"),
-    ("duration_business_days", "The obligation is 23 business days.", "business_days"),
-    ("duration_months", "The obligation is 23 months.", "months"),
-    ("ratio", "The obligation is 23%.", "percent"),
-    ("ratio_difference", "The obligation is 23 pp.", "percentage_point"),
-    ("annual_rate", "The obligation is 23% per annum.", "percent_per_annum"),
-    ("hours_per_week", "The obligation is 23 hours/week.", "hours_per_week"),
+    ("currency:USD", "Acme multi_dim_value obligation is 23 USD.", "USD"),
+    ("currency:EUR", "Acme multi_dim_value obligation is 23 EUR.", "EUR"),
+    ("duration_calendar_days", "Acme multi_dim_value obligation is 23 days.", "calendar_days"),
+    ("duration_business_days", "Acme multi_dim_value obligation is 23 business days.", "business_days"),
+    ("duration_months", "Acme multi_dim_value obligation is 23 months.", "months"),
+    ("ratio", "Acme multi_dim_value obligation is 23%.", "percent"),
+    ("ratio_difference", "Acme multi_dim_value obligation is 23 pp.", "percentage_point"),
+    ("annual_rate", "Acme multi_dim_value obligation is 23% per annum.", "percent_per_annum"),
+    ("hours_per_week", "Acme multi_dim_value obligation is 23 hours/week.", "hours_per_week"),
 )
 
 
@@ -149,8 +151,8 @@ def test_exact_within_dimension_unit_conversions_and_dimensionless_separation():
 
     # Exact within-dimension conversions succeed (2 weeks == 14 calendar_days, 2300 bps == 23 pp)
     for text, unit_name, val in [
-        ("The window is 2 weeks.", "calendar_days", "14"),
-        ("The delta is 2300 bps.", "percentage_point", "23"),
+        ("Acme multi_dim_value window is 2 weeks.", "calendar_days", "14"),
+        ("Acme multi_dim_value delta is 2300 bps.", "percentage_point", "23"),
     ]:
         prop = vocab.proposition(
             {
@@ -167,7 +169,7 @@ def test_exact_within_dimension_unit_conversions_and_dimensionless_separation():
         assert verify_extraction_fidelity(text, u, vocabulary=vocab) == []
 
     # Quantity predicate MUST reject bare unitless prose numbers; dimensionless predicate MUST reject united prose
-    doc_bare = SourceDocument("bare.txt", "The window is 23.", authority_rank=100, weight=1.0)
+    doc_bare = SourceDocument("bare.txt", "Acme duration window is 23.", authority_rank=100, weight=1.0)
     prop_qty = vocab.proposition(
         {
             "entity": "Acme",
@@ -190,7 +192,7 @@ def test_exact_within_dimension_unit_conversions_and_dimensionless_separation():
         f.code for f in verify_extraction_fidelity(doc_bare.text, u_qty, vocabulary=vocab)
     }
 
-    doc_united = SourceDocument("usd.txt", "The score is 23 USD.", authority_rank=100, weight=1.0)
+    doc_united = SourceDocument("usd.txt", "Acme plain score is 23 USD.", authority_rank=100, weight=1.0)
     prop_num = vocab.proposition(
         {
             "entity": "Acme",
@@ -308,7 +310,7 @@ def test_typed_conditions_and_bounds_reject_unitless_and_cross_dimension_inputs(
     # Cross-dimension multi-currency predicate: evidence in USD vs bound in EUR -> POLICY_BOUND_UNIT_MISMATCH
     with tempfile.TemporaryDirectory() as td:
         layer = _layer(td, vocab)
-        doc_usd = SourceDocument("cap.txt", "Acme cap is 500 USD.", authority_rank=100, weight=1.0)
+        doc_usd = SourceDocument("cap.txt", "Acme currency cap is 500 USD.", authority_rank=100, weight=1.0)
         layer.ingest(doc_usd)
         _admit_single(
             layer,
@@ -778,3 +780,538 @@ def test_persisted_authorization_state_and_tamper_detection():
             payload=payload,
             signing_key=key,
         ) is False
+
+
+# ---------------------------------------------------------------------------
+# Group 5: Post-audit structural closure (stale auth, SQLite tx, grounding, unified core)
+# ---------------------------------------------------------------------------
+
+
+def test_stale_authorization_invalidated_on_conflicting_unit_and_atomic_execution_prevents_replay():
+    key = "audit-hmac-secret"
+    payload = {"action": "enforce_cure", "days": 23}
+    doc = SourceDocument(
+        "msa.txt",
+        "Orion cure period is 23 days. Under clause 2.2, Orion cure period is 41 days.",
+        authority_rank=TIER_PRIMARY,
+        weight=1.0,
+    )
+    with tempfile.TemporaryDirectory() as td:
+        layer = EvidenceLayer(
+            Path(td) / "ledger.db",
+            project_id="stale",
+            vocabulary=B2B_CONTRACTS_VOCABULARY,
+            policy=B2B_DEFAULT_ACCEPTANCE_POLICY,
+        )
+        layer.ingest(doc)
+        _admit_single(
+            layer,
+            doc,
+            {
+                "entity": "Orion",
+                "predicate": "cure_period",
+                "value": "23",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+                "scope": {"clause_id": "2.1"},
+            },
+            quote="Orion cure period is 23 days.",
+        )
+        v1 = authorize_operation(
+            layer,
+            entity="Orion",
+            required_predicates=("cure_period",),
+            operation_id="op-cure-1",
+            payload=payload,
+            signing_key=key,
+        )
+        assert v1.status == "PASS"
+        assert v1.allowed is True
+        assert verify_authorization_verdict(
+            v1, layer=layer, operation_id="op-cure-1", payload=payload, signing_key=key
+        ) is True
+
+        # Admitting a conflicting unit from the same document and revision MUST invalidate v1 immediately
+        _admit_single(
+            layer,
+            doc,
+            {
+                "entity": "Orion",
+                "predicate": "cure_period",
+                "value": "41",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+                "scope": {"clause_id": "2.2"},
+            },
+            quote="Under clause 2.2, Orion cure period is 41 days.",
+        )
+        assert verify_authorization_verdict(
+            v1, layer=layer, operation_id="op-cure-1", payload=payload, signing_key=key
+        ) is False
+
+        v2 = authorize_operation(
+            layer,
+            entity="Orion",
+            required_predicates=("cure_period",),
+            operation_id="op-cure-1",
+            payload=payload,
+            signing_key=key,
+        )
+        assert v2.status == "ESCALATE"
+        assert "UNRESOLVED_CONFLICT" in {i.code for i in v2.issues}
+        assert verify_authorization_verdict(
+            v1, layer=layer, operation_id="op-cure-1", payload=payload, signing_key=key
+        ) is False
+
+        called = []
+        with pytest.raises(PermissionError):
+            execute_authorized_operation(
+                layer,
+                v1,
+                lambda v: called.append(v.snapshot_digest),
+                operation_id="op-cure-1",
+                payload=payload,
+                signing_key=key,
+            )
+        assert called == []
+
+        # Fresh layer with one-shot atomic execution prevents replay
+        layer_exec = EvidenceLayer(
+            Path(td) / "exec.db",
+            project_id="exec",
+            vocabulary=B2B_CONTRACTS_VOCABULARY,
+            policy=B2B_DEFAULT_ACCEPTANCE_POLICY,
+        )
+        doc_clean = SourceDocument("msa_clean.txt", "Orion cure period is 23 days.", authority_rank=TIER_PRIMARY, weight=1.0)
+        layer_exec.ingest(doc_clean)
+        _admit_single(
+            layer_exec,
+            doc_clean,
+            {
+                "entity": "Orion",
+                "predicate": "cure_period",
+                "value": "23",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+            },
+        )
+        v_ok = authorize_operation(
+            layer_exec,
+            entity="Orion",
+            required_predicates=("cure_period",),
+            operation_id="op-exec-1",
+            payload=payload,
+            signing_key=key,
+        )
+        assert v_ok.status == "PASS"
+        out = execute_authorized_operation(
+            layer_exec,
+            v_ok,
+            lambda v: {"status": "done", "val": v.resolved_values["cure_period"]},
+            operation_id="op-exec-1",
+            payload=payload,
+            signing_key=key,
+        )
+        assert out == {"status": "done", "val": {"value": "23", "unit": "calendar_days"}}
+        assert verify_authorization_verdict(
+            v_ok, layer=layer_exec, operation_id="op-exec-1", payload=payload, signing_key=key
+        ) is False
+        assert verify_authorization_verdict(
+            v_ok, layer=layer_exec, operation_id="op-exec-1", payload=payload, signing_key=key, allow_consumed=True
+        ) is True
+        with pytest.raises(PermissionError):
+            execute_authorized_operation(
+                layer_exec,
+                v_ok,
+                lambda v: "replay",
+                operation_id="op-exec-1",
+                payload=payload,
+                signing_key=key,
+            )
+
+
+def test_verification_store_select_is_in_transaction_and_prevents_torn_snapshots_and_partial_ingest(monkeypatch):
+    with tempfile.TemporaryDirectory() as td:
+        layer = EvidenceLayer(
+            Path(td) / "tx.db",
+            project_id="tx",
+            vocabulary=B2B_CONTRACTS_VOCABULARY,
+            policy=B2B_DEFAULT_ACCEPTANCE_POLICY,
+        )
+        layer.store.put("document", "rev-1", {"n": 1}, head="doc-1")
+
+        # Read connection starts an explicit SQLite transaction so snapshots see a consistent point-in-time
+        with layer.store.connect() as db1:
+            assert db1.in_transaction is True
+            rows_before = db1.execute(
+                "SELECT name FROM semantic_heads WHERE project_id=? AND kind='document'",
+                ("tx",),
+            ).fetchall()
+            assert rows_before == [("doc-1",)]
+
+            # Independent VerificationStore commits a second row in WAL mode while db1's read tx is open
+            store2 = type(layer.store)(Path(td) / "tx.db", "tx")
+            store2.put("document", "rev-2", {"n": 2}, head="doc-2")
+
+            rows_inside_tx = db1.execute(
+                "SELECT name FROM semantic_heads WHERE project_id=? AND kind='document' ORDER BY name",
+                ("tx",),
+            ).fetchall()
+            assert rows_inside_tx == [("doc-1",)]
+
+        # Fresh connection observes committed doc-2
+        with layer.store.connect() as db_after:
+            rows_after = db_after.execute(
+                "SELECT name FROM semantic_heads WHERE project_id=? AND kind='document' ORDER BY name",
+                ("tx",),
+            ).fetchall()
+            assert rows_after == [("doc-1",), ("doc-2",)]
+
+        # Mid-ingest batch failure rolls back all documents and units atomically
+        layer_atom = EvidenceLayer(
+            Path(td) / "atom.db",
+            project_id="atom",
+            vocabulary=B2B_CONTRACTS_VOCABULARY,
+            policy=B2B_DEFAULT_ACCEPTANCE_POLICY,
+        )
+        d1 = SourceDocument("d1.txt", "Orion cure period is 23 days.", authority_rank=TIER_PRIMARY, weight=1.0)
+        d2 = SourceDocument("d2.txt", "Orion payment terms are 30 days.", authority_rank=TIER_PRIMARY, weight=1.0)
+        layer_atom.ingest([d1, d2])
+
+        def failing_fe(*args, **kwargs):
+            raise RuntimeError("injected storage fault on second item")
+
+        monkeypatch.setattr(layer_atom, "_store_field_evidence", failing_fe)
+        with pytest.raises(RuntimeError, match="injected storage fault"):
+            layer_atom.ingest_units(
+                [
+                    {
+                        "proposal": {
+                            "entity": "Orion",
+                            "predicate": "cure_period",
+                            "value": "23",
+                            "unit": "calendar_days",
+                            "assertion_kind": "requirement",
+                            "condition_status": "unconditional",
+                        },
+                        "evidence": [EvidenceRef(d1.document_id, d1.revision, 0, len(d1.text), d1.text)],
+                    },
+                    {
+                        "proposal": {
+                            "entity": "Orion",
+                            "predicate": "payment_terms",
+                            "value": "30",
+                            "unit": "calendar_days",
+                            "assertion_kind": "requirement",
+                            "condition_status": "unconditional",
+                        },
+                        "evidence": [EvidenceRef(d2.document_id, d2.revision, 0, len(d2.text), d2.text)],
+                        "field_evidence": [FieldEvidence("value", EvidenceRef(d2.document_id, d2.revision, 0, len(d2.text), d2.text))],
+                    },
+                ],
+                attestor="atom_test",
+            )
+        assert len(layer_atom.units) == 0
+
+        layer_batch = EvidenceLayer(
+            Path(td) / "batch.db",
+            project_id="batch",
+            vocabulary=B2B_CONTRACTS_VOCABULARY,
+            policy=B2B_DEFAULT_ACCEPTANCE_POLICY,
+        )
+        orig_record = layer_batch._record_doc_read_status
+        calls = {"n": 0}
+
+        def fail_on_second_doc(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise RuntimeError("mid-ingest document failure")
+            return orig_record(*args, **kwargs)
+
+        monkeypatch.setattr(layer_batch, "_record_doc_read_status", fail_on_second_doc)
+        with pytest.raises(RuntimeError, match="mid-ingest document failure"):
+            layer_batch.ingest([d1, d2])
+        snap = layer_batch.snapshot()
+        assert snap["documents"] == {}
+        assert snap["units"] == []
+
+
+def test_subject_predicate_and_scope_grounding_rejects_entity_and_predicate_swaps():
+    custom_vocab = Vocabulary(
+        name="alias-test",
+        version="4.0",
+        entities=(("Orion", ()), ("Vega", ())),
+        predicates=(
+            PredicateSpec(
+                "cure_period",
+                FieldSpec("quantity", dimensions=("duration_calendar_days",)),
+                assertion_kinds=("requirement",),
+                aliases=("notice window",),
+            ),
+            PredicateSpec(
+                "reporting_period",
+                FieldSpec("quantity", dimensions=("duration_calendar_days",)),
+                assertion_kinds=("requirement",),
+            ),
+        ),
+        scope_keys=("region", "clause_id", "event_id"),
+        require_explicit_condition_status=True,
+    )
+    with tempfile.TemporaryDirectory() as td:
+        # 1. Cross-entity swap in direct text -> ENTITY_NOT_IN_EVIDENCE
+        l_ent = EvidenceLayer(
+            Path(td) / "ent.db", project_id="ent", vocabulary=custom_vocab, policy=B2B_DEFAULT_ACCEPTANCE_POLICY
+        )
+        doc_vega = SourceDocument("vega.txt", "Vega cure period is 23 days.", authority_rank=TIER_PRIMARY, weight=1.0)
+        l_ent.ingest(doc_vega)
+        _admit_single(
+            l_ent,
+            doc_vega,
+            {
+                "entity": "Orion",
+                "predicate": "cure_period",
+                "value": "23",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+            },
+        )
+        v_ent = authorize_operation(l_ent, entity="Orion", required_predicates=("cure_period",))
+        assert v_ent.status == "RETRY"
+        assert "ENTITY_NOT_IN_EVIDENCE" in {i.code for i in v_ent.issues}
+        ask_ent = l_ent.ask(StructuredQuery("Orion", "cure_period"))
+        assert ask_ent["abstain"] is True
+        assert ask_ent["excluded"][0]["reason"] == "fidelity:ENTITY_NOT_IN_EVIDENCE"
+
+        # 2. Multi-sentence document header trap: "Orion MSA." header + quote belonging to "Vega" -> blocked!
+        l_multi = EvidenceLayer(
+            Path(td) / "multi.db", project_id="multi", vocabulary=custom_vocab, policy=B2B_DEFAULT_ACCEPTANCE_POLICY
+        )
+        doc_multi = SourceDocument(
+            "multi.txt",
+            "Orion Master Agreement. Vega cure period is 23 days.",
+            authority_rank=TIER_PRIMARY,
+            weight=1.0,
+        )
+        l_multi.ingest(doc_multi)
+        _admit_single(
+            l_multi,
+            doc_multi,
+            {
+                "entity": "Orion",
+                "predicate": "cure_period",
+                "value": "23",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+            },
+            quote="Vega cure period is 23 days.",
+        )
+        v_multi = authorize_operation(l_multi, entity="Orion", required_predicates=("cure_period",))
+        assert v_multi.status == "RETRY"
+        assert "ENTITY_NOT_IN_EVIDENCE" in {i.code for i in v_multi.issues}
+
+        # 3. Wrong predicate swap ("reporting period" vs "cure_period") -> PREDICATE_NOT_IN_EVIDENCE
+        l_pred = EvidenceLayer(
+            Path(td) / "pred.db", project_id="pred", vocabulary=custom_vocab, policy=B2B_DEFAULT_ACCEPTANCE_POLICY
+        )
+        doc_pred = SourceDocument("pred.txt", "Orion reporting period is 23 days.", authority_rank=TIER_PRIMARY, weight=1.0)
+        l_pred.ingest(doc_pred)
+        _admit_single(
+            l_pred,
+            doc_pred,
+            {
+                "entity": "Orion",
+                "predicate": "cure_period",
+                "value": "23",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+            },
+        )
+        v_pred = authorize_operation(l_pred, entity="Orion", required_predicates=("cure_period",))
+        assert v_pred.status == "RETRY"
+        assert "PREDICATE_NOT_IN_EVIDENCE" in {i.code for i in v_pred.issues}
+
+        # 4. Ungrounded semantic scope ("region": "apj") -> SCOPE_NOT_IN_EVIDENCE
+        l_scope = EvidenceLayer(
+            Path(td) / "scope.db", project_id="scope", vocabulary=custom_vocab, policy=B2B_DEFAULT_ACCEPTANCE_POLICY
+        )
+        doc_scope = SourceDocument("scope.txt", "Orion cure period is 23 days.", authority_rank=TIER_PRIMARY, weight=1.0)
+        l_scope.ingest(doc_scope)
+        _admit_single(
+            l_scope,
+            doc_scope,
+            {
+                "entity": "Orion",
+                "predicate": "cure_period",
+                "value": "23",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+                "scope": {"region": "apj"},
+            },
+        )
+        v_scope = authorize_operation(
+            l_scope, entity="Orion", required_predicates=("cure_period",), query_scope={"region": "apj"}
+        )
+        assert v_scope.status == "RETRY"
+        assert "SCOPE_NOT_IN_EVIDENCE" in {i.code for i in v_scope.issues}
+
+        # 5. PredicateSpec aliases allow alternate phrasing ("notice window") -> PASS
+        l_alias = EvidenceLayer(
+            Path(td) / "alias.db", project_id="alias", vocabulary=custom_vocab, policy=B2B_DEFAULT_ACCEPTANCE_POLICY
+        )
+        doc_alias = SourceDocument("alias.txt", "Orion notice window is 14 days.", authority_rank=TIER_PRIMARY, weight=1.0)
+        l_alias.ingest(doc_alias)
+        _admit_single(
+            l_alias,
+            doc_alias,
+            {
+                "entity": "Orion",
+                "predicate": "cure_period",
+                "value": "14",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+            },
+        )
+        v_alias = authorize_operation(l_alias, entity="Orion", required_predicates=("cure_period",))
+        assert v_alias.status == "PASS"
+
+
+def test_single_admissibility_core_unifies_rule_derived_units_across_ask_and_authorize():
+    vocab = Vocabulary(
+        name="derived-unification",
+        version="4.0",
+        predicates=(
+            PredicateSpec(
+                "raw_cure",
+                FieldSpec("quantity", dimensions=("duration_calendar_days",)),
+                assertion_kinds=("requirement",),
+            ),
+            PredicateSpec(
+                "cure_period",
+                FieldSpec("quantity", dimensions=("duration_calendar_days",)),
+                assertion_kinds=("requirement",),
+            ),
+        ),
+        scope_keys=("clause_id", "event_id"),
+        require_explicit_condition_status=True,
+    )
+    transfer_rule = (
+        "1",
+        lambda conclusion, premises: (
+            len(premises) == 1
+            and premises[0]["predicate"] == "raw_cure"
+            and conclusion["predicate"] == "cure_period"
+            and conclusion["entity"] == premises[0]["entity"]
+            and conclusion["value"] == premises[0]["value"]
+            and conclusion["unit"] == premises[0]["unit"]
+        ),
+    )
+    with tempfile.TemporaryDirectory() as td:
+        layer = EvidenceLayer(
+            Path(td) / "derived.db",
+            project_id="drv",
+            vocabulary=vocab,
+            policy=AcceptancePolicy(allowed_assertion_kinds=("requirement",), tau=0.80, delta=0.50, path_discount=0.95),
+            rules={"copy_to_cure": transfer_rule},
+        )
+        doc = SourceDocument("msa.txt", "Orion raw cure deadline is 23 days.", authority_rank=TIER_PRIMARY, weight=1.0)
+        layer.ingest(doc)
+        premise_unit = _admit_single(
+            layer,
+            doc,
+            {
+                "entity": "Orion",
+                "predicate": "raw_cure",
+                "value": "23",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+            },
+            reliability=0.90,
+        )
+        derived_id = layer.derive(
+            {
+                "entity": "Orion",
+                "predicate": "cure_period",
+                "value": "23",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+            },
+            premises=[premise_unit.unit_id],
+            rule="copy_to_cure",
+        )
+        derived_unit = layer.unit(derived_id)
+        assert derived_unit.origin == "rule_derived"
+        assert derived_unit.structural_reliability is None
+
+        # 1. Both ask() and authorize_operation() admit the rule_derived unit with discounted weakest-link support 0.95 * 0.90 = 0.855
+        ask_res = layer.ask(StructuredQuery("Orion", "cure_period"))
+        assert ask_res["status"] == "answered"
+        assert ask_res["results"][0]["support"]["S"] == 0.855
+
+        verdict = authorize_operation(layer, entity="Orion", required_predicates=("cure_period",))
+        assert verdict.status == "PASS"
+        assert verdict.resolved_values["cure_period"] == {"value": "23", "unit": "calendar_days"}
+
+        # 2. Staling the premise document revision causes BOTH ask() and authorize_operation() to reject the derived unit
+        doc_v2 = SourceDocument(
+            "msa.txt", "Orion raw cure deadline is 30 days.", authority_rank=TIER_PRIMARY, weight=1.0
+        )
+        layer.ingest(doc_v2)
+        ask_stale = layer.ask(StructuredQuery("Orion", "cure_period"))
+        assert ask_stale["abstain"] is True
+        assert ask_stale["excluded"][0]["reason"] == "premise_stale_evidence"
+
+        verdict_stale = authorize_operation(layer, entity="Orion", required_predicates=("cure_period",))
+        assert verdict_stale.status == "RETRY"
+        assert "STALE_EVIDENCE_REVISION" in {i.code for i in verdict_stale.issues}
+
+        # 3. Derived unit over a premise with structural_reliability=None is unassessed in BOTH ask() and authorize_operation()
+        l_unassessed = EvidenceLayer(
+            Path(td) / "unassessed.db",
+            project_id="unass",
+            vocabulary=vocab,
+            policy=AcceptancePolicy(allowed_assertion_kinds=("requirement",), tau=0.80, delta=0.50, path_discount=0.95),
+            rules={"copy_to_cure": transfer_rule},
+        )
+        l_unassessed.ingest(doc)
+        u_none = _admit_single(
+            l_unassessed,
+            doc,
+            {
+                "entity": "Orion",
+                "predicate": "raw_cure",
+                "value": "23",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+            },
+            reliability=None,
+        )
+        l_unassessed.derive(
+            {
+                "entity": "Orion",
+                "predicate": "cure_period",
+                "value": "23",
+                "unit": "calendar_days",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+            },
+            premises=[u_none.unit_id],
+            rule="copy_to_cure",
+        )
+        ask_none = l_unassessed.ask(StructuredQuery("Orion", "cure_period"))
+        assert ask_none["abstain"] is True
+        assert ask_none["excluded"][0]["reason"] == "premise_unassessed"
+
+        v_none = authorize_operation(l_unassessed, entity="Orion", required_predicates=("cure_period",))
+        assert v_none.status == "ESCALATE"
+        assert "UNASSESSED_READER_RELIABILITY" in {i.code for i in v_none.issues}

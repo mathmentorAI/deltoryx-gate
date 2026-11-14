@@ -19,10 +19,16 @@ import os
 import re
 from typing import Any, Mapping, Sequence
 
-from ..semantic.models import EvidenceRef, SourceDocument, canonical, digest, instant
-from .engine import EvidenceLayer, _noisy_or, _q_index
+from ..semantic.models import SourceDocument, canonical, digest, instant
+from .engine import (
+    EvidenceLayer,
+    UnitEvaluation,
+    _noisy_or,
+    _q_index,
+    evaluate_unit_admissibility,
+)
 from .epistemics import DEFAULT_PROFILE, EpistemicProfile
-from .fidelity import FieldEvidence, FidelityFinding, verify_extraction_fidelity
+from .fidelity import FieldEvidence
 from .models import AcceptancePolicy, EvidenceUnit
 from .vocabulary import UnmappedProposal, Vocabulary, label_key, value_relation
 
@@ -84,107 +90,8 @@ def _is_active_at(valid_from: str | None, valid_until: str | None, as_of: str | 
     return True
 
 
-def _scope_matches(unit_scope: Mapping[str, str], query_scope: Mapping[str, str]) -> bool:
-    """Return True if *unit_scope* applies to *query_scope* (general scope {} applies to any)."""
-    for k, v in unit_scope.items():
-        if k == "clause_id":
-            continue
-        if k not in query_scope or label_key(query_scope[k]) != label_key(v):
-            return False
-    return True
-
-
 def _scope_specificity(unit_scope: Mapping[str, str]) -> int:
     return sum(1 for k in unit_scope if k != "clause_id")
-
-
-def _filter_admissible_units(
-    units: Sequence[EvidenceUnit],
-    *,
-    target_entity: str,
-    predicates: set[str] | frozenset[str],
-    policy: AcceptancePolicy,
-    profile: EpistemicProfile = DEFAULT_PROFILE,
-    as_of: str | None = None,
-    query_scope: Mapping[str, str] | None = None,
-    documents: Mapping[str, SourceDocument] | None = None,
-    excluded_unit_ids: set[str] | frozenset[str] = frozenset(),
-    vocabulary: Vocabulary | None = None,
-    field_evidences: Mapping[str, Sequence[FieldEvidence]] | None = None,
-    stored_field_evidences: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
-    require_field_evidence: Sequence[str] = (),
-    check_evidence_refs: bool = True,
-    skip_fidelity: bool = False,
-) -> list[EvidenceUnit]:
-    """Single shared admissibility filter used by both fidelity checks and scope resolution."""
-    eligible: list[EvidenceUnit] = []
-    scope_map = query_scope or {}
-    for u in units:
-        if u.unit_id in excluded_unit_ids:
-            continue
-        p = u.proposition
-        if label_key(p["entity"]) != target_entity:
-            continue
-        if p["predicate"] not in predicates:
-            continue
-        if p.get("assertion_kind") not in policy.allowed_assertion_kinds:
-            continue
-        if not _is_active_at(p.get("valid_from"), p.get("valid_until"), as_of):
-            continue
-        if not _scope_matches(p.get("scope", {}), scope_map):
-            continue
-        if not profile.admissible(u.basis):
-            continue
-        if not u.evidence:
-            if u.origin != "rule_derived":
-                continue
-        elif documents:
-            if any(
-                ref.document_id in documents
-                and documents[ref.document_id].attribution not in policy.allowed_source_attributions
-                for ref in u.evidence
-            ):
-                continue
-            if check_evidence_refs:
-                refs_ok = True
-                for ref in u.evidence:
-                    doc = documents.get(ref.document_id)
-                    if (
-                        doc is None
-                        or doc.revision != ref.revision
-                        or ref.start < 0
-                        or ref.end > len(doc.text)
-                        or doc.text[ref.start : ref.end] != ref.quote
-                    ):
-                        refs_ok = False
-                        break
-                if not refs_ok:
-                    continue
-                if not skip_fidelity:
-                    fe_by_field: dict[str, FieldEvidence] = {}
-                    raw_fe = stored_field_evidences.get(u.unit_id) if stored_field_evidences else None
-                    if raw_fe:
-                        try:
-                            for fname, ref_dict in raw_fe.items():
-                                fe_by_field[fname] = FieldEvidence(fname, EvidenceRef(**ref_dict))
-                        except (TypeError, ValueError):
-                            continue
-                    if field_evidences and u.unit_id in field_evidences:
-                        for caller_fe in field_evidences[u.unit_id]:
-                            fe_by_field[caller_fe.field] = caller_fe
-                    merged_fe = list(fe_by_field.values()) if fe_by_field else None
-                    primary_doc = documents[u.evidence[0].document_id]
-                    if verify_extraction_fidelity(
-                        primary_doc.text,
-                        u,
-                        field_evidence=merged_fe,
-                        require_field_evidence=require_field_evidence,
-                        vocabulary=vocabulary,
-                        documents=documents,
-                    ):
-                        continue
-        eligible.append(u)
-    return eligible
 
 
 def resolve_scope_and_precedence(
@@ -200,6 +107,10 @@ def resolve_scope_and_precedence(
     source_tiers: Mapping[str, int] | None = None,
     source_weights: Mapping[str, float] | None = None,
     documents: Mapping[str, SourceDocument] | Sequence[SourceDocument] | None = None,
+    document_revisions: Mapping[tuple[str, str], SourceDocument] | None = None,
+    units_by_id: Mapping[str, EvidenceUnit] | None = None,
+    rules: Mapping[str, tuple[str, Any]] | None = None,
+    evaluations: Sequence[UnitEvaluation] | None = None,
     policy: AcceptancePolicy | None = None,
     profile: EpistemicProfile = DEFAULT_PROFILE,
     field_evidences: Mapping[str, Sequence[FieldEvidence]] | None = None,
@@ -213,117 +124,124 @@ def resolve_scope_and_precedence(
     q_conds = dict(query_conditions or {})
     pol = policy or AcceptancePolicy()
     target_entity = label_key(vocabulary.entity(entity))
-    if isinstance(documents, Mapping):
-        doc_map = dict(documents)
-    elif documents is not None:
-        doc_map = {d.document_id: d for d in documents}
+
+    if evaluations is None:
+        if isinstance(documents, Mapping):
+            doc_map = dict(documents) if documents else None
+        elif documents is not None:
+            doc_map = {d.document_id: d for d in documents} or None
+        else:
+            doc_map = None
+        u_map = dict(units_by_id) if units_by_id is not None else {u.unit_id: u for u in units}
+        evals_all = [
+            evaluate_unit_admissibility(
+                u,
+                vocabulary=vocabulary,
+                policy=pol,
+                profile=profile,
+                units_by_id=u_map,
+                rules=rules,
+                documents=doc_map,
+                document_revisions=document_revisions,
+                as_of=as_of,
+                query_scope=q_scope,
+                query_conditions=q_conds,
+                condition_mode="discharge",
+                field_evidences=field_evidences,
+                stored_field_evidences=stored_field_evidences,
+                require_field_evidence=require_field_evidence,
+                source_tiers=source_tiers,
+                source_weights=source_weights,
+                check_evidence_refs=check_evidence_refs,
+                skip_fidelity=skip_fidelity,
+            )
+            for u in units
+            if label_key(u.proposition["entity"]) == target_entity
+            and u.proposition["predicate"] == predicate
+        ]
     else:
-        doc_map = {}
+        evals_all = [
+            ev
+            for ev in evaluations
+            if label_key(ev.unit.proposition["entity"]) == target_entity
+            and ev.unit.proposition["predicate"] == predicate
+        ]
 
-    matching = _filter_admissible_units(
-        units,
-        target_entity=target_entity,
-        predicates={predicate},
-        policy=pol,
-        profile=profile,
-        as_of=as_of,
-        query_scope=q_scope,
-        documents=doc_map,
-        vocabulary=vocabulary,
-        field_evidences=field_evidences,
-        stored_field_evidences=stored_field_evidences,
-        require_field_evidence=require_field_evidence,
-        check_evidence_refs=check_evidence_refs,
-        skip_fidelity=skip_fidelity,
-    )
+    # 1. Check unknown / unrepresentable conditions
+    gap_issues = [
+        AuthorizationIssue(
+            code=ev.issue_code,
+            stage=ev.issue_stage or "epistemic_integrity",
+            disposition=ev.issue_disposition or "ESCALATE",
+            predicate=predicate,
+            message=ev.issue_message or f"Condition gap on {entity}.{predicate}; cannot authorize.",
+            detail=ev.issue_detail,
+        )
+        for ev in evals_all
+        if not ev.admissible and ev.issue_code in {"UNKNOWN_CONDITION", "UNREPRESENTABLE_CONDITION"}
+    ]
+    if gap_issues:
+        return {"status": "BLOCKED_GAP", "value": None, "winning_units": (), "issues": tuple(gap_issues)}
 
-    if not matching:
-        return {"status": "NO_EVIDENCE", "value": None, "winning_units": (), "issues": ()}
-
-    issues: list[AuthorizationIssue] = []
-
-    # 1. Check for unknown / unrepresentable conditions on any matching unit in scope
-    for u in matching:
-        cstatus = u.proposition.get("condition_status")
-        if cstatus == "unknown_condition":
-            issues.append(
-                AuthorizationIssue(
-                    code="UNKNOWN_CONDITION",
-                    stage="epistemic_integrity",
-                    disposition="ESCALATE",
-                    predicate=predicate,
-                    message=f"Unit {u.unit_id} has 'unknown_condition' for {entity}.{predicate}; cannot authorize.",
-                    detail={"unit_id": u.unit_id},
-                )
-            )
-        elif cstatus == "unrepresentable_condition":
-            issues.append(
-                AuthorizationIssue(
-                    code="UNREPRESENTABLE_CONDITION",
-                    stage="epistemic_integrity",
-                    disposition="ESCALATE",
-                    predicate=predicate,
-                    message=f"Unit {u.unit_id} has 'unrepresentable_condition' for {entity}.{predicate}; cannot authorize.",
-                    detail={"unit_id": u.unit_id},
-                )
-            )
-
-    if issues:
-        return {"status": "BLOCKED_GAP", "value": None, "winning_units": (), "issues": tuple(issues)}
-
-    # 2. Evaluate conditions against query_conditions using Vocabulary.evaluate_condition
-    spec = vocabulary.predicate(predicate)
-    applicable: list[tuple[EvidenceUnit, int]] = []
-    for u in matching:
-        conds = u.proposition.get("conditions") or ()
-        if not conds:
-            applicable.append((u, 0))
-            continue
-        results = [vocabulary.evaluate_condition(spec, c, q_conds) for c in conds]
-        if "invalid" in results:
-            issues.append(
-                AuthorizationIssue(
-                    code="INVALID_CONDITION_VALUE",
-                    stage="epistemic_integrity",
-                    disposition="ESCALATE",
-                    predicate=predicate,
-                    message=f"Condition for {entity}.{predicate} received an invalid or incommensurable runtime value.",
-                    detail={"unit_id": u.unit_id, "conditions": conds},
-                )
-            )
-            continue
-        if "false" in results:
-            continue
-        if "pending" in results:
-            issues.append(
-                AuthorizationIssue(
-                    code="PENDING_CONDITION",
-                    stage="epistemic_integrity",
-                    disposition="ESCALATE",
-                    predicate=predicate,
-                    message=f"Condition for {entity}.{predicate} cannot be evaluated because operational context is missing.",
-                    detail={"unit_id": u.unit_id, "conditions": conds},
-                )
-            )
-            continue
-        applicable.append((u, len(conds)))
-
-    if issues:
+    # 2. Check invalid or pending conditions
+    cond_issues = [
+        AuthorizationIssue(
+            code=ev.issue_code,
+            stage=ev.issue_stage or "epistemic_integrity",
+            disposition=ev.issue_disposition or "ESCALATE",
+            predicate=predicate,
+            message=ev.issue_message or f"Condition check failed on {entity}.{predicate}.",
+            detail=ev.issue_detail,
+        )
+        for ev in evals_all
+        if not ev.admissible and ev.issue_code in {"INVALID_CONDITION_VALUE", "PENDING_CONDITION"}
+    ]
+    if cond_issues:
         status_code = (
             "INVALID_CONDITION"
-            if any(i.code == "INVALID_CONDITION_VALUE" for i in issues)
+            if any(i.code == "INVALID_CONDITION_VALUE" for i in cond_issues)
             else "PENDING_CONDITION"
         )
-        return {"status": status_code, "value": None, "winning_units": (), "issues": tuple(issues)}
+        return {"status": status_code, "value": None, "winning_units": (), "issues": tuple(cond_issues)}
 
-    if not applicable:
-        return {"status": "NO_APPLICABLE_RULE", "value": None, "winning_units": (), "issues": ()}
+    admissible_evals = [ev for ev in evals_all if ev.admissible]
+    if not admissible_evals:
+        unassessed_evals = [
+            ev
+            for ev in evals_all
+            if not ev.admissible and ev.issue_code == "UNASSESSED_READER_RELIABILITY"
+        ]
+        if unassessed_evals:
+            unassessed_issues = tuple(
+                AuthorizationIssue(
+                    code=ev.issue_code,
+                    stage=ev.issue_stage or "epistemic_integrity",
+                    disposition=ev.issue_disposition or "ESCALATE",
+                    predicate=predicate,
+                    message=ev.issue_message or f"Unassessed reliability on {entity}.{predicate}; cannot authorize.",
+                    detail=ev.issue_detail,
+                )
+                for ev in unassessed_evals
+            )
+            return {
+                "status": "UNASSESSED",
+                "value": None,
+                "winning_units": tuple(ev.unit for ev in unassessed_evals),
+                "issues": unassessed_issues,
+            }
+        saw_false_condition = any(not ev.admissible and ev.reason == "condition_not_met" for ev in evals_all)
+        return {
+            "status": "NO_APPLICABLE_RULE" if saw_false_condition else "NO_EVIDENCE",
+            "value": None,
+            "winning_units": (),
+            "issues": (),
+        }
 
     # 3. Apply explicit ClauseRelation overrides (amends_clause, supersedes_clause, exception_to)
     applicable_clauses = {
-        u.proposition.get("scope", {}).get("clause_id")
-        for u, _ in applicable
-        if u.proposition.get("scope", {}).get("clause_id")
+        ev.unit.proposition.get("scope", {}).get("clause_id")
+        for ev in admissible_evals
+        if ev.unit.proposition.get("scope", {}).get("clause_id")
     }
     suppressed_clauses: set[str] = set()
     for rel in clause_relations:
@@ -333,87 +251,52 @@ def resolve_scope_and_precedence(
             suppressed_clauses.add(rel.target_clause_id)
 
     surviving = [
-        (u, cond_spec)
-        for u, cond_spec in applicable
-        if u.proposition.get("scope", {}).get("clause_id") not in suppressed_clauses
+        ev
+        for ev in admissible_evals
+        if ev.unit.proposition.get("scope", {}).get("clause_id") not in suppressed_clauses
     ]
     if not surviving:
         return {"status": "NO_APPLICABLE_RULE", "value": None, "winning_units": (), "issues": ()}
 
-    # 4. Precedence by tier -> condition specificity -> scope specificity
-    def _doc_tier(doc_id: str) -> int:
-        if source_tiers and doc_id in source_tiers:
-            return source_tiers[doc_id]
-        if doc_id in doc_map:
-            return doc_map[doc_id].authority_rank
-        return 0
+    # 4. Precedence by rank (document tier / weakest-premise tier) -> condition specificity -> scope specificity
+    def _rank_key(ev: UnitEvaluation) -> tuple[int, int, int]:
+        cond_spec = len(ev.unit.proposition.get("conditions") or ())
+        scope_spec = _scope_specificity(ev.unit.proposition.get("scope", {}))
+        return (ev.rank, cond_spec, scope_spec)
 
-    def _rank_key(item: tuple[EvidenceUnit, int]) -> tuple[int, int, int]:
-        u, cond_spec = item
-        tier = min(_doc_tier(ref.document_id) for ref in u.evidence) if u.evidence else 0
-        scope_spec = _scope_specificity(u.proposition.get("scope", {}))
-        return (tier, cond_spec, scope_spec)
-
-    best_rank = max(_rank_key(item) for item in surviving)
-    top_units = [u for u, cspec in surviving if _rank_key((u, cspec)) == best_rank]
+    best_rank = max(_rank_key(ev) for ev in surviving)
+    top_evals = [ev for ev in surviving if _rank_key(ev) == best_rank]
+    top_units = [ev.unit for ev in top_evals]
 
     # 5. Group by assertion_key and compute dependence-aware support/opposition (Q_g, S_g - O_g)
     spec = vocabulary.predicate(predicate)
-    groups: dict[str, list[EvidenceUnit]] = {}
-    for u in top_units:
-        groups.setdefault(u.assertion_key, []).append(u)
+    groups: dict[str, list[UnitEvaluation]] = {}
+    for ev in top_evals:
+        groups.setdefault(ev.unit.assertion_key, []).append(ev)
 
-    def _unit_weight(u: EvidenceUnit) -> float | None:
-        # Unassessed structural reliability (None) MUST remain unassessed, never 1.0
-        if u.structural_reliability is None:
-            return None
-        if u.evidence:
-            doc_w = min(
-                source_weights[ref.document_id]
-                if (source_weights and ref.document_id in source_weights)
-                else (doc_map[ref.document_id].weight if ref.document_id in doc_map else 1.0)
-                for ref in u.evidence
-            )
-        else:
-            doc_w = 1.0
-        basis_w = profile.weight(u.basis)
-        return max(0.0, min(1.0, min(doc_w, float(u.structural_reliability), basis_w)))
-
-    def _unit_dependence(u: EvidenceUnit) -> frozenset[str]:
-        if not u.evidence:
-            return frozenset({f"unit:{u.unit_id}"})
-        return frozenset(
-            (doc_map[r.document_id].dependence_group
-             if r.document_id in doc_map and doc_map[r.document_id].dependence_group
-             else f"document:{r.document_id}")
-            for r in u.evidence
-        )
-
-    def _group_support(g_units: Sequence[EvidenceUnit]) -> float | None:
+    def _group_support(g_evals: Sequence[UnitEvaluation]) -> float | None:
         assessed = sorted(
-            ((u, w) for u in g_units if (w := _unit_weight(u)) is not None),
-            key=lambda pair: (-pair[1], pair[0].unit_id),
+            (ev for ev in g_evals if ev.support is not None),
+            key=lambda ev: (-ev.support, ev.unit.unit_id),
         )
         if not assessed:
             return None
         used_deps: set[str] = set()
         selected_weights: list[float] = []
-        for u, w in assessed:
-            deps = _unit_dependence(u)
-            if not (deps & used_deps):
-                used_deps |= deps
-                selected_weights.append(w)
+        for ev in assessed:
+            if not (ev.dependence & used_deps):
+                used_deps |= ev.dependence
+                selected_weights.append(ev.support)
         return _noisy_or(selected_weights)
 
     def _opposition_over(competing_keys: Sequence[str]) -> float:
         by_dep: dict[tuple[str, ...], float] = {}
         for k in competing_keys:
-            for u in groups[k]:
-                w = _unit_weight(u)
-                if w is None:
+            for ev in groups[k]:
+                if ev.support is None:
                     continue
-                dkey = tuple(sorted(_unit_dependence(u)))
-                by_dep[dkey] = max(by_dep.get(dkey, 0.0), w)
+                dkey = tuple(sorted(ev.dependence))
+                by_dep[dkey] = max(by_dep.get(dkey, 0.0), ev.support)
         merged: dict[tuple[str, ...], float] = {}
         for dkey, val in by_dep.items():
             clash = [mk for mk in merged if set(mk) & set(dkey)]
@@ -424,35 +307,34 @@ def resolve_scope_and_precedence(
         return _noisy_or(list(merged.values()))
 
     group_scores: dict[str, float | None] = {
-        akey: _group_support(g_units)
-        for akey, g_units in groups.items()
+        akey: _group_support(g_evals)
+        for akey, g_evals in groups.items()
     }
     assessed_scores: dict[str, float] = {k: v for k, v in group_scores.items() if v is not None}
 
     if not assessed_scores:
-        issues.append(
-            AuthorizationIssue(
-                code="UNASSESSED_READER_RELIABILITY",
-                stage="epistemic_integrity",
-                disposition="ESCALATE",
-                predicate=predicate,
-                message=f"Units for {entity}.{predicate} have unassessed structural_reliability=None and cannot authorize operations.",
-                detail={"unit_ids": [u.unit_id for u in top_units]},
-            )
+        unassessed_issue = AuthorizationIssue(
+            code="UNASSESSED_READER_RELIABILITY",
+            stage="epistemic_integrity",
+            disposition="ESCALATE",
+            predicate=predicate,
+            message=f"Units for {entity}.{predicate} have unassessed structural_reliability=None and cannot authorize operations.",
+            detail={"unit_ids": [u.unit_id for u in top_units]},
         )
-        return {"status": "UNASSESSED", "value": None, "winning_units": tuple(top_units), "issues": tuple(issues)}
+        return {"status": "UNASSESSED", "value": None, "winning_units": tuple(top_units), "issues": (unassessed_issue,)}
 
     winner_key = max(assessed_scores.items(), key=lambda kv: (kv[1], kv[0]))[0]
-    winner_units = tuple(groups[winner_key])
+    winner_evals = groups[winner_key]
+    winner_units = tuple(ev.unit for ev in winner_evals)
     s_g = assessed_scores[winner_key]
 
     incompatible_keys: list[str] = []
     unassessed_conflict = False
-    p_win = groups[winner_key][0].proposition
+    p_win = winner_units[0].proposition
     for k in groups:
         if k == winner_key:
             continue
-        p_other = groups[k][0].proposition
+        p_other = groups[k][0].unit.proposition
         if p_win.get("polarity") != p_other.get("polarity"):
             rel_kind = "incompatible"
         elif (
@@ -470,48 +352,42 @@ def resolve_scope_and_precedence(
                 incompatible_keys.append(k)
 
     if unassessed_conflict:
-        issues.append(
-            AuthorizationIssue(
-                code="UNRESOLVED_COMPARISON",
-                stage="authorization_policy",
-                disposition="ESCALATE",
-                predicate=predicate,
-                message=f"Competing proposal for {entity}.{predicate} cannot be resolved deterministically (unassessed or incommensurable unit).",
-                detail={"group_scores": group_scores},
-            )
+        comp_issue = AuthorizationIssue(
+            code="UNRESOLVED_COMPARISON",
+            stage="authorization_policy",
+            disposition="ESCALATE",
+            predicate=predicate,
+            message=f"Competing proposal for {entity}.{predicate} cannot be resolved deterministically (unassessed or incommensurable unit).",
+            detail={"group_scores": group_scores},
         )
-        return {"status": "CONFLICT", "value": None, "winning_units": tuple(top_units), "issues": tuple(issues)}
+        return {"status": "CONFLICT", "value": None, "winning_units": tuple(top_units), "issues": (comp_issue,)}
 
     o_g = _opposition_over(incompatible_keys)
     q_g = _q_index(s_g, o_g)
 
     if o_g > 0 and (q_g < pol.tau or (s_g - o_g) < pol.delta):
-        issues.append(
-            AuthorizationIssue(
-                code="UNRESOLVED_CONFLICT",
-                stage="authorization_policy",
-                disposition="ESCALATE",
-                predicate=predicate,
-                message=(
-                    f"Overlapping clauses for {entity}.{predicate} conflict at equal precedence "
-                    f"(Q={q_g:.3f}, margin={s_g - o_g:.3f})."
-                ),
-                detail={"group_scores": group_scores, "opposition": o_g},
-            )
+        conflict_issue = AuthorizationIssue(
+            code="UNRESOLVED_CONFLICT",
+            stage="authorization_policy",
+            disposition="ESCALATE",
+            predicate=predicate,
+            message=(
+                f"Overlapping clauses for {entity}.{predicate} conflict at equal precedence "
+                f"(Q={q_g:.3f}, margin={s_g - o_g:.3f})."
+            ),
+            detail={"group_scores": group_scores, "opposition": o_g},
         )
-        return {"status": "CONFLICT", "value": None, "winning_units": tuple(top_units), "issues": tuple(issues)}
+        return {"status": "CONFLICT", "value": None, "winning_units": tuple(top_units), "issues": (conflict_issue,)}
 
     if q_g < pol.tau or (s_g - o_g) < pol.delta:
-        issues.append(
-            AuthorizationIssue(
-                code="INSUFFICIENT_SUPPORT",
-                stage="authorization_policy",
-                disposition="ESCALATE",
-                predicate=predicate,
-                message=f"Support for {entity}.{predicate} below AcceptancePolicy (Q={q_g:.3f}, margin={s_g - o_g:.3f}).",
-            )
+        support_issue = AuthorizationIssue(
+            code="INSUFFICIENT_SUPPORT",
+            stage="authorization_policy",
+            disposition="ESCALATE",
+            predicate=predicate,
+            message=f"Support for {entity}.{predicate} below AcceptancePolicy (Q={q_g:.3f}, margin={s_g - o_g:.3f}).",
         )
-        return {"status": "LOW_SUPPORT", "value": None, "winning_units": winner_units, "issues": tuple(issues)}
+        return {"status": "LOW_SUPPORT", "value": None, "winning_units": winner_units, "issues": (support_issue,)}
 
     return {
         "status": "RESOLVED",
@@ -692,134 +568,82 @@ def authorize_operation(
                 )
             )
 
-    # Single shared admissible unit candidate pool for both fidelity verification and resolution
+    # Single unified admissibility evaluation for every candidate unit matching (entity, required_predicates)
     all_units: list[EvidenceUnit] = state["units"]
+    units_by_id = {u.unit_id: u for u in all_units}
     stored_fe_map: dict[str, dict[str, dict[str, Any]]] = state["field_evidences"]
     layer_docs: dict[str, SourceDocument] = state["documents"]
     doc_revs: dict[tuple[str, str], SourceDocument] = state["document_revisions"]
+    required_pred_set = set(required_predicates)
+    condition_codes = {
+        "UNKNOWN_CONDITION",
+        "UNREPRESENTABLE_CONDITION",
+        "INVALID_CONDITION_VALUE",
+        "PENDING_CONDITION",
+        "UNASSESSED_READER_RELIABILITY",
+    }
 
-    candidate_units = _filter_admissible_units(
-        all_units,
-        target_entity=target_entity,
-        predicates=set(required_predicates),
-        policy=layer.policy,
-        profile=layer.profile,
-        as_of=as_of,
-        query_scope=query_scope,
-        documents=layer_docs,
-        vocabulary=layer.vocabulary,
-        check_evidence_refs=False,
-        skip_fidelity=True,
-    )
-    ineligible_unit_ids: set[str] = set()
-
-    for u in candidate_units:
-        if not u.evidence:
-            if u.origin != "rule_derived":
-                ineligible_unit_ids.add(u.unit_id)
-                epistemic_issues.append(
-                    AuthorizationIssue(
-                        code="MISSING_EVIDENCE_DOCUMENT",
-                        stage="epistemic_integrity",
-                        disposition="RETRY",
-                        predicate=u.proposition["predicate"],
-                        message=f"Unit {u.unit_id} has no evidence references.",
-                        detail={"unit_id": u.unit_id},
-                    )
-                )
+    evals_by_pred: dict[str, list[UnitEvaluation]] = {pred: [] for pred in required_predicates}
+    verified_eligible_units: list[EvidenceUnit] = []
+    for u in all_units:
+        p = u.proposition
+        if label_key(p["entity"]) != target_entity:
             continue
-
-        cited_doc: SourceDocument | None = None
-        cited_docs_map: dict[str, SourceDocument] = {}
-        for ref in u.evidence:
-            cache_key = (ref.document_id, ref.revision)
-            if cache_key not in doc_revs:
-                ineligible_unit_ids.add(u.unit_id)
-                epistemic_issues.append(
-                    AuthorizationIssue(
-                        code="MISSING_EVIDENCE_DOCUMENT",
-                        stage="epistemic_integrity",
-                        disposition="RETRY",
-                        predicate=u.proposition["predicate"],
-                        message=f"Evidence document '{ref.document_id}' revision '{ref.revision}' unavailable.",
-                        detail={"unit_id": u.unit_id, "document_id": ref.document_id, "revision": ref.revision},
-                    )
-                )
-                continue
-            cited_docs_map[ref.document_id] = doc_revs[cache_key]
-            if cited_doc is None:
-                cited_doc = doc_revs[cache_key]
-            current_doc = layer_docs.get(ref.document_id)
-            if current_doc is None or current_doc.revision != ref.revision:
-                ineligible_unit_ids.add(u.unit_id)
-                epistemic_issues.append(
-                    AuthorizationIssue(
-                        code="STALE_EVIDENCE_REVISION",
-                        stage="epistemic_integrity",
-                        disposition="RETRY",
-                        predicate=u.proposition["predicate"],
-                        message=(
-                            f"Unit {u.unit_id} cites stale revision '{ref.revision}' of '{ref.document_id}'."
-                        ),
-                        detail={
-                            "unit_id": u.unit_id,
-                            "document_id": ref.document_id,
-                            "cited_revision": ref.revision,
-                            "current_revision": current_doc.revision if current_doc else None,
-                        },
-                    )
-                )
-
-        if cited_doc is None or u.unit_id in ineligible_unit_ids:
+        pred = p["predicate"]
+        if pred not in required_pred_set:
             continue
-
-        # Merge stored FieldEvidence from layer with caller-provided overrides
-        fe_by_field: dict[str, FieldEvidence] = {}
-        raw_stored_fe = stored_fe_map.get(u.unit_id)
-        if raw_stored_fe:
-            for fname, ref_dict in raw_stored_fe.items():
-                try:
-                    fe_by_field[fname] = FieldEvidence(fname, EvidenceRef(**ref_dict))
-                except (TypeError, ValueError) as exc:
-                    ineligible_unit_ids.add(u.unit_id)
-                    epistemic_issues.append(
-                        AuthorizationIssue(
-                            code="INVALID_FIELD_EVIDENCE",
-                            stage="epistemic_integrity",
-                            disposition="RETRY",
-                            predicate=u.proposition["predicate"],
-                            message=f"Invalid stored FieldEvidence for '{fname}': {exc}",
-                            detail={"unit_id": u.unit_id, "field": fname},
-                        )
-                    )
-        if field_evidences and u.unit_id in field_evidences:
-            for caller_fe in field_evidences[u.unit_id]:
-                fe_by_field[caller_fe.field] = caller_fe
-        merged_fe = list(fe_by_field.values()) if fe_by_field else None
-
-        f_findings: list[FidelityFinding] = verify_extraction_fidelity(
-            cited_doc.text,
+        ev = evaluate_unit_admissibility(
             u,
-            field_evidence=merged_fe,
-            require_field_evidence=require_field_evidence,
             vocabulary=layer.vocabulary,
-            documents=cited_docs_map,
+            policy=layer.policy,
+            profile=layer.profile,
+            units_by_id=units_by_id,
+            rules=layer._rules,
+            documents=layer_docs,
+            document_revisions=doc_revs,
+            as_of=as_of,
+            query_scope=query_scope,
+            query_conditions=query_conditions,
+            condition_mode="discharge",
+            field_evidences=field_evidences,
+            stored_field_evidences=stored_fe_map,
+            require_field_evidence=require_field_evidence,
+            source_tiers=source_tiers,
+            source_weights=source_weights,
+            check_evidence_refs=True,
+            skip_fidelity=False,
         )
-        if f_findings:
-            ineligible_unit_ids.add(u.unit_id)
-            for ff in f_findings:
+        if ev.admissible:
+            verified_eligible_units.append(u)
+            evals_by_pred[pred].append(ev)
+            continue
+        if ev.issue_code in condition_codes or ev.reason == "condition_not_met":
+            evals_by_pred[pred].append(ev)
+            continue
+        if ev.fidelity_findings:
+            for ff in ev.fidelity_findings:
                 epistemic_issues.append(
                     AuthorizationIssue(
                         code=ff.code,
                         stage="epistemic_integrity",
                         disposition="RETRY",
-                        predicate=u.proposition["predicate"],
+                        predicate=pred,
                         message=ff.message,
                         detail={"unit_id": u.unit_id, "field": ff.field, "detail": ff.detail},
                     )
                 )
-
-    verified_eligible_units = [u for u in candidate_units if u.unit_id not in ineligible_unit_ids]
+            continue
+        if ev.issue_code:
+            epistemic_issues.append(
+                AuthorizationIssue(
+                    code=ev.issue_code,
+                    stage=ev.issue_stage or "epistemic_integrity",
+                    disposition=ev.issue_disposition or "RETRY",
+                    predicate=pred,
+                    message=ev.issue_message or (ev.reason or ev.issue_code),
+                    detail=ev.issue_detail,
+                )
+            )
 
     # ---- Stage 2: Scope/Precedence Resolution & Policy Gate ----
     resolved_values: dict[str, Any] = {}
@@ -837,10 +661,12 @@ def authorize_operation(
             source_tiers=source_tiers,
             source_weights=source_weights,
             documents=layer_docs,
+            document_revisions=doc_revs,
+            units_by_id=units_by_id,
+            rules=layer._rules,
+            evaluations=evals_by_pred[pred],
             policy=layer.policy,
             profile=layer.profile,
-            check_evidence_refs=False,
-            skip_fidelity=True,
         )
         winning_unit_ids_by_pred[pred] = [u.unit_id for u in res.get("winning_units", ())]
         for iss in res.get("issues", ()):
@@ -928,9 +754,15 @@ def authorize_operation(
         status = "PASS"
 
     final_resolved_values = dict(resolved_values) if status == "PASS" else {}
+    auth_head = (
+        str(operation_id)
+        if operation_id is not None
+        else f"__scope__:{target_entity}:{','.join(sorted(required_predicates))}"
+    )
 
     decision_snapshot: dict[str, Any] = {
         "configuration": state["configuration"],
+        "ledger_state_digest": state["ledger_state_digest"],
         "entity": target_entity,
         "required_predicates": list(required_predicates),
         "as_of": as_of,
@@ -960,8 +792,10 @@ def authorize_operation(
             }
             for _, d in sorted(layer_docs.items())
         ],
+        "all_unit_ids": sorted(u.unit_id for u in all_units),
         "eligible_unit_ids": [u.unit_id for u in verified_eligible_units],
         "winning_unit_ids": {pred: winning_unit_ids_by_pred[pred] for pred in sorted(winning_unit_ids_by_pred)},
+        "authorization_head": auth_head,
         "read_state": {
             "unread_documents": combined_unread,
             "read_errors": combined_read_errors,
@@ -989,7 +823,7 @@ def authorize_operation(
         "authorization",
         snapshot_digest,
         auth_record,
-        head=operation_id or snapshot_digest,
+        head=auth_head,
     )
 
     return AuthorizationVerdict(
@@ -1021,8 +855,9 @@ def verify_authorization_verdict(
     payload_digest: str | None = None,
     signing_key: str | bytes | None = None,
     allow_unkeyed: bool = False,
+    allow_consumed: bool = False,
 ) -> bool:
-    """Verify authenticity, snapshot integrity, and operation/payload binding for an executor."""
+    """Verify authenticity, snapshot integrity, ledger-state freshness, and operation/payload binding."""
     if not isinstance(verdict, AuthorizationVerdict):
         return False
     if verdict.status != "PASS" or verdict.allowed is not True or verdict.requires_human is not False:
@@ -1068,6 +903,8 @@ def verify_authorization_verdict(
             return False
         if snap_dict.get("configuration") != current_state["configuration"]:
             return False
+        if snap_dict.get("ledger_state_digest") != current_state.get("ledger_state_digest"):
+            return False
         expected_docs = [
             {
                 "document_id": d.document_id,
@@ -1082,6 +919,8 @@ def verify_authorization_verdict(
         if snap_dict.get("documents") != expected_docs:
             return False
         current_unit_ids = {u.unit_id for u in current_state["units"]}
+        if set(snap_dict.get("all_unit_ids", ())) != current_unit_ids:
+            return False
         if not set(snap_dict.get("eligible_unit_ids", ())) <= current_unit_ids:
             return False
         for unit_ids in snap_dict.get("winning_unit_ids", {}).values():
@@ -1104,6 +943,24 @@ def verify_authorization_verdict(
             return False
         if stored.get("signature") != verdict.signature:
             return False
+        expected_head = (
+            str(verdict.operation_id)
+            if verdict.operation_id is not None
+            else (snap_dict.get("authorization_head") or verdict.snapshot_digest)
+        )
+        try:
+            active_head_id, _ = layer.store.head("authorization", expected_head)
+        except (ValueError, TypeError, KeyError):
+            return False
+        if active_head_id != verdict.snapshot_digest:
+            return False
+        if not allow_consumed:
+            try:
+                consumed = layer.store.get("execution", verdict.snapshot_digest)
+            except (ValueError, TypeError, KeyError):
+                return False
+            if isinstance(consumed, Mapping) and consumed.get("consumed"):
+                return False
 
     active_key = signing_key if signing_key is not None else os.environ.get("CLAIMLAYER_SIGNING_KEY")
     if active_key is not None and active_key != "" and active_key != b"":
@@ -1116,3 +973,47 @@ def verify_authorization_verdict(
     if not allow_unkeyed:
         return False
     return verdict.signature is None
+
+
+def execute_authorized_operation(
+    layer: EvidenceLayer,
+    verdict: AuthorizationVerdict,
+    action: Any,
+    *,
+    operation_id: str | None = None,
+    payload: Any | None = None,
+    payload_digest: str | None = None,
+    signing_key: str | bytes | None = None,
+    allow_unkeyed: bool = False,
+    one_shot: bool = True,
+) -> Any:
+    """Atomically verify an AuthorizationVerdict under a SQLite write lock and execute *action*."""
+    if not callable(action):
+        raise TypeError("action must be callable")
+    with layer.store.transaction(mode="IMMEDIATE"):
+        if not verify_authorization_verdict(
+            verdict,
+            layer=layer,
+            operation_id=operation_id,
+            payload=payload,
+            payload_digest=payload_digest,
+            signing_key=signing_key,
+            allow_unkeyed=allow_unkeyed,
+            allow_consumed=not one_shot,
+        ):
+            raise PermissionError(
+                f"AuthorizationVerdict {getattr(verdict, 'snapshot_digest', None)!r} "
+                "failed verification or was superseded/consumed."
+            )
+        if one_shot:
+            layer.store.put(
+                "execution",
+                verdict.snapshot_digest,
+                {
+                    "snapshot_digest": verdict.snapshot_digest,
+                    "operation_id": verdict.operation_id,
+                    "consumed": True,
+                },
+                head=verdict.snapshot_digest,
+            )
+        return action(verdict)

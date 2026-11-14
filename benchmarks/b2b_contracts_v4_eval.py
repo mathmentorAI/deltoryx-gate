@@ -37,14 +37,14 @@ def _ref(doc: SourceDocument, sub: str) -> EvidenceRef:
 def eval_layer1_reasoning() -> dict[str, int]:
     msa = SourceDocument(
         "msa",
-        "C1: Payment terms are 45 days. C2: Enterprise EU payment terms are 60 days. "
-        "C3: Payment terms are 15 days if invoice is disputed.",
+        "C1: Acme payment terms are 45 days. C2: Acme Enterprise EU payment terms are 60 days. "
+        "C3: Acme payment terms are 15 days if invoice is disputed.",
         authority_rank=TIER_PRIMARY,
         weight=1.0,
     )
     amend = SourceDocument(
         "amend",
-        "C1A: Payment terms amended to 30 days.",
+        "C1A: Acme payment terms amended to 30 days.",
         authority_rank=TIER_PRIMARY,
         weight=1.0,
     )
@@ -63,7 +63,7 @@ def eval_layer1_reasoning() -> dict[str, int]:
                     "scope": {"clause_id": "c1"},
                     "valid_from": "2025-01-01",
                 },
-                "evidence": [_ref(msa, "C1: Payment terms are 45 days.")],
+                "evidence": [_ref(msa, "C1: Acme payment terms are 45 days.")],
             },
             {
                 "proposal": {
@@ -76,7 +76,7 @@ def eval_layer1_reasoning() -> dict[str, int]:
                     "scope": {"clause_id": "c2", "service_tier": "enterprise", "region": "eu"},
                     "valid_from": "2025-01-01",
                 },
-                "evidence": [_ref(msa, "C2: Enterprise EU payment terms are 60 days.")],
+                "evidence": [_ref(msa, "C2: Acme Enterprise EU payment terms are 60 days.")],
             },
             {
                 "proposal": {
@@ -90,7 +90,7 @@ def eval_layer1_reasoning() -> dict[str, int]:
                     "scope": {"clause_id": "c3"},
                     "valid_from": "2025-01-01",
                 },
-                "evidence": [_ref(msa, "C3: Payment terms are 15 days if invoice is disputed.")],
+                "evidence": [_ref(msa, "C3: Acme payment terms are 15 days if invoice is disputed.")],
             },
             {
                 "proposal": {
@@ -103,7 +103,7 @@ def eval_layer1_reasoning() -> dict[str, int]:
                     "scope": {"clause_id": "c1a"},
                     "valid_from": "2026-01-01",
                 },
-                "evidence": [_ref(amend, "C1A: Payment terms amended to 30 days.")],
+                "evidence": [_ref(amend, "C1A: Acme payment terms amended to 30 days.")],
             },
         ],
         attestor="gold",
@@ -145,7 +145,7 @@ def eval_layer1_reasoning() -> dict[str, int]:
 def eval_layer2_fidelity() -> dict[str, object]:
     doc = SourceDocument(
         "d1",
-        "Payment terms are 30 days unless invoice is disputed. Vendor shall not be liable for indirect loss.",
+        "Acme payment terms are 30 days unless invoice is disputed. Vendor shall not be liable for indirect loss.",
         authority_rank=TIER_PRIMARY,
         weight=1.0,
     )
@@ -162,7 +162,7 @@ def eval_layer2_fidelity() -> dict[str, object]:
                     "assertion_kind": "requirement",
                     "condition_status": "unconditional",
                 },
-                "evidence": [_ref(doc, "Payment terms are 30 days")],
+                "evidence": [_ref(doc, "Acme payment terms are 30 days")],
             },
             {
                 "proposal": {
@@ -174,7 +174,7 @@ def eval_layer2_fidelity() -> dict[str, object]:
                     "condition_status": "conditional",
                     "conditions": [{"field": "invoice_disputed", "operator": "eq", "value": False}],
                 },
-                "evidence": [_ref(doc, "Payment terms are 30 days unless invoice is disputed.")],
+                "evidence": [_ref(doc, "Acme payment terms are 30 days unless invoice is disputed.")],
             },
         ],
         attestor="extractor",
@@ -205,7 +205,7 @@ def eval_layer3_end_to_end() -> dict[str, object]:
     """Measure selective risk (errors among accepted PASS) and automation coverage."""
     doc = SourceDocument(
         "msa",
-        "Payment terms are 30 days. Liability cap is 200000 USD.",
+        "Acme payment terms are 30 days. Acme liability cap is 200000 USD.",
         authority_rank=TIER_PRIMARY,
         weight=1.0,
     )
@@ -235,7 +235,7 @@ def eval_layer3_end_to_end() -> dict[str, object]:
                         "assertion_kind": "requirement",
                         "condition_status": cstatus,
                     },
-                    "evidence": [_ref(doc, "Payment terms are 30 days.")],
+                    "evidence": [_ref(doc, "Acme payment terms are 30 days.")],
                 },
                 {
                     "proposal": {
@@ -246,7 +246,7 @@ def eval_layer3_end_to_end() -> dict[str, object]:
                         "assertion_kind": "requirement",
                         "condition_status": "unconditional",
                     },
-                    "evidence": [_ref(doc, "Liability cap is 200000 USD.")],
+                    "evidence": [_ref(doc, "Acme liability cap is 200000 USD.")],
                 },
             ],
             attestor="eval",

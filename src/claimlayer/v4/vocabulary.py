@@ -328,6 +328,7 @@ class PredicateSpec:
     conditions: tuple[tuple[str, FieldSpec], ...] = ()
     assertion_kinds: tuple[str, ...] = tuple(sorted(KINDS))
     description: str = ''
+    aliases: tuple[str, ...] = ()
 
     def __post_init__(self):
         require_string(self.name, 'predicate name')
@@ -341,9 +342,12 @@ class PredicateSpec:
                 raise ValueError('Condition values must be boolean, number, quantity, enum or entity')
 
     def describe(self):
-        return {'name': self.name, 'value': self.value.describe(), 'cardinality': self.cardinality,
-                'conditions': {k: v.describe() for k, v in self.conditions},
-                'assertion_kinds': list(self.assertion_kinds), 'description': self.description}
+        out = {'name': self.name, 'value': self.value.describe(), 'cardinality': self.cardinality,
+               'conditions': {k: v.describe() for k, v in self.conditions},
+               'assertion_kinds': list(self.assertion_kinds), 'description': self.description}
+        if self.aliases:
+            out['aliases'] = list(self.aliases)
+        return out
 
 
 @dataclass(frozen=True)

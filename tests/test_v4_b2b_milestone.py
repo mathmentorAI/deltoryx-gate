@@ -133,13 +133,13 @@ def test_dual_reader_evaluation_reports_shared_errors():
 def test_scope_precedence_exceptions_amendments_and_pending_conditions():
     msa = _doc(
         "msa_2025",
-        "Clause 4.1: Standard payment terms are 45 days. "
-        "Clause 4.2: For Enterprise EU customers, payment terms are 60 days. "
-        "Clause 4.3: Payment terms are 15 days if the invoice is disputed.",
+        "Clause 4.1: Acme standard payment terms are 45 days. "
+        "Clause 4.2: For Acme Enterprise EU customers, payment terms are 60 days. "
+        "Clause 4.3: Acme payment terms are 15 days if the invoice is disputed.",
     )
     amend = _doc(
         "amend_2026",
-        "Amendment Clause 4.1A: Standard payment terms are amended to 30 days effective 2026-01-01.",
+        "Amendment Clause 4.1A: Acme standard payment terms are amended to 30 days effective 2026-01-01.",
     )
     layer = EvidenceLayer(vocabulary=B2B_CONTRACTS_VOCABULARY, policy=B2B_DEFAULT_ACCEPTANCE_POLICY)
     layer.ingest([msa, amend])
@@ -156,7 +156,7 @@ def test_scope_precedence_exceptions_amendments_and_pending_conditions():
                     "scope": {"clause_id": "c4_1"},
                     "valid_from": "2025-01-01",
                 },
-                "evidence": [_ref(msa, "Clause 4.1: Standard payment terms are 45 days.")],
+                "evidence": [_ref(msa, "Clause 4.1: Acme standard payment terms are 45 days.")],
             },
             {
                 "proposal": {
@@ -169,7 +169,7 @@ def test_scope_precedence_exceptions_amendments_and_pending_conditions():
                     "scope": {"clause_id": "c4_2", "service_tier": "enterprise", "region": "eu"},
                     "valid_from": "2025-01-01",
                 },
-                "evidence": [_ref(msa, "Clause 4.2: For Enterprise EU customers, payment terms are 60 days.")],
+                "evidence": [_ref(msa, "Clause 4.2: For Acme Enterprise EU customers, payment terms are 60 days.")],
             },
             {
                 "proposal": {
@@ -183,7 +183,7 @@ def test_scope_precedence_exceptions_amendments_and_pending_conditions():
                     "scope": {"clause_id": "c4_3"},
                     "valid_from": "2025-01-01",
                 },
-                "evidence": [_ref(msa, "Clause 4.3: Payment terms are 15 days if the invoice is disputed.")],
+                "evidence": [_ref(msa, "Clause 4.3: Acme payment terms are 15 days if the invoice is disputed.")],
             },
             {
                 "proposal": {
@@ -196,7 +196,7 @@ def test_scope_precedence_exceptions_amendments_and_pending_conditions():
                     "scope": {"clause_id": "c4_1a"},
                     "valid_from": "2026-01-01",
                 },
-                "evidence": [_ref(amend, "Amendment Clause 4.1A: Standard payment terms are amended to 30 days effective 2026-01-01.")],
+                "evidence": [_ref(amend, "Amendment Clause 4.1A: Acme standard payment terms are amended to 30 days effective 2026-01-01.")],
             },
         ],
         attestor="legal_ops",

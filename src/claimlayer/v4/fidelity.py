@@ -426,6 +426,164 @@ def _value_markers_present(
     return _value_markers_present(str(value), text, units=units)
 
 
+_GENERIC_PREDICATE_TOKENS = frozenset({
+    "period", "days", "day", "hours", "hour", "months", "month", "years", "year",
+    "date", "time", "rate", "ratio", "pct", "percent", "percentage", "target",
+    "threshold", "limit", "limits", "value", "values", "number", "count", "qty",
+    "quantity", "level", "status", "of", "in", "to", "for", "by", "on", "at",
+    "is", "are", "the", "a", "an", "multi", "dim", "plain", "standard",
+})
+
+_PREDICATE_TOKEN_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "payment": ("payment", "payments", "pay", "paid", "payable"),
+    "delivery": ("delivery", "deliver", "delivered", "deliveries"),
+    "governing": ("governing", "governed", "govern", "governs"),
+    "law": ("law", "laws"),
+    "terms": ("terms", "term"),
+    "term": ("term", "terms"),
+    "reporting": ("reporting", "report", "reports"),
+    "servicer": ("servicer", "servicing"),
+    "renewal": ("renewal", "renew", "renews", "renewed"),
+    "auto": ("auto", "automatic", "automatically"),
+}
+
+_HEADER_NON_SUBJECT_WORDS = frozenset({
+    "the", "a", "an", "this", "that", "these", "those", "all", "any", "each",
+    "every", "such", "standard", "general", "section", "clause", "article",
+    "paragraph", "annex", "schedule", "amendment", "supplemental", "indenture",
+    "record", "source", "term", "base", "year", "years", "month", "months",
+    "day", "days", "rsf", "usd", "eur", "gbp",
+})
+
+
+def _term_in_text(text: str, term: str) -> bool:
+    """Case-insensitive token-bounded match allowing space/'_'/'-' equivalence."""
+    key = label_key(term)
+    if not key:
+        return False
+    parts = [re.escape(p) for p in key.split()]
+    pattern = r"(?<![a-z0-9])" + r"[\s_\-]+".join(parts) + r"(?![a-z0-9])"
+    return re.search(pattern, text.casefold()) is not None
+
+
+def _entity_candidate_labels(entity: str, vocabulary: Vocabulary | None) -> list[str]:
+    labels: list[str] = [entity]
+    if vocabulary is not None:
+        canon = label_key(entity)
+        for cname, aliases in vocabulary.entities:
+            if label_key(cname) == canon:
+                labels.extend(aliases)
+                break
+    seen: set[str] = set()
+    out: list[str] = []
+    for lbl in labels:
+        k = label_key(lbl)
+        if k and k not in seen:
+            seen.add(k)
+            out.append(lbl)
+    return out
+
+
+def _leading_header_text(doc_text: str) -> str:
+    """Extract a short title/header prefix (first line/sentence before section/clause body)."""
+    m = re.match(r"^\s*([^\n.;]{1,80}(?:[.;]\s*[^\n.;]{1,60})?)", doc_text)
+    if not m:
+        return ""
+    header = m.group(1)
+    # Only treat short title-like fragments without finite verbs as a document header
+    if re.search(r"\b(?:is|are|was|were|shall|will|must|may|has|have)\b", header, re.IGNORECASE):
+        return ""
+    return header
+
+
+def _has_competing_subject_in_sentences(
+    sentences: Sequence[str],
+    entity_labels: Sequence[str],
+    predicate_name: str,
+) -> bool:
+    entity_words = {w for lbl in entity_labels for w in label_key(lbl).split()}
+    pred_words = set(label_key(predicate_name).split()) | {
+        syn for w in label_key(predicate_name).split() for syn in _PREDICATE_TOKEN_SYNONYMS.get(w, ())
+    }
+    for sent in sentences:
+        for tok in re.findall(r"\b[A-Z][A-Za-z0-9_-]*\b", sent):
+            low = tok.casefold()
+            if low in _HEADER_NON_SUBJECT_WORDS or low in entity_words or low in pred_words:
+                continue
+            return True
+    return False
+
+
+def _entity_grounded_in_evidence(
+    entity: str,
+    combined_quotes: str,
+    enclosing_sents: Sequence[str],
+    doc_text: str,
+    vocabulary: Vocabulary | None,
+) -> bool:
+    labels = _entity_candidate_labels(entity, vocabulary)
+    local_texts = (combined_quotes, " ".join(enclosing_sents))
+    if any(_term_in_text(t, lbl) for t in local_texts for lbl in labels):
+        return True
+    header = _leading_header_text(doc_text)
+    if header and any(_term_in_text(header, lbl) for lbl in labels):
+        return True
+    return False
+
+
+def _predicate_grounded_in_evidence(
+    predicate_name: str,
+    entity: str,
+    combined_quotes: str,
+    enclosing_sents: Sequence[str],
+    doc_text: str,
+    vocabulary: Vocabulary | None,
+    *,
+    predicate_tokens_only: bool = False,
+) -> bool:
+    """Verify predicate cue presence against quote/enclosing sentences (and declared aliases)."""
+    header = _leading_header_text(doc_text) if not predicate_tokens_only else ""
+    search_text = " ".join(part for part in (combined_quotes, " ".join(enclosing_sents), header) if part)
+    candidates: list[str] = [predicate_name]
+    if vocabulary is not None:
+        try:
+            spec = vocabulary.predicate(predicate_name)
+            candidates.extend(spec.aliases)
+        except UnmappedProposal:
+            pass
+    if any(_term_in_text(search_text, cand) for cand in candidates):
+        return True
+
+    ent_tokens = set(label_key(entity).split())
+    raw_tokens = [t for t in label_key(predicate_name).split() if t not in ent_tokens]
+    if not raw_tokens:
+        raw_tokens = label_key(predicate_name).split()
+    specific_tokens = [t for t in raw_tokens if t not in _GENERIC_PREDICATE_TOKENS]
+    required_tokens = specific_tokens if specific_tokens else raw_tokens
+    for tok in required_tokens:
+        forms = _PREDICATE_TOKEN_SYNONYMS.get(tok, (tok,))
+        if not any(_term_in_text(search_text, form) for form in forms):
+            return False
+    return True
+
+
+def _scope_grounded_in_evidence(
+    scope: Mapping[str, Any],
+    combined_quotes: str,
+    enclosing_sents: Sequence[str],
+) -> list[tuple[str, str]]:
+    """Return list of `(scope_key, scope_value)` pairs not grounded in quote/sentence."""
+    local_text = f"{combined_quotes} {' '.join(enclosing_sents)}"
+    ungrounded: list[tuple[str, str]] = []
+    for k, v in scope.items():
+        if k in {"event_id", "clause_id"}:
+            continue
+        if isinstance(v, str) and v.strip():
+            if not _term_in_text(local_text, v):
+                ungrounded.append((str(k), v))
+    return ungrounded
+
+
 def verify_extraction_fidelity(
     doc_text: str,
     unit: EvidenceUnit,
@@ -545,6 +703,66 @@ def verify_extraction_fidelity(
             )
         )
 
+    # 4b. Mandatory entity grounding against cited evidence quotes / enclosing sentence
+    primary_doc_text = (
+        documents[unit.evidence[0].document_id].text
+        if (documents and unit.evidence[0].document_id in documents)
+        else doc_text
+    )
+    prop_entity = prop.get("entity")
+    prop_predicate = prop.get("predicate")
+    if isinstance(prop_entity, str) and prop_entity.strip():
+        labels = _entity_candidate_labels(prop_entity, vocabulary)
+        local_match = any(_term_in_text(t, lbl) for t in (cited_quotes, combined_sentence) for lbl in labels)
+        if not local_match:
+            header = _leading_header_text(primary_doc_text)
+            competing = _has_competing_subject_in_sentences(
+                full_sentences, labels, str(prop_predicate or "")
+            )
+            header_ok = bool(header) and not competing and any(_term_in_text(header, lbl) for lbl in labels)
+            if not header_ok:
+                findings.append(
+                    FidelityFinding(
+                        code="ENTITY_NOT_IN_EVIDENCE",
+                        message=f"Proposed entity {prop_entity!r} is not grounded in the cited evidence.",
+                        field="entity",
+                        detail={"entity": prop_entity, "quotes": [r.quote for r in unit.evidence]},
+                    )
+                )
+
+    # 4c. Mandatory predicate grounding against cited evidence quotes / enclosing sentence
+    if isinstance(prop_predicate, str) and prop_predicate.strip():
+        if not _predicate_grounded_in_evidence(
+            prop_predicate,
+            str(prop_entity or ""),
+            cited_quotes,
+            full_sentences,
+            primary_doc_text,
+            vocabulary,
+        ):
+            findings.append(
+                FidelityFinding(
+                    code="PREDICATE_NOT_IN_EVIDENCE",
+                    message=f"Proposed predicate {prop_predicate!r} is not grounded in the cited evidence.",
+                    field="predicate",
+                    detail={"predicate": prop_predicate, "quotes": [r.quote for r in unit.evidence]},
+                )
+            )
+
+    # 4d. Mandatory semantic scope grounding against cited evidence quotes / enclosing sentence
+    prop_scope = prop.get("scope")
+    if isinstance(prop_scope, Mapping) and prop_scope:
+        ungrounded_scope = _scope_grounded_in_evidence(prop_scope, cited_quotes, full_sentences)
+        if ungrounded_scope:
+            findings.append(
+                FidelityFinding(
+                    code="SCOPE_NOT_IN_EVIDENCE",
+                    message=f"Proposed scope qualifier(s) {ungrounded_scope!r} are not grounded in the cited evidence.",
+                    field="scope",
+                    detail={"ungrounded": ungrounded_scope, "quotes": [r.quote for r in unit.evidence]},
+                )
+            )
+
     # 5. Per-field evidence binding checks
     by_field = {fe.field: fe for fe in (field_evidence or ())}
     for req_field in require_field_evidence:
@@ -570,13 +788,30 @@ def verify_extraction_fidelity(
             )
             continue
         if fe.field == "entity" and prop.get("entity"):
-            ent_tokens = [t for t in re.findall(r"[a-z0-9]+", str(prop["entity"]).lower()) if len(t) >= 2]
-            if ent_tokens and not _tokens_present_bounded(ent_tokens, ref.quote):
+            ent_labels = _entity_candidate_labels(str(prop["entity"]), vocabulary)
+            if not any(_term_in_text(ref.quote, lbl) for lbl in ent_labels):
                 findings.append(
                     FidelityFinding(
                         code="ENTITY_NOT_IN_FIELD_EVIDENCE",
                         message=f"Declared entity '{prop['entity']}' is not grounded in its FieldEvidence span.",
                         field="entity",
+                    )
+                )
+        elif fe.field == "predicate" and isinstance(prop_predicate, str) and prop_predicate.strip():
+            if not _predicate_grounded_in_evidence(
+                prop_predicate,
+                str(prop_entity or ""),
+                ref.quote,
+                (ref.quote,),
+                ref.quote,
+                vocabulary,
+                predicate_tokens_only=True,
+            ):
+                findings.append(
+                    FidelityFinding(
+                        code="PREDICATE_NOT_IN_FIELD_EVIDENCE",
+                        message=f"Declared predicate '{prop_predicate}' is not grounded in its FieldEvidence span.",
+                        field="predicate",
                     )
                 )
         elif fe.field == "value" and not _value_markers_present(

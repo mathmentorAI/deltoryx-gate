@@ -14,7 +14,7 @@ application's authority metadata; nothing here certifies factual truth.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from decimal import Decimal
 import copy
@@ -22,18 +22,29 @@ import json
 from pathlib import Path
 import tempfile
 import uuid
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 
 from ..semantic.models import KINDS, EvidenceRef, SourceDocument, StructuredQuery, canonical, digest, instant
 from ..semantic.store import VerificationStore
 from .epistemics import DEFAULT_PROFILE, EXPLICIT, EpistemicProfile
-from .fidelity import FieldEvidence, verify_extraction_fidelity
+from .fidelity import FieldEvidence, FidelityFinding, verify_extraction_fidelity
 from .models import AcceptancePolicy, EvidenceUnit, context_key
 from .vocabulary import UnmappedProposal, Vocabulary, decimal_text, label_key, value_relation
 
 ENGINE_VERSION = '4.0.0a1'
 CONTRACT = 'claimlayer-evidence-v4'
 TIER_PRIMARY, TIER_ANNEX, TIER_EXTERNAL = 100, 50, 10  # v2 tiers, now declared by the application
+
+
+def _identity_rule_check(conclusion, premises) -> bool:
+    return len(premises) == 1 and all(
+        canonical({k: v for k, v in conclusion.items() if k not in ('valid_from', 'valid_until')})
+        == canonical({k: v for k, v in p.items() if k not in ('valid_from', 'valid_until')})
+        for p in premises
+    )
+
+
+DEFAULT_RULES: dict[str, tuple[str, Any]] = {'identity': ('1', _identity_rule_check)}
 
 
 def _noisy_or(values):
@@ -45,6 +56,446 @@ def _noisy_or(values):
 
 def _q_index(support, opposition):
     return round(support ** 2 / (support + opposition), 6) if support + opposition > 0 else 0.0
+
+
+@dataclass(frozen=True)
+class UnitEvaluation:
+    """Single deterministic unit admissibility & provenance evaluation shared across v4."""
+
+    unit: EvidenceUnit
+    admissible: bool
+    reason: str | None = None
+    issue_code: str | None = None
+    issue_stage: str | None = None
+    issue_disposition: str | None = None
+    issue_message: str | None = None
+    issue_detail: Any = None
+    fidelity_findings: tuple[FidelityFinding, ...] = ()
+    documents: dict[str, SourceDocument] = field(default_factory=dict)
+    support: float | None = None
+    components: dict[str, Any] = field(default_factory=dict)
+    dependence: frozenset[str] = frozenset()
+    rank: int = 0
+    pending_conditions: list[dict[str, Any]] = field(default_factory=list)
+    pending_scope: dict[str, Any] = field(default_factory=dict)
+    premise_ids: tuple[str, ...] = ()
+
+    def as_basis(self) -> dict[str, Any]:
+        return {
+            'unit': self.unit,
+            'documents': self.documents,
+            'support': self.support,
+            'components': self.components,
+            'dependence': self.dependence,
+            'rank': self.rank,
+            'pending_conditions': self.pending_conditions,
+            'pending_scope': self.pending_scope,
+            'premise_bases': list(self.premise_ids),
+        }
+
+
+def evaluate_unit_admissibility(
+    unit: EvidenceUnit,
+    *,
+    vocabulary: Vocabulary,
+    policy: AcceptancePolicy,
+    profile: EpistemicProfile = DEFAULT_PROFILE,
+    units_by_id: Mapping[str, EvidenceUnit] | None = None,
+    rules: Mapping[str, tuple[str, Any]] | None = None,
+    documents: Mapping[str, SourceDocument] | None = None,
+    document_revisions: Mapping[tuple[str, str], SourceDocument] | None = None,
+    as_of: str | None = None,
+    validity: str = 'filter',
+    allowed_assertion_kinds: Iterable[str] | None = None,
+    query_scope: Mapping[str, Any] | None = None,
+    query_conditions: Mapping[str, Any] | None = None,
+    condition_mode: str = 'report',
+    field_evidences: Mapping[str, Sequence[FieldEvidence]] | None = None,
+    stored_field_evidences: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
+    require_field_evidence: Sequence[str] = (),
+    source_tiers: Mapping[str, int] | None = None,
+    source_weights: Mapping[str, float] | None = None,
+    check_evidence_refs: bool = True,
+    skip_fidelity: bool = False,
+    seen: frozenset[str] = frozenset(),
+) -> UnitEvaluation:
+    """Evaluate a single EvidenceUnit under one unified admissibility, provenance, fidelity & condition core."""
+    if unit.unit_id in seen:
+        return UnitEvaluation(unit=unit, admissible=False, reason='cyclic_dependency')
+
+    p = unit.proposition
+    admitted_kinds = tuple(allowed_assertion_kinds) if allowed_assertion_kinds is not None else policy.allowed_assertion_kinds
+    if p['assertion_kind'] not in admitted_kinds:
+        return UnitEvaluation(unit=unit, admissible=False, reason='assertion_kind_not_admitted')
+
+    if validity == 'filter' and as_of is not None:
+        at = instant(as_of)
+        start, end = instant(p['valid_from']), instant(p['valid_until'])
+        if (start and at < start) or (end and at > end):
+            return UnitEvaluation(unit=unit, admissible=False, reason='outside_validity')
+
+    if not profile.admissible(unit.basis):
+        return UnitEvaluation(unit=unit, admissible=False, reason='basis_not_admissible_under_profile')
+
+    pred_spec = vocabulary.predicate(p['predicate'])
+    q_scope = query_scope or {}
+    pending_scope: dict[str, Any] = {}
+    for key, value in p.get('scope', {}).items():
+        if key in {'event_id', 'clause_id'}:
+            if key in q_scope:
+                qval = q_scope[key]
+                if not isinstance(qval, str) or label_key(qval) != label_key(value):
+                    return UnitEvaluation(unit=unit, admissible=False, reason='scope_mismatch')
+            continue
+        if key in q_scope:
+            qval = q_scope[key]
+            if isinstance(qval, str):
+                if label_key(qval) != label_key(value):
+                    return UnitEvaluation(unit=unit, admissible=False, reason='scope_mismatch')
+            elif canonical(qval) != canonical(value):
+                return UnitEvaluation(unit=unit, admissible=False, reason='scope_mismatch')
+        else:
+            pending_scope[key] = value
+
+    if condition_mode == 'discharge' and pending_scope:
+        return UnitEvaluation(unit=unit, admissible=False, reason='scope_not_discharged', pending_scope=pending_scope)
+
+    active_rules = rules if rules is not None else DEFAULT_RULES
+    resolved_docs: dict[str, SourceDocument] = {}
+    premise_ids: tuple[str, ...] = ()
+
+    if unit.origin == 'rule_derived':
+        installed = active_rules.get(unit.rule)
+        if installed is None or installed[0] != unit.rule_version:
+            return UnitEvaluation(
+                unit=unit,
+                admissible=False,
+                reason='rule_version_unavailable',
+                issue_code='RULE_VERSION_UNAVAILABLE',
+                issue_stage='epistemic_integrity',
+                issue_disposition='RETRY',
+                issue_message=f"Rule '{unit.rule}' version '{unit.rule_version}' is not available.",
+                issue_detail={'unit_id': unit.unit_id, 'rule': unit.rule, 'version': unit.rule_version},
+                pending_scope=pending_scope,
+            )
+        premise_evals: list[UnitEvaluation] = []
+        for pid in unit.premises:
+            premise = units_by_id.get(pid) if units_by_id is not None else None
+            if premise is None:
+                return UnitEvaluation(
+                    unit=unit,
+                    admissible=False,
+                    reason='premise_missing',
+                    issue_code='MISSING_PREMISE_UNIT',
+                    issue_stage='epistemic_integrity',
+                    issue_disposition='RETRY',
+                    issue_message=f"Derived unit {unit.unit_id} references missing premise '{pid}'.",
+                    issue_detail={'unit_id': unit.unit_id, 'premise_id': pid},
+                    pending_scope=pending_scope,
+                )
+            p_eval = evaluate_unit_admissibility(
+                premise,
+                vocabulary=vocabulary,
+                policy=policy,
+                profile=profile,
+                units_by_id=units_by_id,
+                rules=active_rules,
+                documents=documents,
+                document_revisions=document_revisions,
+                as_of=as_of,
+                validity=validity,
+                allowed_assertion_kinds=admitted_kinds,
+                query_scope=query_scope,
+                query_conditions=query_conditions,
+                condition_mode=condition_mode,
+                field_evidences=field_evidences,
+                stored_field_evidences=stored_field_evidences,
+                require_field_evidence=require_field_evidence,
+                source_tiers=source_tiers,
+                source_weights=source_weights,
+                check_evidence_refs=check_evidence_refs,
+                skip_fidelity=skip_fidelity,
+                seen=seen | {unit.unit_id},
+            )
+            if not p_eval.admissible:
+                return UnitEvaluation(
+                    unit=unit,
+                    admissible=False,
+                    reason='premise_' + (p_eval.reason or 'ineligible'),
+                    issue_code=p_eval.issue_code or 'PREMISE_INADMISSIBLE',
+                    issue_stage=p_eval.issue_stage or 'epistemic_integrity',
+                    issue_disposition=p_eval.issue_disposition or 'RETRY',
+                    issue_message=p_eval.issue_message or f"Premise {pid} inadmissible: {p_eval.reason}",
+                    issue_detail={'unit_id': unit.unit_id, 'premise_id': pid, 'premise_reason': p_eval.reason, 'detail': p_eval.issue_detail},
+                    fidelity_findings=p_eval.fidelity_findings,
+                    pending_scope=pending_scope,
+                )
+            if p_eval.support is None:
+                return UnitEvaluation(
+                    unit=unit,
+                    admissible=False,
+                    reason='premise_unassessed',
+                    issue_code='UNASSESSED_READER_RELIABILITY',
+                    issue_stage='epistemic_integrity',
+                    issue_disposition='ESCALATE',
+                    issue_message=f"Premise {pid} of derived unit {unit.unit_id} has unassessed structural_reliability=None.",
+                    issue_detail={'unit_id': unit.unit_id, 'premise_id': pid},
+                    pending_scope=pending_scope,
+                )
+            premise_evals.append(p_eval)
+        try:
+            rule_valid = installed[1](p, tuple(pe.unit.proposition for pe in premise_evals)) is True
+        except Exception:
+            rule_valid = False
+        if not rule_valid:
+            return UnitEvaluation(
+                unit=unit,
+                admissible=False,
+                reason='invalid_derivation',
+                issue_code='INVALID_DERIVATION',
+                issue_stage='epistemic_integrity',
+                issue_disposition='RETRY',
+                issue_message=f"Derived unit {unit.unit_id} fails rule '{unit.rule}' check.",
+                issue_detail={'unit_id': unit.unit_id, 'rule': unit.rule},
+                pending_scope=pending_scope,
+            )
+        weakest = min(pe.support for pe in premise_evals if pe.support is not None)
+        support = round((policy.path_discount ** unit.rule_applications) * weakest, 6)
+        components = {
+            'weakest_premise': weakest,
+            'rule_applications': unit.rule_applications,
+            'path_discount': policy.path_discount,
+        }
+        for pe in premise_evals:
+            resolved_docs.update(pe.documents)
+        dependence = frozenset(d for pe in premise_evals for d in pe.dependence) or frozenset({f'unit:{unit.unit_id}'})
+        rank = min((pe.rank for pe in premise_evals), default=0)
+        premise_ids = tuple(pe.unit.unit_id for pe in premise_evals)
+    else:
+        if not unit.evidence:
+            return UnitEvaluation(
+                unit=unit,
+                admissible=False,
+                reason='missing_evidence',
+                issue_code='MISSING_EVIDENCE_DOCUMENT',
+                issue_stage='epistemic_integrity',
+                issue_disposition='RETRY',
+                issue_message=f"Unit {unit.unit_id} has no evidence references.",
+                issue_detail={'unit_id': unit.unit_id},
+                pending_scope=pending_scope,
+            )
+        if documents is not None:
+            for ref in unit.evidence:
+                if document_revisions is not None and (ref.document_id, ref.revision) not in document_revisions and ref.document_id not in documents:
+                    return UnitEvaluation(
+                        unit=unit,
+                        admissible=False,
+                        reason='stale_evidence',
+                        issue_code='MISSING_EVIDENCE_DOCUMENT',
+                        issue_stage='epistemic_integrity',
+                        issue_disposition='RETRY',
+                        issue_message=f"Evidence document '{ref.document_id}' revision '{ref.revision}' unavailable.",
+                        issue_detail={'unit_id': unit.unit_id, 'document_id': ref.document_id, 'revision': ref.revision},
+                        pending_scope=pending_scope,
+                    )
+                doc = documents.get(ref.document_id)
+                if doc is None:
+                    return UnitEvaluation(
+                        unit=unit,
+                        admissible=False,
+                        reason='stale_evidence',
+                        issue_code='MISSING_EVIDENCE_DOCUMENT',
+                        issue_stage='epistemic_integrity',
+                        issue_disposition='RETRY',
+                        issue_message=f"Evidence document '{ref.document_id}' unavailable.",
+                        issue_detail={'unit_id': unit.unit_id, 'document_id': ref.document_id, 'revision': ref.revision},
+                        pending_scope=pending_scope,
+                    )
+                if doc.revision != ref.revision:
+                    return UnitEvaluation(
+                        unit=unit,
+                        admissible=False,
+                        reason='stale_evidence',
+                        issue_code='STALE_EVIDENCE_REVISION',
+                        issue_stage='epistemic_integrity',
+                        issue_disposition='RETRY',
+                        issue_message=f"Unit {unit.unit_id} cites stale revision '{ref.revision}' of '{ref.document_id}'.",
+                        issue_detail={'unit_id': unit.unit_id, 'document_id': ref.document_id, 'cited_revision': ref.revision, 'current_revision': doc.revision},
+                        pending_scope=pending_scope,
+                    )
+                if check_evidence_refs and (ref.start < 0 or ref.end > len(doc.text) or doc.text[ref.start:ref.end] != ref.quote):
+                    return UnitEvaluation(
+                        unit=unit,
+                        admissible=False,
+                        reason='stale_evidence',
+                        issue_code='QUOTE_SPAN_MISMATCH',
+                        issue_stage='epistemic_integrity',
+                        issue_disposition='RETRY',
+                        issue_message='Evidence quote does not match stored document slice.',
+                        issue_detail={'unit_id': unit.unit_id, 'document_id': ref.document_id},
+                        pending_scope=pending_scope,
+                    )
+                resolved_docs[ref.document_id] = doc
+
+            if any(d.attribution not in policy.allowed_source_attributions for d in resolved_docs.values()):
+                return UnitEvaluation(unit=unit, admissible=False, reason='source_attribution_not_admitted', documents=resolved_docs, pending_scope=pending_scope)
+
+            if not skip_fidelity:
+                fe_by_field: dict[str, FieldEvidence] = {}
+                raw_stored_fe = stored_field_evidences.get(unit.unit_id) if stored_field_evidences else None
+                if raw_stored_fe:
+                    for fname, ref_dict in raw_stored_fe.items():
+                        try:
+                            fe_by_field[fname] = FieldEvidence(fname, EvidenceRef(**ref_dict))
+                        except (TypeError, ValueError) as exc:
+                            return UnitEvaluation(
+                                unit=unit,
+                                admissible=False,
+                                reason='fidelity:INVALID_FIELD_EVIDENCE',
+                                issue_code='INVALID_FIELD_EVIDENCE',
+                                issue_stage='epistemic_integrity',
+                                issue_disposition='RETRY',
+                                issue_message=f"Invalid stored FieldEvidence for '{fname}': {exc}",
+                                issue_detail={'unit_id': unit.unit_id, 'field': fname},
+                                documents=resolved_docs,
+                                pending_scope=pending_scope,
+                            )
+                if field_evidences and unit.unit_id in field_evidences:
+                    for caller_fe in field_evidences[unit.unit_id]:
+                        fe_by_field[caller_fe.field] = caller_fe
+                merged_fe = list(fe_by_field.values()) if fe_by_field else None
+                primary_doc = resolved_docs[unit.evidence[0].document_id]
+                f_findings = verify_extraction_fidelity(
+                    primary_doc.text,
+                    unit,
+                    field_evidence=merged_fe,
+                    require_field_evidence=require_field_evidence,
+                    vocabulary=vocabulary,
+                    documents=resolved_docs,
+                )
+                if f_findings:
+                    return UnitEvaluation(
+                        unit=unit,
+                        admissible=False,
+                        reason=f'fidelity:{f_findings[0].code}',
+                        issue_code=f_findings[0].code,
+                        issue_stage='epistemic_integrity',
+                        issue_disposition='RETRY',
+                        issue_message=f_findings[0].message,
+                        issue_detail={'unit_id': unit.unit_id, 'field': f_findings[0].field, 'detail': f_findings[0].detail},
+                        fidelity_findings=tuple(f_findings),
+                        documents=resolved_docs,
+                        pending_scope=pending_scope,
+                    )
+
+        if resolved_docs:
+            doc_w = min(
+                source_weights[d.document_id] if (source_weights and d.document_id in source_weights) else d.weight
+                for d in resolved_docs.values()
+            )
+            rank = min(
+                source_tiers[d.document_id] if (source_tiers and d.document_id in source_tiers) else d.authority_rank
+                for d in resolved_docs.values()
+            )
+            dependence = frozenset(d.dependence_group or ('document:' + d.document_id) for d in resolved_docs.values())
+        else:
+            doc_w = min(
+                (source_weights[r.document_id] if (source_weights and r.document_id in source_weights) else 1.0)
+                for r in unit.evidence
+            )
+            rank = min(
+                (source_tiers[r.document_id] if (source_tiers and r.document_id in source_tiers) else 0)
+                for r in unit.evidence
+            )
+            dependence = frozenset('document:' + r.document_id for r in unit.evidence)
+
+        components = {
+            'span': 1.0,
+            'structure': unit.structural_reliability,
+            'applicability': doc_w,
+            'basis': profile.weight(unit.basis),
+        }
+        support = None if any(v is None for v in components.values()) else round(min(components.values()), 6)
+
+    cstatus = p.get('condition_status')
+    if cstatus == 'unknown_condition':
+        return UnitEvaluation(
+            unit=unit,
+            admissible=False,
+            reason='unknown_condition',
+            issue_code='UNKNOWN_CONDITION',
+            issue_stage='epistemic_integrity',
+            issue_disposition='ESCALATE',
+            issue_message=f"Unit {unit.unit_id} has 'unknown_condition' for {p['entity']}.{p['predicate']}; cannot authorize.",
+            issue_detail={'unit_id': unit.unit_id},
+            documents=resolved_docs,
+            pending_scope=pending_scope,
+        )
+    if cstatus == 'unrepresentable_condition':
+        return UnitEvaluation(
+            unit=unit,
+            admissible=False,
+            reason='unrepresentable_condition',
+            issue_code='UNREPRESENTABLE_CONDITION',
+            issue_stage='epistemic_integrity',
+            issue_disposition='ESCALATE',
+            issue_message=f"Unit {unit.unit_id} has 'unrepresentable_condition' for {p['entity']}.{p['predicate']}; cannot authorize.",
+            issue_detail={'unit_id': unit.unit_id},
+            documents=resolved_docs,
+            pending_scope=pending_scope,
+        )
+
+    pending_conditions: list[dict[str, Any]] = []
+    outcomes = [(cond, vocabulary.evaluate_condition(pred_spec, cond, query_conditions)) for cond in p.get('conditions', ())]
+    if any(out == 'invalid' for _, out in outcomes):
+        return UnitEvaluation(
+            unit=unit,
+            admissible=False,
+            reason='condition_invalid',
+            issue_code='INVALID_CONDITION_VALUE',
+            issue_stage='epistemic_integrity',
+            issue_disposition='ESCALATE',
+            issue_message=f"Condition for {p['entity']}.{p['predicate']} received an invalid or incommensurable runtime value.",
+            issue_detail={'unit_id': unit.unit_id, 'conditions': list(p.get('conditions', ()))},
+            documents=resolved_docs,
+            pending_scope=pending_scope,
+        )
+    if any(out == 'false' for _, out in outcomes):
+        return UnitEvaluation(
+            unit=unit,
+            admissible=False,
+            reason='condition_not_met',
+            documents=resolved_docs,
+            pending_scope=pending_scope,
+        )
+    pending_conditions = [cond for cond, out in outcomes if out == 'pending']
+    if condition_mode == 'discharge' and pending_conditions:
+        return UnitEvaluation(
+            unit=unit,
+            admissible=False,
+            reason='condition_not_discharged',
+            issue_code='PENDING_CONDITION',
+            issue_stage='epistemic_integrity',
+            issue_disposition='ESCALATE',
+            issue_message=f"Condition for {p['entity']}.{p['predicate']} cannot be evaluated because operational context is missing.",
+            issue_detail={'unit_id': unit.unit_id, 'conditions': pending_conditions},
+            documents=resolved_docs,
+            pending_conditions=pending_conditions,
+            pending_scope=pending_scope,
+        )
+
+    return UnitEvaluation(
+        unit=unit,
+        admissible=True,
+        documents=resolved_docs,
+        support=support,
+        components=components,
+        dependence=dependence,
+        rank=rank,
+        pending_conditions=pending_conditions,
+        pending_scope=pending_scope,
+        premise_ids=premise_ids,
+    )
 
 
 class EvidenceLayer:
@@ -177,6 +628,15 @@ class EvidenceLayer:
                 read_errors.extend(st['errors'])
         field_evidences = {uid: rec for uid, _, rec in heads.get('field_evidence', []) if rec}
         rejections = [{'rejection_id': rid, **rec} for rid, rec in raw['rejections']]
+        ledger_state_digest = digest({
+            'documents': {doc_id: doc.revision for doc_id, doc in sorted(docs.items())},
+            'document_revisions': sorted(raw['document_revisions'].keys()),
+            'units': sorted(u.unit_id for u in units),
+            'unread_documents': list(unread),
+            'read_errors': read_errors,
+            'field_evidences': {uid: digest(rec) for uid, rec in sorted(field_evidences.items())},
+            'rejections': [r['rejection_id'] for r in rejections],
+        })
         return {
             'configuration': self.configuration,
             'documents': docs,
@@ -186,60 +646,86 @@ class EvidenceLayer:
             'read_errors': tuple(read_errors),
             'field_evidences': field_evidences,
             'rejections': rejections,
+            'ledger_state_digest': ledger_state_digest,
         }
 
     def ingest(self, documents):
         """Store sources; if a reader is configured, record its proposals and admit conforming units."""
         if isinstance(documents, SourceDocument):
             documents = [documents]
-        summary = {'documents_ingested': 0, 'units_admitted': 0, 'proposals_rejected': 0,
-                   'rejection_reasons': {}, 'unread_documents': [], 'read_errors': []}
+        else:
+            documents = list(documents)
         for document in documents:
             if not isinstance(document, SourceDocument):
                 raise TypeError('Use SourceDocument; authority, weight and dependence are application metadata')
-            self.store.put('document', document.revision, asdict(document), head=document.document_id)
-            summary['documents_ingested'] += 1
+
+        # Run external/uncached reader proposals outside SQLite write lock, then persist the whole batch atomically.
+        prepared = []
+        local_read_cache: dict[str, dict[str, Any]] = {}
+        for document in documents:
             if self.reader is None:
-                summary['unread_documents'].append(document.document_id)
-                self._record_doc_read_status(document.document_id, document.revision, unread=True, errors=[])
+                prepared.append((document, None, None, None, None))
                 continue
             request = {'task': 'propose', 'contract': CONTRACT, 'reader': self.reader.identity,
                        'document': {'document_id': document.document_id, 'revision': document.revision,
                                     'text': document.text},
                        'vocabulary': self.vocabulary.describe(), 'profile': self.profile.describe()}
             key = digest(request)
-            _, cached = self.store.head('read', key)
+            cached = local_read_cache.get(key)
+            already_stored = cached is not None
             if cached is None:
-                try:
-                    result = self.reader.propose(copy.deepcopy(request))
-                    canonical(result)
-                except Exception as exc:  # recorded, never converted into evidence
-                    self._event({'task': 'propose', 'request_key': key, 'error_type': type(exc).__name__,
-                                 'diagnostics': getattr(exc, 'diagnostics', None)})
-                    err = {'document_id': document.document_id, 'error_type': type(exc).__name__}
+                _, cached = self.store.head('read', key)
+                already_stored = cached is not None
+            if cached is not None:
+                prepared.append((document, key, cached, None, already_stored))
+                continue
+            try:
+                result = self.reader.propose(copy.deepcopy(request))
+                canonical(result)
+            except Exception as exc:  # recorded, never converted into evidence
+                prepared.append((document, key, None, type(exc).__name__, getattr(exc, 'diagnostics', None)))
+            else:
+                cached = {'request_key': key, 'result': json.loads(canonical(result))}
+                local_read_cache[key] = cached
+                prepared.append((document, key, cached, None, False))
+
+        summary = {'documents_ingested': 0, 'units_admitted': 0, 'proposals_rejected': 0,
+                   'rejection_reasons': {}, 'unread_documents': [], 'read_errors': []}
+        with self.store.transaction(mode='IMMEDIATE'):
+            for document, key, cached, error_type, diag_or_flag in prepared:
+                self.store.put('document', document.revision, asdict(document), head=document.document_id)
+                summary['documents_ingested'] += 1
+                if self.reader is None:
+                    summary['unread_documents'].append(document.document_id)
+                    self._record_doc_read_status(document.document_id, document.revision, unread=True, errors=[])
+                    continue
+                if error_type is not None:
+                    self._event({'task': 'propose', 'request_key': key, 'error_type': error_type,
+                                 'diagnostics': diag_or_flag})
+                    err = {'document_id': document.document_id, 'error_type': error_type}
                     summary['read_errors'].append(err)
                     summary['unread_documents'].append(document.document_id)
                     self._record_doc_read_status(document.document_id, document.revision, unread=True, errors=[err])
                     continue
-                cached = {'request_key': key, 'result': json.loads(canonical(result))}
-                self.store.put('read', key, cached, head=key)
-            result = cached['result']
-            producer = {'kind': 'reader', 'identity': self.reader.identity, 'read_key': key}
-            doc_errors = [{'document_id': document.document_id, **e} for e in result.get('errors', ())]
-            if doc_errors:
-                summary['read_errors'].extend(doc_errors)
-                summary['unread_documents'].append(document.document_id)
-            self._record_doc_read_status(document.document_id, document.revision,
-                                         unread=bool(doc_errors), errors=doc_errors)
-            for rejected in result.get('rejected', []):
-                self._reject(rejected.get('proposal'), rejected.get('basis'), producer,
-                             {'reason': rejected.get('reason', 'reader_contract'), 'path': '', 'detail': rejected.get('detail')},
-                             summary)
-            for item in result.get('items', []):
-                uid = self._admit(item.get('proposal'), item.get('basis'), item.get('evidence'), 'reader', producer,
-                                  getattr(self.reader, 'structural_reliability', None), summary)
-                if uid is not None and item.get('field_evidence'):
-                    self._store_field_evidence(uid, item['field_evidence'])
+                if not diag_or_flag:
+                    self.store.put('read', key, cached, head=key)
+                result = cached['result']
+                producer = {'kind': 'reader', 'identity': self.reader.identity, 'read_key': key}
+                doc_errors = [{'document_id': document.document_id, **e} for e in result.get('errors', ())]
+                if doc_errors:
+                    summary['read_errors'].extend(doc_errors)
+                    summary['unread_documents'].append(document.document_id)
+                self._record_doc_read_status(document.document_id, document.revision,
+                                             unread=bool(doc_errors), errors=doc_errors)
+                for rejected in result.get('rejected', []):
+                    self._reject(rejected.get('proposal'), rejected.get('basis'), producer,
+                                 {'reason': rejected.get('reason', 'reader_contract'), 'path': '', 'detail': rejected.get('detail')},
+                                 summary)
+                for item in result.get('items', []):
+                    uid = self._admit(item.get('proposal'), item.get('basis'), item.get('evidence'), 'reader', producer,
+                                      getattr(self.reader, 'structural_reliability', None), summary)
+                    if uid is not None and item.get('field_evidence'):
+                        self._store_field_evidence(uid, item['field_evidence'])
         return summary
 
     def ingest_units(self, items, *, attestor: str, structural_reliability: float | None = 1.0):
@@ -248,20 +734,21 @@ class EvidenceLayer:
             raise ValueError('An application attestor is required')
         summary = {'units_admitted': 0, 'proposals_rejected': 0, 'rejection_reasons': {}, 'unit_ids': []}
         producer = {'kind': 'application', 'attestor': attestor}
-        for item in items:
-            evidence = [asdict(r) if isinstance(r, EvidenceRef) else r for r in item.get('evidence', ())]
-            unit_id = self._admit(item.get('proposal'), item.get('basis', EXPLICIT), evidence, 'application',
-                                  producer, structural_reliability, summary)
-            if unit_id is not None:
-                if item.get('field_evidence'):
-                    self._store_field_evidence(unit_id, item['field_evidence'])
-                for ev in evidence:
-                    doc_id = ev.get('document_id') if isinstance(ev, Mapping) else None
-                    if doc_id:
-                        _, st = self.store.head('doc_read_status', doc_id)
-                        if st and st.get('unread') and not st.get('errors'):
-                            self._record_doc_read_status(doc_id, st['revision'], unread=False, errors=[])
-            summary['unit_ids'].append(unit_id)
+        with self.store.transaction(mode='IMMEDIATE'):
+            for item in items:
+                evidence = [asdict(r) if isinstance(r, EvidenceRef) else r for r in item.get('evidence', ())]
+                unit_id = self._admit(item.get('proposal'), item.get('basis', EXPLICIT), evidence, 'application',
+                                      producer, structural_reliability, summary)
+                if unit_id is not None:
+                    if item.get('field_evidence'):
+                        self._store_field_evidence(unit_id, item['field_evidence'])
+                    for ev in evidence:
+                        doc_id = ev.get('document_id') if isinstance(ev, Mapping) else None
+                        if doc_id:
+                            _, st = self.store.head('doc_read_status', doc_id)
+                            if st and st.get('unread') and not st.get('errors'):
+                                self._record_doc_read_status(doc_id, st['revision'], unread=False, errors=[])
+                summary['unit_ids'].append(unit_id)
         return summary
 
     def _reject(self, proposal, basis, producer, error, summary):
@@ -313,12 +800,8 @@ class EvidenceLayer:
         return EvidenceUnit.from_record(record)
 
     def rejections(self, *, entity=None, predicate=None):
-        with self.store.connect() as db:
-            ids = [r[0] for r in db.execute('SELECT record_id FROM semantic_records WHERE project_id=? AND kind=? ORDER BY rowid',
-                                          (self.store.project_id, 'rejection'))]
         out = []
-        for rid in ids:
-            record = self.store.get('rejection', rid)
+        for rid, record in self.store.by_kind('rejection'):
             if entity is not None and record['hint'].get('entity') != entity:
                 continue
             if predicate is not None and record['hint'].get('predicate') != predicate:
@@ -334,22 +817,23 @@ class EvidenceLayer:
         premise_ids = tuple(premises)
         if not premise_ids:
             raise ValueError('Derivations need premises; empty-premise axioms are not supported')
-        units = [self.unit(pid) for pid in premise_ids]
-        proposition = self.vocabulary.proposition(proposal)
-        version, checker = self._rules[rule]
-        try:
-            valid = checker(proposition, tuple(u.proposition for u in units)) is True
-        except Exception:
-            valid = False
-        if not valid:
-            raise ValueError('Rule does not justify this conclusion from these premises')
-        applications = (len(units) - 1 if rule.startswith('transitive:') else 1) + max(u.rule_applications for u in units)
-        unit = EvidenceUnit(proposition, (), EXPLICIT, 'rule_derived', {'kind': 'rule', 'rule': rule},
-                            None, premise_ids, rule, version, applications, proposal=json.loads(canonical(proposal)))
-        if unit.unit_id in premise_ids:
-            raise ValueError('Cyclic derivation')
-        self.store.put('unit', unit.unit_id, unit.record(), head=unit.unit_id)
-        return unit.unit_id
+        with self.store.transaction(mode='IMMEDIATE'):
+            units = [self.unit(pid) for pid in premise_ids]
+            proposition = self.vocabulary.proposition(proposal)
+            version, checker = self._rules[rule]
+            try:
+                valid = checker(proposition, tuple(u.proposition for u in units)) is True
+            except Exception:
+                valid = False
+            if not valid:
+                raise ValueError('Rule does not justify this conclusion from these premises')
+            applications = (len(units) - 1 if rule.startswith('transitive:') else 1) + max(u.rule_applications for u in units)
+            unit = EvidenceUnit(proposition, (), EXPLICIT, 'rule_derived', {'kind': 'rule', 'rule': rule},
+                                None, premise_ids, rule, version, applications, proposal=json.loads(canonical(proposal)))
+            if unit.unit_id in premise_ids:
+                raise ValueError('Cyclic derivation')
+            self.store.put('unit', unit.unit_id, unit.record(), head=unit.unit_id)
+            return unit.unit_id
 
     def derive_paths(self, entity, predicate, *, as_of=None, max_hops=3, max_paths=20):
         from .paths import derive_paths
@@ -380,155 +864,43 @@ class EvidenceLayer:
         kinds=None,
         validity='filter',
         *,
+        units_by_id=None,
         documents_override=None,
+        document_revisions_override=None,
         field_evidences_map=None,
         field_evidence_overrides=None,
         require_field_evidence=(),
         skip_fidelity=False,
     ):
-        """Return (basis, None) or (None, reason) for a unit under a query and policy."""
-        if unit.unit_id in seen:
-            return None, 'cyclic_dependency'
-        p = unit.proposition
-        if p['assertion_kind'] not in (kinds or self.policy.allowed_assertion_kinds):
-            return None, 'assertion_kind_not_admitted'
-        if validity == 'filter':
-            at = instant(query.as_of)
-            start, end = instant(p['valid_from']), instant(p['valid_until'])
-            if (start and at < start) or (end and at > end):
-                return None, 'outside_validity'
-        cstatus = p.get('condition_status')
-        if cstatus in {'unknown_condition', 'unrepresentable_condition'}:
-            return None, cstatus
-        pending_scope = {}
-        predicate = self.vocabulary.predicate(p['predicate'])
-        for key, value in p['scope'].items():
-            if key in {'event_id', 'clause_id'}:
-                if key in query.context:
-                    qval = query.context[key]
-                    if not isinstance(qval, str) or label_key(qval) != label_key(value):
-                        return None, 'scope_mismatch'
-                continue
-            if key in query.context:
-                qval = query.context[key]
-                if isinstance(qval, str):
-                    if label_key(qval) != label_key(value):
-                        return None, 'scope_mismatch'
-                elif canonical(qval) != canonical(value):
-                    return None, 'scope_mismatch'
-            else:
-                pending_scope[key] = value
-        pending_conditions = []
-        for condition in p['conditions']:
-            state = self._condition_state(condition, query.context, predicate)
-            if state == 'invalid':
-                return None, 'condition_invalid'
-            if state is False:
-                return None, 'condition_not_met'
-            if state is None:
-                pending_conditions.append(condition)
-        if mode == 'discharge' and (pending_conditions or pending_scope):
-            return None, 'condition_not_discharged' if pending_conditions else 'scope_not_discharged'
+        """Return (basis, None) or (None, reason) for a unit under the unified v4 admissibility core."""
+        docs = {d.document_id: d for d in self.documents} if documents_override is None else documents_override
+        units_map = {u.unit_id: u for u in self.units} if units_by_id is None else units_by_id
         fe_map = self.field_evidences if field_evidences_map is None else field_evidences_map
-        if unit.origin == 'rule_derived':
-            installed = self._rules.get(unit.rule)
-            if installed is None or installed[0] != unit.rule_version:
-                return None, 'rule_version_unavailable'
-            bases = []
-            for pid in unit.premises:
-                try:
-                    premise = self.unit(pid)
-                except KeyError:
-                    return None, 'premise_missing'
-                basis, reason = self._eligible(
-                    premise,
-                    query,
-                    mode,
-                    seen | {unit.unit_id},
-                    kinds,
-                    validity,
-                    documents_override=documents_override,
-                    field_evidences_map=fe_map,
-                    field_evidence_overrides=field_evidence_overrides,
-                    require_field_evidence=require_field_evidence,
-                    skip_fidelity=skip_fidelity,
-                )
-                if basis is None:
-                    return None, 'premise_' + reason
-                if basis['support'] is None:
-                    return None, 'premise_unassessed'
-                bases.append(basis)
-            try:
-                valid = installed[1](p, tuple(b['unit'].proposition for b in bases)) is True
-            except Exception:
-                valid = False
-            if not valid:
-                return None, 'invalid_derivation'
-            weakest = min(b['support'] for b in bases)
-            support = round((self.policy.path_discount ** unit.rule_applications) * weakest, 6)
-            documents = {k: v for b in bases for k, v in b['documents'].items()}
-            return {'unit': unit, 'documents': documents, 'support': support,
-                    'components': {'weakest_premise': weakest, 'rule_applications': unit.rule_applications,
-                                   'path_discount': self.policy.path_discount},
-                    'dependence': frozenset(d for b in bases for d in b['dependence']),
-                    'rank': min(b['rank'] for b in bases), 'pending_conditions': pending_conditions,
-                    'pending_scope': pending_scope, 'premise_bases': [b['unit'].unit_id for b in bases]}, None
-        if documents_override is not None:
-            if not unit.evidence:
-                return None, 'stale_evidence'
-            documents = {}
-            for ref in unit.evidence:
-                doc = documents_override.get(ref.document_id)
-                if (
-                    doc is None
-                    or doc.revision != ref.revision
-                    or ref.end > len(doc.text)
-                    or doc.text[ref.start:ref.end] != ref.quote
-                ):
-                    return None, 'stale_evidence'
-                documents[ref.document_id] = doc
-        else:
-            try:
-                self._refs_valid(unit.evidence)
-            except ValueError:
-                return None, 'stale_evidence'
-            documents = {r.document_id: self._document(r.document_id, r.revision) for r in unit.evidence}
-        if any(d.attribution not in self.policy.allowed_source_attributions for d in documents.values()):
-            return None, 'source_attribution_not_admitted'
-        if not self.profile.admissible(unit.basis):
-            return None, 'basis_not_admissible_under_profile'
-        if not skip_fidelity:
-            fe_by_field: dict[str, FieldEvidence] = {}
-            raw_stored_fe = fe_map.get(unit.unit_id)
-            if raw_stored_fe:
-                for fname, ref_dict in raw_stored_fe.items():
-                    try:
-                        fe_by_field[fname] = FieldEvidence(fname, EvidenceRef(**ref_dict))
-                    except (TypeError, ValueError):
-                        return None, 'fidelity:INVALID_FIELD_EVIDENCE'
-            if field_evidence_overrides and unit.unit_id in field_evidence_overrides:
-                for caller_fe in field_evidence_overrides[unit.unit_id]:
-                    fe_by_field[caller_fe.field] = caller_fe
-            merged_fe = list(fe_by_field.values()) if fe_by_field else None
-            primary_doc = documents[unit.evidence[0].document_id]
-            f_findings = verify_extraction_fidelity(
-                primary_doc.text,
-                unit,
-                field_evidence=merged_fe,
-                require_field_evidence=require_field_evidence,
-                vocabulary=self.vocabulary,
-                documents=documents,
-            )
-            if f_findings:
-                return None, f'fidelity:{f_findings[0].code}'
-        components = {'span': 1.0, 'structure': unit.structural_reliability,
-                      'applicability': min(d.weight for d in documents.values()),
-                      'basis': self.profile.weight(unit.basis)}
-        support = None if any(v is None for v in components.values()) else round(min(components.values()), 6)
-        dependence = frozenset(d.dependence_group or 'document:' + d.document_id for d in documents.values())
-        return {'unit': unit, 'documents': documents, 'support': support, 'components': components,
-                'dependence': dependence, 'rank': min(d.authority_rank for d in documents.values()),
-                'pending_conditions': pending_conditions, 'pending_scope': pending_scope}, None
+        ev = evaluate_unit_admissibility(
+            unit,
+            vocabulary=self.vocabulary,
+            policy=self.policy,
+            profile=self.profile,
+            units_by_id=units_map,
+            rules=self._rules,
+            documents=docs,
+            document_revisions=document_revisions_override,
+            as_of=query.as_of,
+            validity=validity,
+            allowed_assertion_kinds=kinds,
+            query_scope=query.context,
+            query_conditions=query.context,
+            condition_mode=mode,
+            field_evidences=field_evidence_overrides,
+            stored_field_evidences=fe_map,
+            require_field_evidence=require_field_evidence,
+            check_evidence_refs=True,
+            skip_fidelity=skip_fidelity,
+            seen=seen,
+        )
+        if not ev.admissible:
+            return None, ev.reason
+        return ev.as_basis(), None
 
     # ------------------------------------------------------------------ queries
     def _query(self, query):
@@ -558,10 +930,14 @@ class EvidenceLayer:
             spec = self.vocabulary.predicate(query.predicate)
         except UnmappedProposal as exc:
             return self._issue({'status': 'invalid_query', 'abstain': True, 'reason': exc.as_dict(), 'results': []})
-        fe_map = self.field_evidences
-        docs_map = {d.document_id: d for d in self.documents}
+        snap = self.snapshot()
+        fe_map = snap['field_evidences']
+        docs_map = snap['documents']
+        doc_revs_map = snap['document_revisions']
+        units_list = snap['units']
+        units_map = {u.unit_id: u for u in units_list}
         bases, excluded = [], []
-        for unit in self.units:
+        for unit in units_list:
             p = unit.proposition
             if label_key(p['entity']) != label_key(query.entity) or p['predicate'] != query.predicate:
                 continue
@@ -571,14 +947,19 @@ class EvidenceLayer:
                 conditions,
                 kinds=assertion_kinds,
                 validity=validity,
+                units_by_id=units_map,
                 documents_override=docs_map,
+                document_revisions_override=doc_revs_map,
                 field_evidences_map=fe_map,
             )
             if basis is None:
                 excluded.append({'unit_id': unit.unit_id, 'reason': reason})
             else:
                 bases.append(basis)
-        rejected = self.rejections(entity=query.entity, predicate=query.predicate)
+        rejected = [
+            r for r in snap['rejections']
+            if r['hint'].get('entity') == query.entity and r['hint'].get('predicate') == query.predicate
+        ]
         coverage = {'eligible_units': len(bases), 'excluded_units': len(excluded),
                     'rejected_proposals': len(rejected), 'rejection_ids': [r['rejection_id'] for r in rejected],
                     'scope': 'ledger for this project and vocabulary; not completeness of the source corpus'}
@@ -598,11 +979,14 @@ class EvidenceLayer:
         for basis in bases:
             used.update(basis.get('premise_bases', ()))
         revisions = sorted({d.revision for b in bases for d in b['documents'].values()})
+        unit_digests = {
+            uid: digest((units_map[uid] if uid in units_map else self.unit(uid)).record())
+            for uid in sorted(used)
+        }
         return self._issue({'query': asdict(query), 'conditions_mode': conditions, 'validity_mode': validity, 'status': status,
                             'abstain': status != 'answered', 'reason': reason, 'results': results,
                             'excluded': excluded, 'coverage': coverage, 'configuration': self.configuration,
-                            'basis': {'unit_record_digests': {uid: digest(self.unit(uid).record()) for uid in sorted(used)},
-                                      'source_revisions': revisions},
+                            'basis': {'unit_record_digests': unit_digests, 'source_revisions': revisions},
                             'support_kind': 'policy index, not a calibrated probability',
                             'source_authentication': 'not_verified'})
 

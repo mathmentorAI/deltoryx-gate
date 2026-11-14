@@ -98,64 +98,6 @@ def _scope_specificity(unit_scope: Mapping[str, str]) -> int:
     return sum(1 for k in unit_scope if k != "clause_id")
 
 
-def _eval_condition(
-    cond: Mapping[str, Any],
-    query_conditions: Mapping[str, Any],
-    vocabulary: Vocabulary,
-) -> str:
-    """Evaluate one declared condition against *query_conditions*.
-
-    Returns 'true', 'false', or 'pending' (when query_conditions lacks the field).
-    """
-    field_name = cond["field"]
-    if field_name not in query_conditions or query_conditions[field_name] is None:
-        return "pending"
-
-    op = cond["operator"]
-    expected = cond["value"]
-    actual = query_conditions[field_name]
-
-    if isinstance(expected, dict) and "unit" in expected:
-        if isinstance(actual, dict) and "value" in actual and "unit" in actual:
-            amt, base = vocabulary.units.to_base(actual["value"], actual["unit"], f"query_conditions/{field_name}")
-            if base != expected["unit"]:
-                return "pending"
-            lhs = Decimal(amt)
-        else:
-            lhs = Decimal(str(actual))
-        rhs = Decimal(str(expected["value"]))
-    elif isinstance(expected, bool) or isinstance(actual, bool):
-        if op == "eq":
-            return "true" if bool(actual) is bool(expected) else "false"
-        if op == "ne":
-            return "true" if bool(actual) is not bool(expected) else "false"
-        return "pending"
-    elif op in {"lt", "le", "gt", "ge"}:
-        lhs = Decimal(str(actual))
-        rhs = Decimal(str(expected))
-    else:
-        eq = label_key(str(actual)) == label_key(str(expected))
-        if op == "eq":
-            return "true" if eq else "false"
-        if op == "ne":
-            return "true" if not eq else "false"
-        return "pending"
-
-    if op == "eq":
-        return "true" if lhs == rhs else "false"
-    if op == "ne":
-        return "true" if lhs != rhs else "false"
-    if op == "lt":
-        return "true" if lhs < rhs else "false"
-    if op == "le":
-        return "true" if lhs <= rhs else "false"
-    if op == "gt":
-        return "true" if lhs > rhs else "false"
-    if op == "ge":
-        return "true" if lhs >= rhs else "false"
-    return "pending"
-
-
 def _filter_admissible_units(
     units: Sequence[EvidenceUnit],
     *,
@@ -167,6 +109,12 @@ def _filter_admissible_units(
     query_scope: Mapping[str, str] | None = None,
     documents: Mapping[str, SourceDocument] | None = None,
     excluded_unit_ids: set[str] | frozenset[str] = frozenset(),
+    vocabulary: Vocabulary | None = None,
+    field_evidences: Mapping[str, Sequence[FieldEvidence]] | None = None,
+    stored_field_evidences: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
+    require_field_evidence: Sequence[str] = (),
+    check_evidence_refs: bool = True,
+    skip_fidelity: bool = False,
 ) -> list[EvidenceUnit]:
     """Single shared admissibility filter used by both fidelity checks and scope resolution."""
     eligible: list[EvidenceUnit] = []
@@ -187,13 +135,54 @@ def _filter_admissible_units(
             continue
         if not profile.admissible(u.basis):
             continue
-        if documents:
+        if not u.evidence:
+            if u.origin != "rule_derived":
+                continue
+        elif documents:
             if any(
                 ref.document_id in documents
                 and documents[ref.document_id].attribution not in policy.allowed_source_attributions
                 for ref in u.evidence
             ):
                 continue
+            if check_evidence_refs:
+                refs_ok = True
+                for ref in u.evidence:
+                    doc = documents.get(ref.document_id)
+                    if (
+                        doc is None
+                        or doc.revision != ref.revision
+                        or ref.start < 0
+                        or ref.end > len(doc.text)
+                        or doc.text[ref.start : ref.end] != ref.quote
+                    ):
+                        refs_ok = False
+                        break
+                if not refs_ok:
+                    continue
+                if not skip_fidelity:
+                    fe_by_field: dict[str, FieldEvidence] = {}
+                    raw_fe = stored_field_evidences.get(u.unit_id) if stored_field_evidences else None
+                    if raw_fe:
+                        try:
+                            for fname, ref_dict in raw_fe.items():
+                                fe_by_field[fname] = FieldEvidence(fname, EvidenceRef(**ref_dict))
+                        except (TypeError, ValueError):
+                            continue
+                    if field_evidences and u.unit_id in field_evidences:
+                        for caller_fe in field_evidences[u.unit_id]:
+                            fe_by_field[caller_fe.field] = caller_fe
+                    merged_fe = list(fe_by_field.values()) if fe_by_field else None
+                    primary_doc = documents[u.evidence[0].document_id]
+                    if verify_extraction_fidelity(
+                        primary_doc.text,
+                        u,
+                        field_evidence=merged_fe,
+                        require_field_evidence=require_field_evidence,
+                        vocabulary=vocabulary,
+                        documents=documents,
+                    ):
+                        continue
         eligible.append(u)
     return eligible
 
@@ -213,6 +202,11 @@ def resolve_scope_and_precedence(
     documents: Mapping[str, SourceDocument] | Sequence[SourceDocument] | None = None,
     policy: AcceptancePolicy | None = None,
     profile: EpistemicProfile = DEFAULT_PROFILE,
+    field_evidences: Mapping[str, Sequence[FieldEvidence]] | None = None,
+    stored_field_evidences: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
+    require_field_evidence: Sequence[str] = (),
+    check_evidence_refs: bool = True,
+    skip_fidelity: bool = False,
 ) -> dict[str, Any]:
     """Resolve governing value for `(entity, predicate)` with scope/condition overlap & clause precedence."""
     q_scope = dict(query_scope or {})
@@ -235,6 +229,12 @@ def resolve_scope_and_precedence(
         as_of=as_of,
         query_scope=q_scope,
         documents=doc_map,
+        vocabulary=vocabulary,
+        field_evidences=field_evidences,
+        stored_field_evidences=stored_field_evidences,
+        require_field_evidence=require_field_evidence,
+        check_evidence_refs=check_evidence_refs,
+        skip_fidelity=skip_fidelity,
     )
 
     if not matching:
@@ -271,14 +271,27 @@ def resolve_scope_and_precedence(
     if issues:
         return {"status": "BLOCKED_GAP", "value": None, "winning_units": (), "issues": tuple(issues)}
 
-    # 2. Evaluate conditions against query_conditions
+    # 2. Evaluate conditions against query_conditions using Vocabulary.evaluate_condition
+    spec = vocabulary.predicate(predicate)
     applicable: list[tuple[EvidenceUnit, int]] = []
     for u in matching:
         conds = u.proposition.get("conditions") or ()
         if not conds:
             applicable.append((u, 0))
             continue
-        results = [_eval_condition(c, q_conds, vocabulary) for c in conds]
+        results = [vocabulary.evaluate_condition(spec, c, q_conds) for c in conds]
+        if "invalid" in results:
+            issues.append(
+                AuthorizationIssue(
+                    code="INVALID_CONDITION_VALUE",
+                    stage="epistemic_integrity",
+                    disposition="ESCALATE",
+                    predicate=predicate,
+                    message=f"Condition for {entity}.{predicate} received an invalid or incommensurable runtime value.",
+                    detail={"unit_id": u.unit_id, "conditions": conds},
+                )
+            )
+            continue
         if "false" in results:
             continue
         if "pending" in results:
@@ -296,7 +309,12 @@ def resolve_scope_and_precedence(
         applicable.append((u, len(conds)))
 
     if issues:
-        return {"status": "PENDING_CONDITION", "value": None, "winning_units": (), "issues": tuple(issues)}
+        status_code = (
+            "INVALID_CONDITION"
+            if any(i.code == "INVALID_CONDITION_VALUE" for i in issues)
+            else "PENDING_CONDITION"
+        )
+        return {"status": status_code, "value": None, "winning_units": (), "issues": tuple(issues)}
 
     if not applicable:
         return {"status": "NO_APPLICABLE_RULE", "value": None, "winning_units": (), "issues": ()}
@@ -524,13 +542,11 @@ def _finite_decimal(raw: Any, label: str) -> Decimal:
 def _resolve_bound_limits(
     numeric_bounds: Mapping[str, Any] | None,
     pred: str,
-    val: Any,
     vocabulary: Vocabulary,
-) -> tuple[Decimal | None, Decimal | None, str | None]:
-    """Resolve finite Decimal (low, high, target_unit) bounds with vocabulary unit normalization."""
+) -> tuple[Decimal | None, Decimal | None, str | None, str | None]:
+    """Resolve finite Decimal (low, high, target_unit, error_msg) bounds via Vocabulary."""
     if not numeric_bounds:
-        return None, None, None
-    val_unit = val.get("unit") if isinstance(val, dict) else None
+        return None, None, None, None
     bound_entry = None
     explicit_unit: str | None = None
     if pred in numeric_bounds:
@@ -544,35 +560,22 @@ def _resolve_bound_limits(
                     explicit_unit = b_unit
                     break
     if bound_entry is None:
-        return None, None, None
-
-    if isinstance(bound_entry, Mapping):
-        raw_lo = bound_entry.get("min")
-        raw_hi = bound_entry.get("max")
-        explicit_unit = bound_entry.get("unit", explicit_unit)
-    elif isinstance(bound_entry, (tuple, list)) and len(bound_entry) == 3:
-        raw_lo, raw_hi, explicit_unit = bound_entry
-    elif isinstance(bound_entry, (tuple, list)) and len(bound_entry) == 2:
-        raw_lo, raw_hi = bound_entry
-    else:
-        raise ValueError(f"Invalid numeric_bounds entry for '{pred}': {bound_entry!r}")
-
-    lo = _finite_decimal(raw_lo, f"numeric_bounds[{pred}][0]") if raw_lo is not None else None
-    hi = _finite_decimal(raw_hi, f"numeric_bounds[{pred}][1]") if raw_hi is not None else None
-
-    target_unit = val_unit
-    if explicit_unit is not None:
-        if lo is not None:
-            amt_lo, base_lo = vocabulary.units.to_base(lo, explicit_unit, f"numeric_bounds/{pred}/min")
-            lo = Decimal(amt_lo)
-            target_unit = base_lo
-        if hi is not None:
-            amt_hi, base_hi = vocabulary.units.to_base(hi, explicit_unit, f"numeric_bounds/{pred}/max")
-            hi = Decimal(amt_hi)
-            target_unit = base_hi
-    if lo is not None and hi is not None and lo > hi:
-        raise ValueError(f"numeric_bounds[{pred}] lower bound {lo} exceeds upper bound {hi}")
-    return lo, hi, target_unit
+        return None, None, None, None
+    try:
+        lo, hi, target_unit = vocabulary.normalize_bound_limits(
+            pred, bound_entry, explicit_unit=explicit_unit
+        )
+    except UnmappedProposal as exc:
+        if exc.reason in {
+            "unit_required",
+            "unknown_unit",
+            "unit_dimension_mismatch",
+            "unit_not_applicable",
+            "numeric_bounds_unsupported_type",
+        }:
+            return None, None, None, str(exc)
+        raise
+    return lo, hi, target_unit, None
 
 
 def _canonical_bound_entry(entry: Any) -> Any:
@@ -704,6 +707,9 @@ def authorize_operation(
         as_of=as_of,
         query_scope=query_scope,
         documents=layer_docs,
+        vocabulary=layer.vocabulary,
+        check_evidence_refs=False,
+        skip_fidelity=True,
     )
     ineligible_unit_ids: set[str] = set()
 
@@ -711,9 +717,20 @@ def authorize_operation(
         if not u.evidence:
             if u.origin != "rule_derived":
                 ineligible_unit_ids.add(u.unit_id)
+                epistemic_issues.append(
+                    AuthorizationIssue(
+                        code="MISSING_EVIDENCE_DOCUMENT",
+                        stage="epistemic_integrity",
+                        disposition="RETRY",
+                        predicate=u.proposition["predicate"],
+                        message=f"Unit {u.unit_id} has no evidence references.",
+                        detail={"unit_id": u.unit_id},
+                    )
+                )
             continue
 
         cited_doc: SourceDocument | None = None
+        cited_docs_map: dict[str, SourceDocument] = {}
         for ref in u.evidence:
             cache_key = (ref.document_id, ref.revision)
             if cache_key not in doc_revs:
@@ -729,6 +746,7 @@ def authorize_operation(
                     )
                 )
                 continue
+            cited_docs_map[ref.document_id] = doc_revs[cache_key]
             if cited_doc is None:
                 cited_doc = doc_revs[cache_key]
             current_doc = layer_docs.get(ref.document_id)
@@ -785,6 +803,7 @@ def authorize_operation(
             field_evidence=merged_fe,
             require_field_evidence=require_field_evidence,
             vocabulary=layer.vocabulary,
+            documents=cited_docs_map,
         )
         if f_findings:
             ineligible_unit_ids.add(u.unit_id)
@@ -820,6 +839,8 @@ def authorize_operation(
             documents=layer_docs,
             policy=layer.policy,
             profile=layer.profile,
+            check_evidence_refs=False,
+            skip_fidelity=True,
         )
         winning_unit_ids_by_pred[pred] = [u.unit_id for u in res.get("winning_units", ())]
         for iss in res.get("issues", ()):
@@ -846,8 +867,19 @@ def authorize_operation(
         val = res["value"]
         resolved_values[pred] = val
 
-        # Check operational numeric bounds (unit-normalized Decimal comparison)
-        low, high, target_unit = _resolve_bound_limits(numeric_bounds, pred, val, layer.vocabulary)
+        # Check operational numeric bounds via Vocabulary (unit-normalized Decimal comparison)
+        low, high, target_unit, bound_error = _resolve_bound_limits(numeric_bounds, pred, layer.vocabulary)
+        if bound_error is not None:
+            policy_issues.append(
+                AuthorizationIssue(
+                    code="POLICY_BOUND_UNIT_MISMATCH",
+                    stage="authorization_policy",
+                    disposition="ESCALATE",
+                    predicate=pred,
+                    message=bound_error,
+                )
+            )
+            continue
         if low is not None or high is not None:
             if isinstance(val, dict) and "unit" in val and target_unit and val["unit"] != target_unit:
                 policy_issues.append(
@@ -948,6 +980,18 @@ def authorize_operation(
         key_bytes = active_key.encode("utf-8") if isinstance(active_key, str) else active_key
         signature = hmac.new(key_bytes, snapshot_digest.encode("utf-8"), hashlib.sha256).hexdigest()
 
+    auth_record = {
+        "snapshot": decision_snapshot,
+        "snapshot_digest": snapshot_digest,
+        "signature": signature,
+    }
+    layer.store.put(
+        "authorization",
+        snapshot_digest,
+        auth_record,
+        head=operation_id or snapshot_digest,
+    )
+
     return AuthorizationVerdict(
         status=status,
         allowed=(status == "PASS"),
@@ -1018,7 +1062,10 @@ def verify_authorization_verdict(
             return False
 
     if layer is not None:
-        current_state = layer.snapshot()
+        try:
+            current_state = layer.snapshot()
+        except (ValueError, TypeError, KeyError):
+            return False
         if snap_dict.get("configuration") != current_state["configuration"]:
             return False
         expected_docs = [
@@ -1033,6 +1080,29 @@ def verify_authorization_verdict(
             for _, d in sorted(current_state["documents"].items())
         ]
         if snap_dict.get("documents") != expected_docs:
+            return False
+        current_unit_ids = {u.unit_id for u in current_state["units"]}
+        if not set(snap_dict.get("eligible_unit_ids", ())) <= current_unit_ids:
+            return False
+        for unit_ids in snap_dict.get("winning_unit_ids", {}).values():
+            if not set(unit_ids) <= current_unit_ids:
+                return False
+        if snap_dict.get("read_state") != {
+            "unread_documents": list(current_state["unread_documents"]),
+            "read_errors": list(current_state["read_errors"]),
+        }:
+            return False
+        try:
+            stored = layer.store.get("authorization", verdict.snapshot_digest)
+        except (ValueError, TypeError, KeyError):
+            return False
+        if not isinstance(stored, Mapping):
+            return False
+        if stored.get("snapshot_digest") != verdict.snapshot_digest:
+            return False
+        if canonical(stored.get("snapshot")) != canonical(snap_dict):
+            return False
+        if stored.get("signature") != verdict.signature:
             return False
 
     active_key = signing_key if signing_key is not None else os.environ.get("CLAIMLAYER_SIGNING_KEY")

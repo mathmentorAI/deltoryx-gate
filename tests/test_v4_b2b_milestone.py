@@ -329,7 +329,7 @@ def test_authorize_operation_blocks_on_gaps_and_policy_limits():
         required_predicates=("payment_terms", "liability_cap"),
         field_evidences=fe,
         require_field_evidence=("entity", "value"),
-        numeric_bounds={"liability_cap": (None, 250000.0)},
+        numeric_bounds={"liability_cap": (None, 250000.0, "USD")},
     )
     assert blocked_cap.status == "ESCALATE"
     assert blocked_cap.requires_human is True
@@ -341,7 +341,7 @@ def test_authorize_operation_blocks_on_gaps_and_policy_limits():
         required_predicates=("payment_terms", "liability_cap"),
         field_evidences=fe,
         require_field_evidence=("entity", "value"),
-        numeric_bounds={"liability_cap": (None, 1000000.0)},
+        numeric_bounds={"liability_cap": (None, 1000000.0, "USD")},
     )
     assert passed.status == "PASS"
     assert passed.allowed is True

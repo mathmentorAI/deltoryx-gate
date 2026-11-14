@@ -1031,7 +1031,7 @@ def test_v4_snapshot_digest_binds_as_of_bounds_relations_tiers_and_doc_revisions
             entity="Orion",
             required_predicates=("cure_period",),
             as_of=as_of,
-            numeric_bounds=bounds if bounds is not None else {"cure_period": (None, 100.0)},
+            numeric_bounds=bounds if bounds is not None else {"cure_period": (None, 100.0, "calendar_days")},
             clause_relations=relations,
             source_tiers=tiers if tiers is not None else {"msa.txt": 100},
         )
@@ -1043,7 +1043,7 @@ def test_v4_snapshot_digest_binds_as_of_bounds_relations_tiers_and_doc_revisions
 
     variants = [
         ("as_of", _build_and_authorize(as_of="2026-01-01")),
-        ("numeric_bounds", _build_and_authorize(bounds={"cure_period": (None, 200.0)})),
+        ("numeric_bounds", _build_and_authorize(bounds={"cure_period": (None, 200.0, "calendar_days")})),
         ("clause_relations", _build_and_authorize(relations=(ClauseRelation("amends_clause", "2", "1"),))),
         ("source_tiers", _build_and_authorize(tiers={"msa.txt": 80})),
         ("doc_revision", _build_and_authorize(doc_text="Section 1: Orion cure period is 23 days.")),

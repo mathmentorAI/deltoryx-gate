@@ -55,7 +55,7 @@ class EvalCase:
     query_scope: Mapping[str, Any]
     query_conditions: Mapping[str, Any]
     clause_relations: tuple[ClauseRelation, ...]
-    numeric_bounds: Mapping[str, tuple[float | None, float | None]]
+    numeric_bounds: Mapping[str, tuple[float | None, float | None, str] | tuple[float | None, float | None]]
     gold_units: tuple[dict[str, Any], ...]
     expected_allowed: bool
     expected_status: str  # "PASS" | "RETRY" | "ESCALATE"
@@ -132,7 +132,7 @@ def _build_dev_cases() -> list[EvalCase]:
             query_scope={},
             query_conditions={},
             clause_relations=(),
-            numeric_bounds={"liability_cap": (None, 600000.0)},
+            numeric_bounds={"liability_cap": (None, 600000.0, "USD")},
             gold_units=(
                 {
                     "proposal": {
@@ -386,7 +386,7 @@ def _build_dev_cases() -> list[EvalCase]:
             query_scope={},
             query_conditions={},
             clause_relations=(),
-            numeric_bounds={"liability_cap": (None, 500000.0)},
+            numeric_bounds={"liability_cap": (None, 500000.0, "USD")},
             gold_units=(
                 {
                     "proposal": {
@@ -662,7 +662,7 @@ def _build_test_cases() -> list[EvalCase]:
             query_scope={},
             query_conditions={},
             clause_relations=(),
-            numeric_bounds={"liability_cap": (None, 500000.0)},
+            numeric_bounds={"liability_cap": (None, 500000.0, "EUR")},
             gold_units=(
                 {
                     "proposal": {
@@ -962,7 +962,7 @@ def _build_test_cases() -> list[EvalCase]:
             query_scope={},
             query_conditions={},
             clause_relations=(),
-            numeric_bounds={"liability_cap": (None, 500000.0)},
+            numeric_bounds={"liability_cap": (None, 500000.0, "USD")},
             gold_units=(
                 {
                     "proposal": {

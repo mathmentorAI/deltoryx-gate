@@ -27,6 +27,7 @@ from typing import Any, Iterable, Mapping
 from ..semantic.models import KINDS, EvidenceRef, SourceDocument, StructuredQuery, canonical, digest, instant
 from ..semantic.store import VerificationStore
 from .epistemics import DEFAULT_PROFILE, EXPLICIT, EpistemicProfile
+from .fidelity import FieldEvidence, verify_extraction_fidelity
 from .models import AcceptancePolicy, EvidenceUnit, context_key
 from .vocabulary import UnmappedProposal, Vocabulary, decimal_text, label_key, value_relation
 
@@ -360,33 +361,31 @@ class EvidenceLayer:
 
     # -------------------------------------------------------------- eligibility
     def _condition_state(self, condition, context, predicate):
-        """Return True (met), False (violated) or None (not discharged by runtime context)."""
-        name = condition['field']
-        if name not in context:
-            return None
-        spec = dict(predicate.conditions)[name]
-        right, op = condition['value'], condition['operator']
-        try:
-            if spec.type == 'quantity':
-                raw = context[name]
-                amount, base = self.vocabulary.units.to_base(raw['value'], raw['unit'], 'context')
-                if base != right['unit']:
-                    return False
-                left, right = Decimal(amount), Decimal(right['value'])
-            else:
-                left, _ = self.vocabulary.value(spec, context[name], None, 'context')
-                if spec.type == 'number':
-                    left, right = Decimal(left), Decimal(right)
-                elif spec.type != 'date' and op in {'lt', 'le', 'gt', 'ge'}:
-                    return False
-        except (UnmappedProposal, TypeError, KeyError):
+        """Return True (met), False (violated), None (pending), or 'invalid' (malformed runtime value)."""
+        outcome = self.vocabulary.evaluate_condition(predicate, condition, context)
+        if outcome == 'true':
+            return True
+        if outcome == 'false':
             return False
-        if op in {'eq', 'ne'}:
-            equal = left == right if isinstance(left, Decimal) else canonical(left) == canonical(right)
-            return equal if op == 'eq' else not equal
-        return {'lt': left < right, 'le': left <= right, 'gt': left > right, 'ge': left >= right}[op]
+        if outcome == 'invalid':
+            return 'invalid'
+        return None
 
-    def _eligible(self, unit, query, mode, seen=frozenset(), kinds=None, validity='filter'):
+    def _eligible(
+        self,
+        unit,
+        query,
+        mode,
+        seen=frozenset(),
+        kinds=None,
+        validity='filter',
+        *,
+        documents_override=None,
+        field_evidences_map=None,
+        field_evidence_overrides=None,
+        require_field_evidence=(),
+        skip_fidelity=False,
+    ):
         """Return (basis, None) or (None, reason) for a unit under a query and policy."""
         if unit.unit_id in seen:
             return None, 'cyclic_dependency'
@@ -398,27 +397,39 @@ class EvidenceLayer:
             start, end = instant(p['valid_from']), instant(p['valid_until'])
             if (start and at < start) or (end and at > end):
                 return None, 'outside_validity'
+        cstatus = p.get('condition_status')
+        if cstatus in {'unknown_condition', 'unrepresentable_condition'}:
+            return None, cstatus
         pending_scope = {}
         predicate = self.vocabulary.predicate(p['predicate'])
         for key, value in p['scope'].items():
-            if key == 'event_id':
-                if key in query.context and canonical(query.context[key]) != canonical(value):
-                    return None, 'scope_mismatch'
+            if key in {'event_id', 'clause_id'}:
+                if key in query.context:
+                    qval = query.context[key]
+                    if not isinstance(qval, str) or label_key(qval) != label_key(value):
+                        return None, 'scope_mismatch'
                 continue
             if key in query.context:
-                if canonical(query.context[key]) != canonical(value):
+                qval = query.context[key]
+                if isinstance(qval, str):
+                    if label_key(qval) != label_key(value):
+                        return None, 'scope_mismatch'
+                elif canonical(qval) != canonical(value):
                     return None, 'scope_mismatch'
             else:
                 pending_scope[key] = value
         pending_conditions = []
         for condition in p['conditions']:
             state = self._condition_state(condition, query.context, predicate)
+            if state == 'invalid':
+                return None, 'condition_invalid'
             if state is False:
                 return None, 'condition_not_met'
             if state is None:
                 pending_conditions.append(condition)
         if mode == 'discharge' and (pending_conditions or pending_scope):
             return None, 'condition_not_discharged' if pending_conditions else 'scope_not_discharged'
+        fe_map = self.field_evidences if field_evidences_map is None else field_evidences_map
         if unit.origin == 'rule_derived':
             installed = self._rules.get(unit.rule)
             if installed is None or installed[0] != unit.rule_version:
@@ -429,7 +440,19 @@ class EvidenceLayer:
                     premise = self.unit(pid)
                 except KeyError:
                     return None, 'premise_missing'
-                basis, reason = self._eligible(premise, query, mode, seen | {unit.unit_id}, kinds, validity)
+                basis, reason = self._eligible(
+                    premise,
+                    query,
+                    mode,
+                    seen | {unit.unit_id},
+                    kinds,
+                    validity,
+                    documents_override=documents_override,
+                    field_evidences_map=fe_map,
+                    field_evidence_overrides=field_evidence_overrides,
+                    require_field_evidence=require_field_evidence,
+                    skip_fidelity=skip_fidelity,
+                )
                 if basis is None:
                     return None, 'premise_' + reason
                 if basis['support'] is None:
@@ -450,15 +473,54 @@ class EvidenceLayer:
                     'dependence': frozenset(d for b in bases for d in b['dependence']),
                     'rank': min(b['rank'] for b in bases), 'pending_conditions': pending_conditions,
                     'pending_scope': pending_scope, 'premise_bases': [b['unit'].unit_id for b in bases]}, None
-        try:
-            self._refs_valid(unit.evidence)
-        except ValueError:
-            return None, 'stale_evidence'
-        documents = {r.document_id: self._document(r.document_id, r.revision) for r in unit.evidence}
+        if documents_override is not None:
+            if not unit.evidence:
+                return None, 'stale_evidence'
+            documents = {}
+            for ref in unit.evidence:
+                doc = documents_override.get(ref.document_id)
+                if (
+                    doc is None
+                    or doc.revision != ref.revision
+                    or ref.end > len(doc.text)
+                    or doc.text[ref.start:ref.end] != ref.quote
+                ):
+                    return None, 'stale_evidence'
+                documents[ref.document_id] = doc
+        else:
+            try:
+                self._refs_valid(unit.evidence)
+            except ValueError:
+                return None, 'stale_evidence'
+            documents = {r.document_id: self._document(r.document_id, r.revision) for r in unit.evidence}
         if any(d.attribution not in self.policy.allowed_source_attributions for d in documents.values()):
             return None, 'source_attribution_not_admitted'
         if not self.profile.admissible(unit.basis):
             return None, 'basis_not_admissible_under_profile'
+        if not skip_fidelity:
+            fe_by_field: dict[str, FieldEvidence] = {}
+            raw_stored_fe = fe_map.get(unit.unit_id)
+            if raw_stored_fe:
+                for fname, ref_dict in raw_stored_fe.items():
+                    try:
+                        fe_by_field[fname] = FieldEvidence(fname, EvidenceRef(**ref_dict))
+                    except (TypeError, ValueError):
+                        return None, 'fidelity:INVALID_FIELD_EVIDENCE'
+            if field_evidence_overrides and unit.unit_id in field_evidence_overrides:
+                for caller_fe in field_evidence_overrides[unit.unit_id]:
+                    fe_by_field[caller_fe.field] = caller_fe
+            merged_fe = list(fe_by_field.values()) if fe_by_field else None
+            primary_doc = documents[unit.evidence[0].document_id]
+            f_findings = verify_extraction_fidelity(
+                primary_doc.text,
+                unit,
+                field_evidence=merged_fe,
+                require_field_evidence=require_field_evidence,
+                vocabulary=self.vocabulary,
+                documents=documents,
+            )
+            if f_findings:
+                return None, f'fidelity:{f_findings[0].code}'
         components = {'span': 1.0, 'structure': unit.structural_reliability,
                       'applicability': min(d.weight for d in documents.values()),
                       'basis': self.profile.weight(unit.basis)}
@@ -496,12 +558,22 @@ class EvidenceLayer:
             spec = self.vocabulary.predicate(query.predicate)
         except UnmappedProposal as exc:
             return self._issue({'status': 'invalid_query', 'abstain': True, 'reason': exc.as_dict(), 'results': []})
+        fe_map = self.field_evidences
+        docs_map = {d.document_id: d for d in self.documents}
         bases, excluded = [], []
         for unit in self.units:
             p = unit.proposition
             if label_key(p['entity']) != label_key(query.entity) or p['predicate'] != query.predicate:
                 continue
-            basis, reason = self._eligible(unit, query, conditions, kinds=assertion_kinds, validity=validity)
+            basis, reason = self._eligible(
+                unit,
+                query,
+                conditions,
+                kinds=assertion_kinds,
+                validity=validity,
+                documents_override=docs_map,
+                field_evidences_map=fe_map,
+            )
             if basis is None:
                 excluded.append({'unit_id': unit.unit_id, 'reason': reason})
             else:

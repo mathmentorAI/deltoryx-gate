@@ -15,14 +15,18 @@ from typing import Any, Mapping, Sequence
 from ..semantic.models import EvidenceRef
 from ..verifiers.quote_quantity import extract_dates, extract_quantities
 from .models import EvidenceUnit
-from .vocabulary import STANDARD_UNITS, UnitRegistry, UnmappedProposal, Vocabulary, label_key
+from .vocabulary import STANDARD_UNITS, FieldSpec, UnitRegistry, UnmappedProposal, Vocabulary, label_key, normalize_date
 
 _CONDITIONAL_MARKER_RE = re.compile(
-    r"\b(?:unless|except(?:\s+for|\s+that|\s+where)?|provided\s+that|subject\s+to|"
+    r"\b(?:unless|except(?:\s+for|\s+that|\s+where)?|provided\s+that|subject\s+to(?!\s+a\s+(?:floor|cap|minimum|maximum)\b)|"
     r"notwithstanding|save\s+that|if\s+(?:and\s+only\s+if)?|when|where|in\s+the\s+event|"
     r"for\s+disputed|during\s+force\s+majeure|excluding|other\s+than|"
     r"salvo|excepto|siempre\s+que|a\s+menos\s+que|sujeto\s+a|en\s+caso\s+de)\b",
     re.IGNORECASE,
+)
+
+_ISO_DATE_FRAGMENT_RE = re.compile(
+    r"(?<![0-9\-])\d{4}(?:-\d{2}(?:-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?)?)?(?![0-9\-])"
 )
 
 _CLAUSE_NEGATION_RE = re.compile(
@@ -99,7 +103,12 @@ def enclosing_sentence(doc_text: str, start: int, end: int) -> tuple[int, int, s
     return sent_start, sent_end, doc_text[sent_start:sent_end].strip()
 
 
-def check_clause_boundary_completeness(doc_text: str, ref: EvidenceRef) -> list[FidelityFinding]:
+def check_clause_boundary_completeness(
+    doc_text: str,
+    ref: EvidenceRef,
+    *,
+    check_conditional: bool = True,
+) -> list[FidelityFinding]:
     """Verify that `ref` matches `doc_text` verbatim and does not drop adjacent restrictive qualifiers."""
     findings: list[FidelityFinding] = []
     if ref.start < 0 or ref.end > len(doc_text) or ref.start >= ref.end:
@@ -127,7 +136,7 @@ def check_clause_boundary_completeness(doc_text: str, ref: EvidenceRef) -> list[
     leading = doc_text[sent_start : ref.start].strip()
     trailing = doc_text[ref.end : sent_end].strip()
 
-    if leading and (_CONDITIONAL_MARKER_RE.search(leading) or _CLAUSE_NEGATION_RE.search(leading)):
+    if leading and ((check_conditional and _CONDITIONAL_MARKER_RE.search(leading)) or _CLAUSE_NEGATION_RE.search(leading)):
         findings.append(
             FidelityFinding(
                 code="TRUNCATED_CLAUSE_CONTEXT",
@@ -136,7 +145,7 @@ def check_clause_boundary_completeness(doc_text: str, ref: EvidenceRef) -> list[
                 detail={"dropped_prefix": leading},
             )
         )
-    if trailing and _CONDITIONAL_MARKER_RE.search(trailing):
+    if check_conditional and trailing and _CONDITIONAL_MARKER_RE.search(trailing):
         findings.append(
             FidelityFinding(
                 code="TRUNCATED_CLAUSE_CONTEXT",
@@ -312,16 +321,14 @@ def _numeric_marker_present(
 
     typed_qs, occupied_spans = _extract_typed_v4_quantities(text, units)
     if unit_hint is not None:
-        if label_key(unit_hint) in units._labels:
-            try:
-                norm_amt, norm_unit = units.to_base(target, unit_hint, "fidelity")
-                target_val = Decimal(norm_amt)
-                target_unit = norm_unit
-            except (UnmappedProposal, ValueError, InvalidOperation):
-                return False
-        else:
-            target_val = target
-            target_unit = unit_hint
+        if label_key(unit_hint) not in units._labels:
+            return False
+        try:
+            norm_amt, norm_unit = units.to_base(target, unit_hint, "fidelity")
+            target_val = Decimal(norm_amt)
+            target_unit = norm_unit
+        except (UnmappedProposal, ValueError, InvalidOperation):
+            return False
         return any(base_u == target_unit and mag == target_val for mag, base_u in typed_qs)
 
     return any(n == target for n in _extract_standalone_decimals_untyped(text, occupied_spans))
@@ -337,7 +344,65 @@ def _tokens_present_bounded(tokens: Sequence[str], text: str) -> bool:
     )
 
 
-def _value_markers_present(value: Any, text: str, *, units: UnitRegistry = STANDARD_UNITS) -> bool:
+def _date_marker_present(value: Any, text: str) -> bool:
+    if not isinstance(value, str):
+        return False
+    stripped = value.strip()
+    if not stripped:
+        return False
+    if re.search(r"(?<![0-9\-])" + re.escape(stripped) + r"(?![0-9\-])", text):
+        return True
+    for m in _ISO_DATE_FRAGMENT_RE.finditer(text):
+        try:
+            if normalize_date(m.group(0)) == stripped:
+                return True
+        except ValueError:
+            continue
+    return stripped in extract_dates(text, allow_slash=True)
+
+
+def _value_markers_present(
+    value: Any,
+    text: str,
+    *,
+    units: UnitRegistry = STANDARD_UNITS,
+    spec: FieldSpec | None = None,
+) -> bool:
+    if spec is not None:
+        t = spec.type
+        if t in {"quantity", "bound"}:
+            if not isinstance(value, dict) or "value" not in value or not value.get("unit"):
+                return False
+            return _numeric_marker_present(value["value"], text, unit_hint=value["unit"], units=units)
+        if t == "number":
+            if isinstance(value, (dict, list, tuple, bool)):
+                return False
+            return _numeric_marker_present(value, text, unit_hint=None, units=units)
+        if t == "boolean":
+            return isinstance(value, bool)
+        if t == "date":
+            return _date_marker_present(value, text)
+        if t == "record":
+            if not isinstance(value, dict):
+                return False
+            declared = dict(spec.fields)
+            return all(
+                _value_markers_present(v, text, units=units, spec=declared.get(k))
+                for k, v in value.items()
+            )
+        if t == "set":
+            if not isinstance(value, (list, tuple)) or not value:
+                return False
+            elem_spec = FieldSpec("enum", enum=spec.enum)
+            return all(_value_markers_present(item, text, units=units, spec=elem_spec) for item in value)
+        if not isinstance(value, str):
+            return False
+        stripped = value.strip()
+        tokens = [tok for tok in re.findall(r"[a-z0-9]+", stripped.lower()) if len(tok) >= 2]
+        if not tokens:
+            tokens = re.findall(r"[a-z0-9]+", stripped.lower())
+        return _tokens_present_bounded(tokens, text)
+
     if isinstance(value, dict) and "value" in value:
         return _numeric_marker_present(value["value"], text, unit_hint=value.get("unit"), units=units)
     if isinstance(value, dict):
@@ -352,10 +417,8 @@ def _value_markers_present(value: Any, text: str, *, units: UnitRegistry = STAND
         stripped = value.strip()
         if re.fullmatch(r"[-+]?\d+(?:\.\d+)?", stripped):
             return _numeric_marker_present(stripped, text, units=units)
-        if re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", stripped):
-            if re.search(r"(?<![0-9\-])" + re.escape(stripped) + r"(?![0-9\-])", text):
-                return True
-            return stripped in extract_dates(text, allow_slash=True)
+        if re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?)?)?", stripped):
+            return _date_marker_present(stripped, text)
         tokens = [t for t in re.findall(r"[a-z0-9]+", stripped.lower()) if len(t) >= 2]
         if not tokens:
             tokens = re.findall(r"[a-z0-9]+", stripped.lower())
@@ -370,6 +433,7 @@ def verify_extraction_fidelity(
     field_evidence: Sequence[FieldEvidence] | None = None,
     require_field_evidence: Sequence[str] = (),
     vocabulary: Vocabulary | None = None,
+    documents: Mapping[str, Any] | None = None,
 ) -> list[FidelityFinding]:
     """Run independent deterministic fidelity checks on an admitted EvidenceUnit."""
     findings: list[FidelityFinding] = []
@@ -377,17 +441,19 @@ def verify_extraction_fidelity(
         return findings
 
     prop = unit.proposition
-    full_sentences: list[str] = []
-    for ref in unit.evidence:
-        findings.extend(check_clause_boundary_completeness(doc_text, ref))
-        _, _, sent = enclosing_sentence(doc_text, ref.start, ref.end)
-        full_sentences.append(sent)
-
-    combined_sentence = " ".join(full_sentences)
     cond_status = prop.get(
         "condition_status",
         "conditional" if prop.get("conditions") else "unconditional",
     )
+    check_cond = cond_status == "unconditional"
+    full_sentences: list[str] = []
+    for ref in unit.evidence:
+        ref_text = documents[ref.document_id].text if (documents and ref.document_id in documents) else doc_text
+        findings.extend(check_clause_boundary_completeness(ref_text, ref, check_conditional=check_cond))
+        _, _, sent = enclosing_sentence(ref_text, ref.start, ref.end)
+        full_sentences.append(sent)
+
+    combined_sentence = " ".join(full_sentences)
 
     # 1. Uncaptured condition / exception in sentence when proposition claims to be unconditional
     if cond_status == "unconditional" and _CONDITIONAL_MARKER_RE.search(combined_sentence):
@@ -461,8 +527,14 @@ def verify_extraction_fidelity(
 
     # 4. Mandatory value grounding against cited evidence quotes (even without field_evidence)
     unit_reg = vocabulary.units if vocabulary is not None else STANDARD_UNITS
+    val_spec: FieldSpec | None = None
+    if vocabulary is not None and isinstance(prop.get("predicate"), str):
+        try:
+            val_spec = vocabulary.predicate(prop["predicate"]).value
+        except UnmappedProposal:
+            val_spec = None
     cited_quotes = " ".join(r.quote for r in unit.evidence)
-    val_grounded = _value_markers_present(val, cited_quotes, units=unit_reg)
+    val_grounded = _value_markers_present(val, cited_quotes, units=unit_reg, spec=val_spec)
     if not val_grounded:
         findings.append(
             FidelityFinding(
@@ -487,7 +559,8 @@ def verify_extraction_fidelity(
 
     for fe in field_evidence or ():
         ref = fe.evidence
-        if ref.start < 0 or ref.end > len(doc_text) or doc_text[ref.start : ref.end] != ref.quote:
+        fe_text = documents[ref.document_id].text if (documents and ref.document_id in documents) else doc_text
+        if ref.start < 0 or ref.end > len(fe_text) or fe_text[ref.start : ref.end] != ref.quote:
             findings.append(
                 FidelityFinding(
                     code="INVALID_FIELD_EVIDENCE",
@@ -506,7 +579,9 @@ def verify_extraction_fidelity(
                         field="entity",
                     )
                 )
-        elif fe.field == "value" and not _value_markers_present(prop.get("value"), ref.quote, units=unit_reg):
+        elif fe.field == "value" and not _value_markers_present(
+            prop.get("value"), ref.quote, units=unit_reg, spec=val_spec
+        ):
             findings.append(
                 FidelityFinding(
                     code="VALUE_NOT_IN_FIELD_EVIDENCE",

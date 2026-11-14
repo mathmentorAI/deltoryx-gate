@@ -256,7 +256,7 @@ def eval_layer3_end_to_end() -> dict[str, object]:
             entity="Acme",
             required_predicates=("payment_terms", "liability_cap"),
             ingest_summary=ingest_err,
-            numeric_bounds={"liability_cap": (None, cap_max)},
+            numeric_bounds={"liability_cap": (None, cap_max, "USD")},
         )
         if verdict.allowed:
             accepted += 1

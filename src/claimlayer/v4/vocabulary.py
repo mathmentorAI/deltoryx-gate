@@ -577,3 +577,132 @@ class Vocabulary:
         if self.require_explicit_condition_status or cond_status is not None:
             out['condition_status'] = cond_status
         return out
+
+    def normalize_runtime_value(self, spec: FieldSpec, raw: Any, path: str = 'context'):
+        """Normalize a runtime value against a declared FieldSpec (requiring explicit units for quantities)."""
+        canon, _ = self.value(spec, raw, None, path)
+        return canon
+
+    def evaluate_condition(
+        self,
+        predicate: PredicateSpec,
+        condition: Mapping[str, Any],
+        context: Mapping[str, Any] | None,
+    ) -> str:
+        """Evaluate a canonical condition against runtime context: 'true' | 'false' | 'pending' | 'invalid'."""
+        name = condition['field']
+        if context is None or name not in context or context[name] is None:
+            return 'pending'
+        declared = dict(predicate.conditions)
+        if name not in declared:
+            return 'invalid'
+        spec = declared[name]
+        op = condition['operator']
+        expected = condition['value']
+        try:
+            actual = self.normalize_runtime_value(spec, context[name], f'context/{name}')
+        except UnmappedProposal:
+            return 'invalid'
+
+        if spec.type == 'quantity':
+            if actual['unit'] != expected['unit']:
+                return 'invalid'
+            lhs, rhs = Decimal(actual['value']), Decimal(expected['value'])
+            return 'true' if {'eq': lhs == rhs, 'ne': lhs != rhs, 'lt': lhs < rhs,
+                              'le': lhs <= rhs, 'gt': lhs > rhs, 'ge': lhs >= rhs}[op] else 'false'
+
+        if spec.type == 'number':
+            lhs, rhs = Decimal(actual), Decimal(expected)
+            return 'true' if {'eq': lhs == rhs, 'ne': lhs != rhs, 'lt': lhs < rhs,
+                              'le': lhs <= rhs, 'gt': lhs > rhs, 'ge': lhs >= rhs}[op] else 'false'
+
+        if spec.type == 'date':
+            if op in {'eq', 'ne'}:
+                rel = value_relation(spec, actual, expected)
+                if rel == 'equal':
+                    return 'true' if op == 'eq' else 'false'
+                if rel == 'incompatible':
+                    return 'false' if op == 'eq' else 'true'
+                return 'pending'
+            if date_precision(actual) == date_precision(expected):
+                res = {'lt': actual < expected, 'le': actual <= expected,
+                       'gt': actual > expected, 'ge': actual >= expected}[op]
+                return 'true' if res else 'false'
+            a0, a1 = _date_span(actual)
+            b0, b1 = _date_span(expected)
+            decided = {
+                'lt': True if a1 < b0 else (False if a0 >= b1 else None),
+                'le': True if a1 <= b0 else (False if a0 > b1 else None),
+                'gt': True if a0 > b1 else (False if a1 <= b0 else None),
+                'ge': True if a0 >= b1 else (False if a1 < b0 else None),
+            }[op]
+            if decided is None:
+                return 'pending'
+            return 'true' if decided else 'false'
+
+        if op not in {'eq', 'ne'}:
+            return 'invalid'
+        eq = canonical(actual) == canonical(expected)
+        return 'true' if (eq if op == 'eq' else not eq) else 'false'
+
+    def normalize_bound_limits(
+        self,
+        predicate_name: str,
+        bound_entry: Any,
+        *,
+        explicit_unit: str | None = None,
+        path: str = 'numeric_bounds',
+    ) -> tuple[Decimal | None, Decimal | None, str | None]:
+        """Validate and unit-normalize numeric bounds against the declared predicate FieldSpec."""
+        pred_spec = self.predicate(predicate_name)
+        bound_path = f'{path}/{predicate_name}'
+        if isinstance(bound_entry, Mapping):
+            raw_lo = bound_entry.get('min')
+            raw_hi = bound_entry.get('max')
+            entry_unit = bound_entry.get('unit')
+        elif isinstance(bound_entry, (tuple, list)) and len(bound_entry) == 3:
+            raw_lo, raw_hi, entry_unit = bound_entry
+        elif isinstance(bound_entry, (tuple, list)) and len(bound_entry) == 2:
+            raw_lo, raw_hi = bound_entry
+            entry_unit = None
+        else:
+            raise ValueError(f"Invalid numeric_bounds entry for '{predicate_name}': {bound_entry!r}")
+
+        if explicit_unit is not None and entry_unit is not None and label_key(explicit_unit) != label_key(entry_unit):
+            raise UnmappedProposal(
+                'unit_dimension_mismatch',
+                f'{bound_path}/unit',
+                {'key_unit': explicit_unit, 'entry_unit': entry_unit},
+            )
+        effective_unit = entry_unit if entry_unit is not None else explicit_unit
+
+        lo = Decimal(decimal_text(raw_lo, f'{bound_path}/min')) if raw_lo is not None else None
+        hi = Decimal(decimal_text(raw_hi, f'{bound_path}/max')) if raw_hi is not None else None
+
+        val_spec = pred_spec.value
+        if val_spec.type in {'quantity', 'bound'}:
+            unit_obj = self.units.lookup(effective_unit, f'{bound_path}/unit')
+            if unit_obj.dimension not in val_spec.dimensions:
+                raise UnmappedProposal(
+                    'unit_dimension_mismatch',
+                    f'{bound_path}/unit',
+                    {'unit': effective_unit, 'allowed': list(val_spec.dimensions)},
+                )
+            base_unit = self.units.base(unit_obj.dimension)
+            if lo is not None:
+                amt_lo, base_unit = self.units.to_base(lo, effective_unit, f'{bound_path}/min')
+                lo = Decimal(amt_lo)
+            if hi is not None:
+                amt_hi, base_unit = self.units.to_base(hi, effective_unit, f'{bound_path}/max')
+                hi = Decimal(amt_hi)
+            target_unit: str | None = base_unit
+        elif val_spec.type == 'number':
+            if effective_unit is not None:
+                raise UnmappedProposal('unit_not_applicable', f'{bound_path}/unit', effective_unit)
+            target_unit = None
+        else:
+            raise UnmappedProposal('numeric_bounds_unsupported_type', bound_path, val_spec.type)
+
+        if lo is not None and hi is not None and lo > hi:
+            raise ValueError(f"numeric_bounds[{predicate_name}] lower bound {lo} exceeds upper bound {hi}")
+        return lo, hi, target_unit

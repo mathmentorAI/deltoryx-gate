@@ -1,0 +1,774 @@
+{
+  "corpus_id": "ridgeline",
+  "case_id": "banking_finance_synthetic",
+  "model": "nvidia/nemotron-3-ultra-550b-a55b",
+  "provider": "openai-compatible",
+  "prompt_version": "v4-proposals-7",
+  "prompt_digest": "24c37d7b1d39222609c9dc754aa43d432c39c31f13edd0bab18f6e4f1ee49491",
+  "recorded_at": "2026-11-15T17:45:39.923836+00:00",
+  "fragment_chars": 1800,
+  "documents": {
+    "lender-markup-term-sheet.docx": {
+      "revision": "4d645e42b3c813d60ebc8ff20571914da616144222afb1f2bca76422bd9499e8",
+      "raw_proposals": [
+        {
+          "assertion_kind": "proposal",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Lender",
+          "evidence": [
+            "ev-3cdc164e7c385cb9b1ea757699f62a7a79dc6e03c86862ffc380e5ca0d6a8089"
+          ],
+          "field_evidence": {
+            "entity": "Lender",
+            "value": "Lender proposes Applicable Margin of 5.25% per annum"
+          },
+          "polarity": "affirmed",
+          "predicate": "interest_margin",
+          "quote": "Lender proposes Applicable Margin of 5.25% per annum",
+          "scope": {},
+          "unit": "percent_per_annum",
+          "valid_from": null,
+          "valid_until": null,
+          "value": {
+            "unit": "percent_per_annum",
+            "value": 5.25
+          }
+        },
+        {
+          "assertion_kind": "proposal",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Lender",
+          "evidence": [
+            "ev-3cdc164e7c385cb9b1ea757699f62a7a79dc6e03c86862ffc380e5ca0d6a8089"
+          ],
+          "field_evidence": {
+            "entity": "Lender",
+            "value": "Maximum Net Leverage of 4.0x"
+          },
+          "polarity": "affirmed",
+          "predicate": "leverage_ratio",
+          "quote": "Maximum Net Leverage of 4.0x",
+          "scope": {},
+          "unit": "multiple",
+          "valid_from": null,
+          "valid_until": null,
+          "value": {
+            "unit": "multiple",
+            "value": 4.0
+          }
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Counterparty Markup",
+          "evidence": [
+            "ev-3cdc164e7c385cb9b1ea757699f62a7a79dc6e03c86862ffc380e5ca0d6a8089"
+          ],
+          "field_evidence": {
+            "entity": "Counterparty Markup",
+            "value": "Counterparty Markup: Lender proposes Applicable Margin of 5.25% per annum and Maximum Net Leverage of 4.0x."
+          },
+          "polarity": "affirmed",
+          "predicate": "markup_deviation",
+          "quote": "Counterparty Markup: Lender proposes Applicable Margin of 5.25% per annum and Maximum Net Leverage of 4.0x.",
+          "scope": {},
+          "valid_from": null,
+          "valid_until": null,
+          "value": "material_deviation"
+        }
+      ],
+      "calls": [
+        {
+          "response": {
+            "output": {
+              "proposals": [
+                {
+                  "assertion_kind": "proposal",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Lender",
+                  "evidence": [
+                    "ev-3cdc164e7c385cb9b1ea757699f62a7a79dc6e03c86862ffc380e5ca0d6a8089"
+                  ],
+                  "field_evidence": {
+                    "entity": "Lender",
+                    "value": "Lender proposes Applicable Margin of 5.25% per annum"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "interest_margin",
+                  "quote": "Lender proposes Applicable Margin of 5.25% per annum",
+                  "scope": {},
+                  "unit": "percent_per_annum",
+                  "valid_from": null,
+                  "valid_until": null,
+                  "value": {
+                    "unit": "percent_per_annum",
+                    "value": 5.25
+                  }
+                },
+                {
+                  "assertion_kind": "proposal",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Lender",
+                  "evidence": [
+                    "ev-3cdc164e7c385cb9b1ea757699f62a7a79dc6e03c86862ffc380e5ca0d6a8089"
+                  ],
+                  "field_evidence": {
+                    "entity": "Lender",
+                    "value": "Maximum Net Leverage of 4.0x"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "leverage_ratio",
+                  "quote": "Maximum Net Leverage of 4.0x",
+                  "scope": {},
+                  "unit": "multiple",
+                  "valid_from": null,
+                  "valid_until": null,
+                  "value": {
+                    "unit": "multiple",
+                    "value": 4.0
+                  }
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Counterparty Markup",
+                  "evidence": [
+                    "ev-3cdc164e7c385cb9b1ea757699f62a7a79dc6e03c86862ffc380e5ca0d6a8089"
+                  ],
+                  "field_evidence": {
+                    "entity": "Counterparty Markup",
+                    "value": "Counterparty Markup: Lender proposes Applicable Margin of 5.25% per annum and Maximum Net Leverage of 4.0x."
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "markup_deviation",
+                  "quote": "Counterparty Markup: Lender proposes Applicable Margin of 5.25% per annum and Maximum Net Leverage of 4.0x.",
+                  "scope": {},
+                  "valid_from": null,
+                  "valid_until": null,
+                  "value": "material_deviation"
+                }
+              ]
+            },
+            "provider_response": {
+              "choices": [
+                {
+                  "finish_reason": "stop",
+                  "index": 0,
+                  "logprobs": null,
+                  "message": {
+                    "content": "{\"proposals\": [{\"entity\": \"Lender\", \"predicate\": \"interest_margin\", \"value\": {\"value\": 5.25, \"unit\": \"percent_per_annum\"}, \"unit\": \"percent_per_annum\", \"polarity\": \"affirmed\", \"assertion_kind\": \"proposal\", \"conditions\": [], \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Lender\", \"value\": \"Lender proposes Applicable Margin of 5.25% per annum\"}, \"scope\": {}, \"valid_from\": null, \"valid_until\": null, \"basis\": \"explicit\", \"evidence\": [\"ev-3cdc164e7c385cb9b1ea757699f62a7a79dc6e03c86862ffc380e5ca0d6a8089\"], \"quote\": \"Lender proposes Applicable Margin of 5.25% per annum\"}, {\"entity\": \"Lender\", \"predicate\": \"leverage_ratio\", \"value\": {\"value\": 4.0, \"unit\": \"multiple\"}, \"unit\": \"multiple\", \"polarity\": \"affirmed\", \"assertion_kind\": \"proposal\", \"conditions\": [], \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Lender\", \"value\": \"Maximum Net Leverage of 4.0x\"}, \"scope\": {}, \"valid_from\": null, \"valid_until\": null, \"basis\": \"explicit\", \"evidence\": [\"ev-3cdc164e7c385cb9b1ea757699f62a7a79dc6e03c86862ffc380e5ca0d6a8089\"], \"quote\": \"Maximum Net Leverage of 4.0x\"}, {\"entity\": \"Counterparty Markup\", \"predicate\": \"markup_deviation\", \"value\": \"material_deviation\", \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Counterparty Markup\", \"value\": \"Counterparty Markup: Lender proposes Applicable Margin of 5.25% per annum and Maximum Net Leverage of 4.0x.\"}, \"scope\": {}, \"valid_from\": null, \"valid_until\": null, \"basis\": \"explicit\", \"evidence\": [\"ev-3cdc164e7c385cb9b1ea757699f62a7a79dc6e03c86862ffc380e5ca0d6a8089\"], \"quote\": \"Counterparty Markup: Lender proposes Applicable Margin of 5.25% per annum and Maximum Net Leverage of 4.0x.\"}]}",
+                    "refusal": null,
+                    "role": "assistant"
+                  }
+                }
+              ],
+              "created": 1794764713,
+              "id": "chatcmpl-4ebefe4a-0afe-4104-97c5-11c04aa6299e",
+              "model": "nvidia/nemotron-3-ultra-550b-a55b",
+              "object": "chat.completion",
+              "usage": {
+                "completion_tokens": 672,
+                "completion_tokens_details": {
+                  "reasoning_tokens": 0
+                },
+                "prompt_tokens": 3193,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                },
+                "total_tokens": 3865
+              }
+            },
+            "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+            "transport_attempts": [
+              {
+                "attempt": 1,
+                "status": "success"
+              }
+            ],
+            "usage": {
+              "completion_tokens": 672,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "prompt_tokens": 3193,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 3865
+            }
+          },
+          "window": "0+1"
+        }
+      ],
+      "errors": []
+    },
+    "negotiation-playbook.docx": {
+      "revision": "81ccd19df0dbac81d1b5b6a8d59ed810eda3c620f0d11e35c926317814e2faf1",
+      "raw_proposals": [
+        {
+          "assertion_kind": "requirement",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Client Negotiation Playbook",
+          "evidence": [
+            "ev-d7f750d838d262c590949a669de497f4063880a7efaec95a9f6ba7339a4bb68d"
+          ],
+          "field_evidence": {
+            "entity": "Client Negotiation Playbook",
+            "value": "Maximum acceptable Applicable Margin is 4.75% per annum"
+          },
+          "polarity": "affirmed",
+          "predicate": "interest_margin",
+          "quote": "Maximum acceptable Applicable Margin is 4.75% per annum",
+          "scope": {},
+          "unit": "percent_per_annum",
+          "valid_from": null,
+          "valid_until": null,
+          "value": {
+            "unit": "percent_per_annum",
+            "value": 4.75
+          }
+        },
+        {
+          "assertion_kind": "requirement",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Client Negotiation Playbook",
+          "evidence": [
+            "ev-d7f750d838d262c590949a669de497f4063880a7efaec95a9f6ba7339a4bb68d"
+          ],
+          "field_evidence": {
+            "entity": "Client Negotiation Playbook",
+            "value": "target Maximum Net Leverage covenant is 4.5x"
+          },
+          "polarity": "affirmed",
+          "predicate": "leverage_ratio",
+          "quote": "target Maximum Net Leverage covenant is 4.5x",
+          "scope": {},
+          "unit": "multiple",
+          "valid_from": null,
+          "valid_until": null,
+          "value": {
+            "unit": "multiple",
+            "value": 4.5
+          }
+        }
+      ],
+      "calls": [
+        {
+          "response": {
+            "output": {
+              "proposals": [
+                {
+                  "assertion_kind": "requirement",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Client Negotiation Playbook",
+                  "evidence": [
+                    "ev-d7f750d838d262c590949a669de497f4063880a7efaec95a9f6ba7339a4bb68d"
+                  ],
+                  "field_evidence": {
+                    "entity": "Client Negotiation Playbook",
+                    "value": "Maximum acceptable Applicable Margin is 4.75% per annum"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "interest_margin",
+                  "quote": "Maximum acceptable Applicable Margin is 4.75% per annum",
+                  "scope": {},
+                  "unit": "percent_per_annum",
+                  "valid_from": null,
+                  "valid_until": null,
+                  "value": {
+                    "unit": "percent_per_annum",
+                    "value": 4.75
+                  }
+                },
+                {
+                  "assertion_kind": "requirement",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Client Negotiation Playbook",
+                  "evidence": [
+                    "ev-d7f750d838d262c590949a669de497f4063880a7efaec95a9f6ba7339a4bb68d"
+                  ],
+                  "field_evidence": {
+                    "entity": "Client Negotiation Playbook",
+                    "value": "target Maximum Net Leverage covenant is 4.5x"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "leverage_ratio",
+                  "quote": "target Maximum Net Leverage covenant is 4.5x",
+                  "scope": {},
+                  "unit": "multiple",
+                  "valid_from": null,
+                  "valid_until": null,
+                  "value": {
+                    "unit": "multiple",
+                    "value": 4.5
+                  }
+                }
+              ]
+            },
+            "provider_response": {
+              "choices": [
+                {
+                  "finish_reason": "stop",
+                  "index": 0,
+                  "logprobs": null,
+                  "message": {
+                    "content": "{\"proposals\": [{\"entity\": \"Client Negotiation Playbook\", \"predicate\": \"interest_margin\", \"value\": {\"value\": 4.75, \"unit\": \"percent_per_annum\"}, \"unit\": \"percent_per_annum\", \"polarity\": \"affirmed\", \"assertion_kind\": \"requirement\", \"conditions\": [], \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Client Negotiation Playbook\", \"value\": \"Maximum acceptable Applicable Margin is 4.75% per annum\"}, \"scope\": {}, \"valid_from\": null, \"valid_until\": null, \"basis\": \"explicit\", \"evidence\": [\"ev-d7f750d838d262c590949a669de497f4063880a7efaec95a9f6ba7339a4bb68d\"], \"quote\": \"Maximum acceptable Applicable Margin is 4.75% per annum\"}, {\"entity\": \"Client Negotiation Playbook\", \"predicate\": \"leverage_ratio\", \"value\": {\"value\": 4.5, \"unit\": \"multiple\"}, \"unit\": \"multiple\", \"polarity\": \"affirmed\", \"assertion_kind\": \"requirement\", \"conditions\": [], \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Client Negotiation Playbook\", \"value\": \"target Maximum Net Leverage covenant is 4.5x\"}, \"scope\": {}, \"valid_from\": null, \"valid_until\": null, \"basis\": \"explicit\", \"evidence\": [\"ev-d7f750d838d262c590949a669de497f4063880a7efaec95a9f6ba7339a4bb68d\"], \"quote\": \"target Maximum Net Leverage covenant is 4.5x\"}]}",
+                    "refusal": null,
+                    "role": "assistant"
+                  }
+                }
+              ],
+              "created": 1794764719,
+              "id": "chatcmpl-11572c03-7c47-40f2-bf3a-78e6caf245e6",
+              "model": "nvidia/nemotron-3-ultra-550b-a55b",
+              "object": "chat.completion",
+              "usage": {
+                "completion_tokens": 452,
+                "completion_tokens_details": {
+                  "reasoning_tokens": 0
+                },
+                "prompt_tokens": 3194,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                },
+                "total_tokens": 3646
+              }
+            },
+            "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+            "transport_attempts": [
+              {
+                "attempt": 1,
+                "status": "success"
+              }
+            ],
+            "usage": {
+              "completion_tokens": 452,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "prompt_tokens": 3194,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 3646
+            }
+          },
+          "window": "0+1"
+        }
+      ],
+      "errors": []
+    },
+    "original-term-sheet.docx": {
+      "revision": "d54192c5303ba657da49447d75d626fdbfa04e7c2e4910e678545b6f82016406",
+      "raw_proposals": [
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Senior Secured Term Loan Facility",
+          "evidence": [
+            "ev-47b7d260506082765eb5ed1851de81d43c5dd1f1edd7da2cab5b36e90ea9c07b"
+          ],
+          "field_evidence": {
+            "entity": "Senior Secured Term Loan Facility",
+            "value": "$200,000,000"
+          },
+          "polarity": "affirmed",
+          "predicate": "facility_amount",
+          "quote": "Senior Secured Term Loan Facility Commitment is $200,000,000",
+          "scope": {},
+          "unit": "USD",
+          "valid_from": null,
+          "valid_until": null,
+          "value": 200000000
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Senior Secured Term Loan Facility",
+          "evidence": [
+            "ev-47b7d260506082765eb5ed1851de81d43c5dd1f1edd7da2cab5b36e90ea9c07b"
+          ],
+          "field_evidence": {
+            "entity": "Senior Secured Term Loan Facility",
+            "value": "4.50% per annum"
+          },
+          "polarity": "affirmed",
+          "predicate": "interest_margin",
+          "quote": "at an Applicable Margin of 4.50% per annum",
+          "scope": {},
+          "unit": "percent_per_annum",
+          "valid_from": null,
+          "valid_until": null,
+          "value": 4.5
+        }
+      ],
+      "calls": [
+        {
+          "response": {
+            "output": {
+              "proposals": [
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Senior Secured Term Loan Facility",
+                  "evidence": [
+                    "ev-47b7d260506082765eb5ed1851de81d43c5dd1f1edd7da2cab5b36e90ea9c07b"
+                  ],
+                  "field_evidence": {
+                    "entity": "Senior Secured Term Loan Facility",
+                    "value": "$200,000,000"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "facility_amount",
+                  "quote": "Senior Secured Term Loan Facility Commitment is $200,000,000",
+                  "scope": {},
+                  "unit": "USD",
+                  "valid_from": null,
+                  "valid_until": null,
+                  "value": 200000000
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Senior Secured Term Loan Facility",
+                  "evidence": [
+                    "ev-47b7d260506082765eb5ed1851de81d43c5dd1f1edd7da2cab5b36e90ea9c07b"
+                  ],
+                  "field_evidence": {
+                    "entity": "Senior Secured Term Loan Facility",
+                    "value": "4.50% per annum"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "interest_margin",
+                  "quote": "at an Applicable Margin of 4.50% per annum",
+                  "scope": {},
+                  "unit": "percent_per_annum",
+                  "valid_from": null,
+                  "valid_until": null,
+                  "value": 4.5
+                }
+              ]
+            },
+            "provider_response": {
+              "choices": [
+                {
+                  "finish_reason": "stop",
+                  "index": 0,
+                  "logprobs": null,
+                  "message": {
+                    "content": "{\"proposals\": [{\"entity\": \"Senior Secured Term Loan Facility\", \"predicate\": \"facility_amount\", \"value\": 200000000, \"unit\": \"USD\", \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Senior Secured Term Loan Facility\", \"value\": \"$200,000,000\"}, \"scope\": {}, \"valid_from\": null, \"valid_until\": null, \"basis\": \"explicit\", \"evidence\": [\"ev-47b7d260506082765eb5ed1851de81d43c5dd1f1edd7da2cab5b36e90ea9c07b\"], \"quote\": \"Senior Secured Term Loan Facility Commitment is $200,000,000\"}, {\"entity\": \"Senior Secured Term Loan Facility\", \"predicate\": \"interest_margin\", \"value\": 4.5, \"unit\": \"percent_per_annum\", \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Senior Secured Term Loan Facility\", \"value\": \"4.50% per annum\"}, \"scope\": {}, \"valid_from\": null, \"valid_until\": null, \"basis\": \"explicit\", \"evidence\": [\"ev-47b7d260506082765eb5ed1851de81d43c5dd1f1edd7da2cab5b36e90ea9c07b\"], \"quote\": \"at an Applicable Margin of 4.50% per annum\"}]}",
+                    "refusal": null,
+                    "role": "assistant"
+                  }
+                }
+              ],
+              "created": 1794764728,
+              "id": "chatcmpl-81d40830-5c96-4e6a-8037-a0a4dd94ac52",
+              "model": "nvidia/nemotron-3-ultra-550b-a55b",
+              "object": "chat.completion",
+              "usage": {
+                "completion_tokens": 428,
+                "completion_tokens_details": {
+                  "reasoning_tokens": 0
+                },
+                "prompt_tokens": 3196,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                },
+                "total_tokens": 3624
+              }
+            },
+            "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+            "transport_attempts": [
+              {
+                "attempt": 1,
+                "status": "success"
+              }
+            ],
+            "usage": {
+              "completion_tokens": 428,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "prompt_tokens": 3196,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 3624
+            }
+          },
+          "window": "0+1"
+        }
+      ],
+      "errors": []
+    },
+    "partner-instructions-email.eml": {
+      "revision": "429f7d2615539ab03e27aac988236b7845f5b76fb53cc85a17cced792bb314b7",
+      "raw_proposals": [
+        {
+          "assertion_kind": "proposal",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Partner Instructions",
+          "evidence": [
+            "ev-db51c08b66fd7fb43d0ee629295e9e7d6feb42dd3da644d36aa39f0b1f6a3bc1"
+          ],
+          "field_evidence": {
+            "entity": "Partner Instructions",
+            "value": "Applicable Margin"
+          },
+          "polarity": "affirmed",
+          "predicate": "interest_margin",
+          "quote": "Focus review on Applicable Margin",
+          "scope": {},
+          "unit": "basis_point",
+          "valid_from": null,
+          "valid_until": null,
+          "value": {
+            "unit": "basis_point",
+            "value": 0
+          }
+        }
+      ],
+      "calls": [
+        {
+          "response": {
+            "output": {
+              "proposals": [
+                {
+                  "assertion_kind": "proposal",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Partner Instructions",
+                  "evidence": [
+                    "ev-db51c08b66fd7fb43d0ee629295e9e7d6feb42dd3da644d36aa39f0b1f6a3bc1"
+                  ],
+                  "field_evidence": {
+                    "entity": "Partner Instructions",
+                    "value": "Applicable Margin"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "interest_margin",
+                  "quote": "Focus review on Applicable Margin",
+                  "scope": {},
+                  "unit": "basis_point",
+                  "valid_from": null,
+                  "valid_until": null,
+                  "value": {
+                    "unit": "basis_point",
+                    "value": 0
+                  }
+                }
+              ]
+            },
+            "provider_response": {
+              "choices": [
+                {
+                  "finish_reason": "stop",
+                  "index": 0,
+                  "logprobs": null,
+                  "message": {
+                    "content": "{\"proposals\": [{\"entity\": \"Partner Instructions\", \"predicate\": \"interest_margin\", \"value\": {\"value\": 0, \"unit\": \"basis_point\"}, \"unit\": \"basis_point\", \"polarity\": \"affirmed\", \"assertion_kind\": \"proposal\", \"conditions\": [], \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Partner Instructions\", \"value\": \"Applicable Margin\"}, \"scope\": {}, \"valid_from\": null, \"valid_until\": null, \"basis\": \"explicit\", \"evidence\": [\"ev-db51c08b66fd7fb43d0ee629295e9e7d6feb42dd3da644d36aa39f0b1f6a3bc1\"], \"quote\": \"Focus review on Applicable Margin\"}]}",
+                    "refusal": null,
+                    "role": "assistant"
+                  }
+                }
+              ],
+              "created": 1794764732,
+              "id": "chatcmpl-10453800-1d66-47be-9212-04f08b91a0fb",
+              "model": "nvidia/nemotron-3-ultra-550b-a55b",
+              "object": "chat.completion",
+              "usage": {
+                "completion_tokens": 198,
+                "completion_tokens_details": {
+                  "reasoning_tokens": 0
+                },
+                "prompt_tokens": 3175,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                },
+                "total_tokens": 3373
+              }
+            },
+            "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+            "transport_attempts": [
+              {
+                "attempt": 1,
+                "status": "success"
+              }
+            ],
+            "usage": {
+              "completion_tokens": 198,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "prompt_tokens": 3175,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 3373
+            }
+          },
+          "window": "0+1"
+        }
+      ],
+      "errors": []
+    },
+    "ridgeline-financial-summary.xlsx": {
+      "revision": "4b74cda68a17f3e30934c267513e7d34d645b68158a6f992bbff096645180186",
+      "raw_proposals": [
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Ridgeline Consolidated",
+          "evidence": [
+            "ev-5e344a00c04a961d57081bc50eef28567cd5dfaf4c4f8161b85981a7aa8eee01"
+          ],
+          "field_evidence": {
+            "entity": "Ridgeline Consolidated",
+            "value": "$50,000,000"
+          },
+          "polarity": "affirmed",
+          "predicate": "ebitda",
+          "quote": "Financial Summary: Ridgeline Consolidated Adjusted EBITDA is $50,000,000 for LTM Q4.",
+          "scope": {
+            "period": "LTM Q4"
+          },
+          "unit": "USD",
+          "valid_from": null,
+          "valid_until": null,
+          "value": {
+            "unit": "USD",
+            "value": 50000000
+          }
+        }
+      ],
+      "calls": [
+        {
+          "response": {
+            "output": {
+              "proposals": [
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Ridgeline Consolidated",
+                  "evidence": [
+                    "ev-5e344a00c04a961d57081bc50eef28567cd5dfaf4c4f8161b85981a7aa8eee01"
+                  ],
+                  "field_evidence": {
+                    "entity": "Ridgeline Consolidated",
+                    "value": "$50,000,000"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "ebitda",
+                  "quote": "Financial Summary: Ridgeline Consolidated Adjusted EBITDA is $50,000,000 for LTM Q4.",
+                  "scope": {
+                    "period": "LTM Q4"
+                  },
+                  "unit": "USD",
+                  "valid_from": null,
+                  "valid_until": null,
+                  "value": {
+                    "unit": "USD",
+                    "value": 50000000
+                  }
+                }
+              ]
+            },
+            "provider_response": {
+              "choices": [
+                {
+                  "finish_reason": "stop",
+                  "index": 0,
+                  "logprobs": null,
+                  "message": {
+                    "content": "{\"proposals\": [{\"entity\": \"Ridgeline Consolidated\", \"predicate\": \"ebitda\", \"value\": {\"value\": 50000000, \"unit\": \"USD\"}, \"unit\": \"USD\", \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Ridgeline Consolidated\", \"value\": \"$50,000,000\"}, \"scope\": {\"period\": \"LTM Q4\"}, \"valid_from\": null, \"valid_until\": null, \"basis\": \"explicit\", \"evidence\": [\"ev-5e344a00c04a961d57081bc50eef28567cd5dfaf4c4f8161b85981a7aa8eee01\"], \"quote\": \"Financial Summary: Ridgeline Consolidated Adjusted EBITDA is $50,000,000 for LTM Q4.\"}]}",
+                    "refusal": null,
+                    "role": "assistant"
+                  }
+                }
+              ],
+              "created": 1794764736,
+              "id": "chatcmpl-82cbf804-b7d0-4ae2-b013-3fbb2b64a671",
+              "model": "nvidia/nemotron-3-ultra-550b-a55b",
+              "object": "chat.completion",
+              "usage": {
+                "completion_tokens": 251,
+                "completion_tokens_details": {
+                  "reasoning_tokens": 0
+                },
+                "prompt_tokens": 3190,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                },
+                "total_tokens": 3441
+              }
+            },
+            "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+            "transport_attempts": [
+              {
+                "attempt": 1,
+                "status": "success"
+              }
+            ],
+            "usage": {
+              "completion_tokens": 251,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "prompt_tokens": 3190,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 3441
+            }
+          },
+          "window": "0+1"
+        }
+      ],
+      "errors": []
+    }
+  },
+  "reread_metadata": {
+    "provider": "openai-compatible",
+    "model": "nvidia/nemotron-3-ultra-550b-a55b",
+    "prompt_version": "v4-reread-2",
+    "prompt_digest": "bcd1e58135f22ee341b3bab6138e5bc6228e33ee64a36fab8a5937335f27ebfb",
+    "recorded_at": "2026-11-15T17:45:39.923859+00:00"
+  },
+  "rereads": {}
+}

@@ -140,6 +140,10 @@ BANKING_FINANCE_ACCEPTANCE_POLICY = AcceptancePolicy(
     tau=0.80,
     delta=0.20,
     allowed_assertion_kinds=("fact", "definition", "requirement", "proposal"),
+    allowed_source_attributions=(
+        *AcceptancePolicy.allowed_source_attributions,
+        "authoritative_instrument",
+    ),
     version="banking-finance-v1.1",
 )
 

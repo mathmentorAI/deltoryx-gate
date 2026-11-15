@@ -720,3 +720,114 @@ def test_textual_diff_catches_non_numeric_variants_and_ignores_formatting_and_do
             doc_metadata=coll_fmt.document_metadata,
         )
         assert gaps == []
+
+
+def test_recorded_reads_v2_replay_preserves_ablation_and_closes_gaps():
+    """Offline replay of live nvidia/nemotron-3-ultra-550b-a55b v2 + reread recordings stays 10/10 on ablation and deterministic."""
+    import sys
+
+    bench_dir = Path(__file__).resolve().parents[1] / "benchmarks"
+    if str(bench_dir) not in sys.path:
+        sys.path.insert(0, str(bench_dir))
+    import measure_reader_recall as mrr
+
+    rec_v2_dir = Path(__file__).resolve().parents[1] / "examples" / "harness2_securitization" / "recorded_reads_v2"
+    ann_path = bench_dir / "conflict_annotations.json"
+    rep = mrr.measure_recall(annotations_path=ann_path, recordings_dir=rec_v2_dir, mode="recorded")
+    summary = rep["summary"]
+    assert summary["documents_total"] == 15
+    assert summary["documents_read_ok"] == 15
+    assert summary["ablation"]["conflicts_removed"] == 10
+    assert summary["ablation"]["gaps_detected"] == 10
+    assert summary["gaps_closed_by_reread_total"] == 2
+    assert summary["gaps_by_kind"]["quantity"] == 4
+    assert summary["clean_corpus_false_gaps"]["false_gaps_total"] == 0
+    assert summary["clean_candidate_escalation_rate_wilson_95"]["k"] == 0
+    per_corpus = {c["corpus_id"]: c for c in rep["corpora"]}
+    assert per_corpus["meridian"]["gaps_closed_by_reread"] == 2
+    assert per_corpus["apex"]["reference_register_gaps"] == 0
+    assert per_corpus["ridgeline"]["reference_register_gaps"] == 0
+
+
+def test_duplicate_raw_proposals_and_authoritative_reread_attribution():
+    """Duplicate semantic proposals with differing raw dicts do not fail store immutability, and authoritative_instrument rereads admit."""
+    doc = _make_doc(
+        "indenture.docx",
+        "Class B Notes ($40,000,000 initial principal) bear interest at 5.80% per annum.",
+        rank=100,
+    )
+    doc = SourceDocument(
+        document_id=doc.document_id,
+        text=doc.text,
+        authority_rank=doc.authority_rank,
+        attribution="authoritative_instrument",
+    )
+    frags = _build_document_fragments(
+        {"document_id": doc.document_id, "revision": doc.revision, "text": doc.text},
+        1800,
+    )
+    fid = frags[0][0]
+
+    class _DupReader:
+        identity = {"provider": "test", "model": "dup", "prompt_version": "t", "prompt_digest": "d"}
+
+        def propose(self, req):
+            items, rej = [], []
+            raw = [
+                {
+                    "entity": "Class B Notes",
+                    "predicate": "coupon_rate",
+                    "value": {"value": 5.8, "unit": "percent_per_annum"},
+                    "assertion_kind": "fact",
+                    "condition_status": "unconditional",
+                    "basis": "explicit",
+                    "evidence": [fid],
+                    "quote": "Class B Notes ($40,000,000 initial principal) bear interest at 5.80% per annum.",
+                    "field_evidence": {"entity": "Class B Notes", "value": "5.80% per annum"},
+                },
+                {
+                    "entity": "Class B Notes",
+                    "predicate": "coupon_rate",
+                    "value": {"value": 5.8, "unit": "percent_per_annum"},
+                    "assertion_kind": "fact",
+                    "conditions": [],
+                    "condition_status": "unconditional",
+                    "basis": "explicit",
+                    "evidence": [fid],
+                    "quote": "Class B Notes ($40,000,000 initial principal) bear interest at 5.80% per annum.",
+                    "field_evidence": {"entity": "Class B Notes", "value": "5.80% per annum"},
+                },
+            ]
+            _bind_raw_proposals(raw, dict(frags), doc.text, items, rej)
+            assert not rej
+            return {"items": items, "rejected": [], "calls": [], "errors": [], "fragments": 1, "windows": 1}
+
+    layer = EvidenceLayer(vocabulary=SECURITIZATION_VOCABULARY, policy=SECURITIZATION_ACCEPTANCE_POLICY, reader=_DupReader())
+    res = layer.ingest([doc])
+    assert res["units_admitted"] == 1
+    assert not res["read_errors"]
+
+    rr_items, rr_rej = [], []
+    _bind_raw_proposals(
+        [
+            {
+                "entity": "Class B Notes",
+                "predicate": "note_principal",
+                "value": {"value": 40000000, "unit": "USD"},
+                "assertion_kind": "fact",
+                "condition_status": "unconditional",
+                "basis": "explicit",
+                "evidence": [fid],
+                "quote": "Class B Notes ($40,000,000 initial principal) bear interest at 5.80% per annum.",
+                "field_evidence": {"entity": "Class B Notes", "value": "$40,000,000"},
+            }
+        ],
+        dict(frags),
+        doc.text,
+        rr_items,
+        rr_rej,
+    )
+    assert not rr_rej
+    rr_sum = layer.admit_reread_items(rr_items, producer={"kind": "reread_reader", "identity": {"model": "dup"}})
+    assert rr_sum["units_admitted"] == 1
+    assert not rr_sum["rejection_reasons"]

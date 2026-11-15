@@ -719,6 +719,10 @@ SECURITIZATION_ACCEPTANCE_POLICY = AcceptancePolicy(
     tau=0.70,
     delta=0.20,
     allowed_assertion_kinds=("fact", "definition", "requirement"),
+    allowed_source_attributions=(
+        *AcceptancePolicy.allowed_source_attributions,
+        "authoritative_instrument",
+    ),
     version="securitization-v1",
 )
 

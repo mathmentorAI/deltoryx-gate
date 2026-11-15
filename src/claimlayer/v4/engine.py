@@ -859,14 +859,24 @@ class EvidenceLayer:
                     )
                     continue
 
-                _, existing = self.store.head('unit', unit.unit_id)
-                if existing is None or canonical(existing) != canonical(unit.record()):
-                    self.store.put('unit', unit.unit_id, unit.record(), head=unit.unit_id)
-                    summary['units_admitted'] += 1
+                self._put_unit_if_new(unit, summary)
                 if fe_list:
                     self._store_field_evidence(unit.unit_id, {fe.field: fe.evidence for fe in fe_list})
                 summary['unit_ids'].append(unit.unit_id)
         return summary
+
+    def _put_unit_if_new(self, unit: EvidenceUnit, summary: dict[str, Any]) -> str:
+        """Persist a unit once per semantic identity without failing on differing raw proposal dicts."""
+        rec = unit.record()
+        _, existing = self.store.head('unit', unit.unit_id)
+        if existing is not None:
+            ex_id = {k: v for k, v in existing.items() if k != 'proposal'}
+            new_id = {k: v for k, v in rec.items() if k != 'proposal'}
+            if canonical(ex_id) == canonical(new_id):
+                return unit.unit_id
+        self.store.put('unit', unit.unit_id, rec, head=unit.unit_id)
+        summary['units_admitted'] += 1
+        return unit.unit_id
 
     def _reject(self, proposal, basis, producer, error, summary):
         hint = {}
@@ -901,12 +911,7 @@ class EvidenceLayer:
         except (ValueError, TypeError, KeyError) as exc:
             return self._reject(proposal, basis, producer, {'reason': 'evidence_binding', 'path': 'evidence',
                                                             'detail': str(exc)}, summary)
-        _, existing = self.store.head('unit', unit.unit_id)
-        if existing is not None and canonical(existing) == canonical(unit.record()):
-            return unit.unit_id
-        self.store.put('unit', unit.unit_id, unit.record(), head=unit.unit_id)
-        summary['units_admitted'] += 1
-        return unit.unit_id
+        return self._put_unit_if_new(unit, summary)
 
     # ------------------------------------------------------------------ ledger
     @property

@@ -34,8 +34,8 @@
     "deterministic_tiebreak": "lexicographical_accession_number"
   },
   "reader_configuration": {
-    "strict_prompt_version": "v4-proposals-4",
-    "reread_prompt_version": "v4-reread-1",
+    "strict_prompt_version": "v4-proposals-7",
+    "reread_prompt_version": "v4-reread-2",
     "reread_config": {
       "enabled": true,
       "max_attempts_per_document": 3,

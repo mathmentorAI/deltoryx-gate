@@ -831,3 +831,146 @@ def test_duplicate_raw_proposals_and_authoritative_reread_attribution():
     rr_sum = layer.admit_reread_items(rr_items, producer={"kind": "reread_reader", "identity": {"model": "dup"}})
     assert rr_sum["units_admitted"] == 1
     assert not rr_sum["rejection_reasons"]
+
+
+def test_authoritative_instrument_admission_verdict_diff():
+    """Point 13: adding authoritative_instrument admits ONLY fidelity-clean authoritative_instrument units."""
+    from dataclasses import replace
+
+    bench_dir = Path(__file__).resolve().parents[1] / "benchmarks"
+    if str(bench_dir) not in sys.path:
+        sys.path.insert(0, str(bench_dir))
+    import measure_reader_recall as mrr
+
+    rec_roots = (
+        ("v1", Path(__file__).resolve().parents[1] / "examples" / "harness2_securitization" / "recorded_reads", 46, 10, 17),
+        ("v2", Path(__file__).resolve().parents[1] / "examples" / "harness2_securitization" / "recorded_reads_v2", 39, 11, 10),
+    )
+
+    for label, rec_dir, expected_total, expected_admitted_diff, expected_fidelity_blocked in rec_roots:
+        total_units = 0
+        admitted_diff = 0
+        fidelity_blocked = 0
+        for _cid, (short_name, builder, vocab, pol, _dprof) in mrr._CORPUS_SPECS.items():
+            assert "authoritative_instrument" in pol.allowed_source_attributions
+            pol_before = replace(
+                pol,
+                allowed_source_attributions=tuple(
+                    a for a in pol.allowed_source_attributions if a != "authoritative_instrument"
+                ),
+            )
+            corpus = builder()
+            reader = RecordedProposalReader.from_file(rec_dir / f"{short_name}.json")
+            layer = EvidenceLayer(vocabulary=vocab, policy=pol, reader=reader)
+            layer.ingest(list(corpus.v4_sources.values()))
+
+            docs = {d.document_id: d for d in corpus.v4_sources.values()}
+            doc_revs = {(d.document_id, d.revision): d for d in corpus.v4_sources.values()}
+            fe_map = layer.field_evidences
+            for unit in layer.units:
+                total_units += 1
+                q_scope = dict(unit.proposition.get("scope") or {})
+                ev_before = evaluate_unit_admissibility(
+                    unit,
+                    vocabulary=vocab,
+                    policy=pol_before,
+                    documents=docs,
+                    document_revisions=doc_revs,
+                    query_scope=q_scope,
+                    stored_field_evidences=fe_map,
+                    condition_mode="report",
+                    skip_fidelity=False,
+                )
+                ev_after = evaluate_unit_admissibility(
+                    unit,
+                    vocabulary=vocab,
+                    policy=pol,
+                    documents=docs,
+                    document_revisions=doc_revs,
+                    query_scope=q_scope,
+                    stored_field_evidences=fe_map,
+                    condition_mode="report",
+                    skip_fidelity=False,
+                )
+                if ev_before.admissible != ev_after.admissible:
+                    admitted_diff += 1
+                    assert not ev_before.admissible, f"{label} unintended revocation"
+                    assert ev_before.reason == "source_attribution_not_admitted"
+                    assert ev_after.admissible
+                    attributions = {docs[ref.document_id].attribution for ref in unit.evidence}
+                    assert "authoritative_instrument" in attributions
+                elif ev_before.reason != ev_after.reason:
+                    fidelity_blocked += 1
+                    assert not ev_before.admissible and not ev_after.admissible
+                    assert ev_before.reason == "source_attribution_not_admitted"
+                    assert str(ev_after.reason or "").startswith("fidelity:")
+        assert total_units == expected_total, f"{label}: {total_units}"
+        assert admitted_diff == expected_admitted_diff, f"{label}: {admitted_diff}"
+        assert fidelity_blocked == expected_fidelity_blocked, f"{label}: {fidelity_blocked}"
+
+    # Negative guard: untrusted attributions & broken fidelity stay rejected even with authoritative_instrument.
+    bad_doc = SourceDocument(
+        document_id="untrusted.docx",
+        text="Class B Notes bear interest at 5.80% per annum.",
+        authority_rank=50,
+        attribution="unverified_assertion",
+    )
+    info_doc = SourceDocument(
+        document_id="info.docx",
+        text="Class B Notes bear interest at 5.80% per annum.",
+        authority_rank=50,
+        attribution="informational",
+    )
+    auth_doc = SourceDocument(
+        document_id="auth.docx",
+        text="Class B Notes bear interest at 5.80% per annum.",
+        authority_rank=100,
+        attribution="authoritative_instrument",
+    )
+    docs_map = {d.document_id: d for d in (bad_doc, info_doc, auth_doc)}
+    revs_map = {(d.document_id, d.revision): d for d in docs_map.values()}
+    for doc, expected_reason in (
+        (bad_doc, "source_attribution_not_admitted"),
+        (info_doc, "source_attribution_not_admitted"),
+        (auth_doc, "fidelity:VALUE_NOT_IN_EVIDENCE"),
+    ):
+        u = EvidenceUnit(
+            proposition={
+                "entity": "Class B Notes",
+                "predicate": "coupon_rate",
+                "value": 9.99 if doc is auth_doc else 5.8,
+                "unit": "percent_per_annum",
+                "polarity": "affirmed",
+                "assertion_kind": "fact",
+                "conditions": [],
+                "condition_status": "unconditional",
+                "scope": {"tranche": "Class B Notes"},
+                "valid_from": None,
+                "valid_until": None,
+            },
+            evidence=(
+                EvidenceRef(
+                    document_id=doc.document_id,
+                    revision=doc.revision,
+                    start=0,
+                    end=len(doc.text),
+                    quote=doc.text,
+                ),
+            ),
+            basis=EXPLICIT,
+            origin="reader",
+            producer={"kind": "test", "identity": {"model": "test"}},
+        )
+        ev = evaluate_unit_admissibility(
+            u,
+            vocabulary=SECURITIZATION_VOCABULARY,
+            policy=SECURITIZATION_ACCEPTANCE_POLICY,
+            documents=docs_map,
+            document_revisions=revs_map,
+            query_scope={"tranche": "Class B Notes"},
+            condition_mode="report",
+            skip_fidelity=False,
+        )
+        assert not ev.admissible
+        assert ev.reason == expected_reason
+

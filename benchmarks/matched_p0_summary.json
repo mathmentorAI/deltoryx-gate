@@ -1,0 +1,500 @@
+{
+  "evaluated_at_utc": "2026-11-15T18:45:28.237235+00:00",
+  "repo_root": "/Users/franciscohdb/Documents/Deltoryx Platform v1/claim-layer",
+  "p0_1_v1_vs_v2_matched": {
+    "v1": {
+      "per_corpus": {
+        "cart_synth": {
+          "clean_in_this_version": true,
+          "annotated_conflicts": 4,
+          "conflicts_found": 4,
+          "divergent_sections": 8,
+          "sentence_checks": 45,
+          "initial_gaps": 26,
+          "closed_by_reread": 0,
+          "final_gaps": 26,
+          "gaps_by_kind": {
+            "quantity": 12,
+            "textual": 14,
+            "section": 0
+          },
+          "sentences_with_any_gap": 14,
+          "sentences_with_qty_gap": 9,
+          "sentences_with_txt_gap": 11,
+          "escalates": true
+        },
+        "meridian": {
+          "clean_in_this_version": false,
+          "annotated_conflicts": 2,
+          "conflicts_found": 1,
+          "divergent_sections": 1,
+          "sentence_checks": 5,
+          "initial_gaps": 8,
+          "closed_by_reread": 0,
+          "final_gaps": 8,
+          "gaps_by_kind": {
+            "quantity": 3,
+            "textual": 5,
+            "section": 0
+          },
+          "sentences_with_any_gap": 5,
+          "sentences_with_qty_gap": 3,
+          "sentences_with_txt_gap": 5,
+          "escalates": true
+        },
+        "apex": {
+          "clean_in_this_version": true,
+          "annotated_conflicts": 2,
+          "conflicts_found": 2,
+          "divergent_sections": 2,
+          "sentence_checks": 4,
+          "initial_gaps": 0,
+          "closed_by_reread": 0,
+          "final_gaps": 0,
+          "gaps_by_kind": {
+            "quantity": 0,
+            "textual": 0,
+            "section": 0
+          },
+          "sentences_with_any_gap": 0,
+          "sentences_with_qty_gap": 0,
+          "sentences_with_txt_gap": 0,
+          "escalates": false
+        },
+        "ridgeline": {
+          "clean_in_this_version": true,
+          "annotated_conflicts": 2,
+          "conflicts_found": 2,
+          "divergent_sections": 2,
+          "sentence_checks": 5,
+          "initial_gaps": 0,
+          "closed_by_reread": 0,
+          "final_gaps": 0,
+          "gaps_by_kind": {
+            "quantity": 0,
+            "textual": 0,
+            "section": 0
+          },
+          "sentences_with_any_gap": 0,
+          "sentences_with_qty_gap": 0,
+          "sentences_with_txt_gap": 0,
+          "escalates": false
+        }
+      },
+      "matched_all_4_corpora": {
+        "corpora_ids": [
+          "cart_synth",
+          "meridian",
+          "apex",
+          "ridgeline"
+        ],
+        "corpora_count": 4,
+        "divergent_sections": 13,
+        "sentence_checks": 59,
+        "recall": {
+          "k": 9,
+          "n": 10,
+          "rate": 0.9,
+          "ci_95_low": 0.5958,
+          "ci_95_high": 0.9821
+        },
+        "initial_gaps": 34,
+        "closed_by_reread": 0,
+        "final_gaps": 34,
+        "gaps_by_kind": {
+          "quantity": 15,
+          "textual": 19,
+          "section": 0
+        },
+        "corpus_escalation_rate": {
+          "k": 2,
+          "n": 4,
+          "rate": 0.5,
+          "ci_95_low": 0.15,
+          "ci_95_high": 0.85
+        },
+        "sentence_any_gap_rate": {
+          "k": 19,
+          "n": 59,
+          "rate": 0.322,
+          "ci_95_low": 0.2169,
+          "ci_95_high": 0.4489
+        },
+        "sentence_qty_gap_rate": {
+          "k": 12,
+          "n": 59,
+          "rate": 0.2034,
+          "ci_95_low": 0.1204,
+          "ci_95_high": 0.3227
+        },
+        "sentence_txt_gap_rate": {
+          "k": 16,
+          "n": 59,
+          "rate": 0.2712,
+          "ci_95_low": 0.1744,
+          "ci_95_high": 0.396
+        }
+      },
+      "matched_common_clean_2_corpora": {
+        "corpora_ids": [
+          "apex",
+          "ridgeline"
+        ],
+        "corpora_count": 2,
+        "divergent_sections": 4,
+        "sentence_checks": 9,
+        "recall": {
+          "k": 4,
+          "n": 4,
+          "rate": 1.0,
+          "ci_95_low": 0.5101,
+          "ci_95_high": 1.0
+        },
+        "initial_gaps": 0,
+        "closed_by_reread": 0,
+        "final_gaps": 0,
+        "gaps_by_kind": {
+          "quantity": 0,
+          "textual": 0,
+          "section": 0
+        },
+        "corpus_escalation_rate": {
+          "k": 0,
+          "n": 2,
+          "rate": 0.0,
+          "ci_95_low": 0.0,
+          "ci_95_high": 0.6576
+        },
+        "sentence_any_gap_rate": {
+          "k": 0,
+          "n": 9,
+          "rate": 0.0,
+          "ci_95_low": 0.0,
+          "ci_95_high": 0.2991
+        },
+        "sentence_qty_gap_rate": {
+          "k": 0,
+          "n": 9,
+          "rate": 0.0,
+          "ci_95_low": 0.0,
+          "ci_95_high": 0.2991
+        },
+        "sentence_txt_gap_rate": {
+          "k": 0,
+          "n": 9,
+          "rate": 0.0,
+          "ci_95_low": 0.0,
+          "ci_95_high": 0.2991
+        }
+      }
+    },
+    "v2": {
+      "per_corpus": {
+        "cart_synth": {
+          "clean_in_this_version": false,
+          "annotated_conflicts": 4,
+          "conflicts_found": 3,
+          "divergent_sections": 8,
+          "sentence_checks": 45,
+          "initial_gaps": 18,
+          "closed_by_reread": 0,
+          "final_gaps": 18,
+          "gaps_by_kind": {
+            "quantity": 4,
+            "textual": 14,
+            "section": 0
+          },
+          "sentences_with_any_gap": 8,
+          "sentences_with_qty_gap": 3,
+          "sentences_with_txt_gap": 8,
+          "escalates": true
+        },
+        "meridian": {
+          "clean_in_this_version": false,
+          "annotated_conflicts": 2,
+          "conflicts_found": 1,
+          "divergent_sections": 1,
+          "sentence_checks": 5,
+          "initial_gaps": 5,
+          "closed_by_reread": 2,
+          "final_gaps": 3,
+          "gaps_by_kind": {
+            "quantity": 1,
+            "textual": 2,
+            "section": 0
+          },
+          "sentences_with_any_gap": 2,
+          "sentences_with_qty_gap": 1,
+          "sentences_with_txt_gap": 2,
+          "escalates": true
+        },
+        "apex": {
+          "clean_in_this_version": true,
+          "annotated_conflicts": 2,
+          "conflicts_found": 2,
+          "divergent_sections": 2,
+          "sentence_checks": 4,
+          "initial_gaps": 0,
+          "closed_by_reread": 0,
+          "final_gaps": 0,
+          "gaps_by_kind": {
+            "quantity": 0,
+            "textual": 0,
+            "section": 0
+          },
+          "sentences_with_any_gap": 0,
+          "sentences_with_qty_gap": 0,
+          "sentences_with_txt_gap": 0,
+          "escalates": false
+        },
+        "ridgeline": {
+          "clean_in_this_version": true,
+          "annotated_conflicts": 2,
+          "conflicts_found": 2,
+          "divergent_sections": 2,
+          "sentence_checks": 5,
+          "initial_gaps": 0,
+          "closed_by_reread": 0,
+          "final_gaps": 0,
+          "gaps_by_kind": {
+            "quantity": 0,
+            "textual": 0,
+            "section": 0
+          },
+          "sentences_with_any_gap": 0,
+          "sentences_with_qty_gap": 0,
+          "sentences_with_txt_gap": 0,
+          "escalates": false
+        }
+      },
+      "matched_all_4_corpora": {
+        "corpora_ids": [
+          "cart_synth",
+          "meridian",
+          "apex",
+          "ridgeline"
+        ],
+        "corpora_count": 4,
+        "divergent_sections": 13,
+        "sentence_checks": 59,
+        "recall": {
+          "k": 8,
+          "n": 10,
+          "rate": 0.8,
+          "ci_95_low": 0.4902,
+          "ci_95_high": 0.9433
+        },
+        "initial_gaps": 23,
+        "closed_by_reread": 2,
+        "final_gaps": 21,
+        "gaps_by_kind": {
+          "quantity": 5,
+          "textual": 16,
+          "section": 0
+        },
+        "corpus_escalation_rate": {
+          "k": 2,
+          "n": 4,
+          "rate": 0.5,
+          "ci_95_low": 0.15,
+          "ci_95_high": 0.85
+        },
+        "sentence_any_gap_rate": {
+          "k": 10,
+          "n": 59,
+          "rate": 0.1695,
+          "ci_95_low": 0.0948,
+          "ci_95_high": 0.2846
+        },
+        "sentence_qty_gap_rate": {
+          "k": 4,
+          "n": 59,
+          "rate": 0.0678,
+          "ci_95_low": 0.0267,
+          "ci_95_high": 0.1618
+        },
+        "sentence_txt_gap_rate": {
+          "k": 10,
+          "n": 59,
+          "rate": 0.1695,
+          "ci_95_low": 0.0948,
+          "ci_95_high": 0.2846
+        }
+      },
+      "matched_common_clean_2_corpora": {
+        "corpora_ids": [
+          "apex",
+          "ridgeline"
+        ],
+        "corpora_count": 2,
+        "divergent_sections": 4,
+        "sentence_checks": 9,
+        "recall": {
+          "k": 4,
+          "n": 4,
+          "rate": 1.0,
+          "ci_95_low": 0.5101,
+          "ci_95_high": 1.0
+        },
+        "initial_gaps": 0,
+        "closed_by_reread": 0,
+        "final_gaps": 0,
+        "gaps_by_kind": {
+          "quantity": 0,
+          "textual": 0,
+          "section": 0
+        },
+        "corpus_escalation_rate": {
+          "k": 0,
+          "n": 2,
+          "rate": 0.0,
+          "ci_95_low": 0.0,
+          "ci_95_high": 0.6576
+        },
+        "sentence_any_gap_rate": {
+          "k": 0,
+          "n": 9,
+          "rate": 0.0,
+          "ci_95_low": 0.0,
+          "ci_95_high": 0.2991
+        },
+        "sentence_qty_gap_rate": {
+          "k": 0,
+          "n": 9,
+          "rate": 0.0,
+          "ci_95_low": 0.0,
+          "ci_95_high": 0.2991
+        },
+        "sentence_txt_gap_rate": {
+          "k": 0,
+          "n": 9,
+          "rate": 0.0,
+          "ci_95_low": 0.0,
+          "ci_95_high": 0.2991
+        }
+      }
+    }
+  },
+  "p1_scaling_matched": {
+    "points": [
+      {
+        "units": 50,
+        "ms": 13.15
+      },
+      {
+        "units": 100,
+        "ms": 24.01
+      },
+      {
+        "units": 198,
+        "ms": 43.97
+      }
+    ],
+    "exponent_50_to_198": 0.877
+  },
+  "p2_fidelity_and_noise_matched": {
+    "utility_admitted_and_supported_positive": {
+      "k": 5,
+      "n": 5,
+      "rate": 1.0,
+      "ci_95_low": 0.5655,
+      "ci_95_high": 1.0
+    },
+    "adversarial_rejected_fidelity_and_condition": {
+      "k": 4,
+      "n": 4,
+      "rate": 1.0,
+      "ci_95_low": 0.5101,
+      "ci_95_high": 1.0
+    },
+    "ocr_clean_no_false_gap": {
+      "k": 3,
+      "n": 3,
+      "rate": 1.0,
+      "ci_95_low": 0.4385,
+      "ci_95_high": 1.0
+    },
+    "ocr_genuine_change_detected": {
+      "k": 1,
+      "n": 1,
+      "rate": 1.0,
+      "ci_95_low": 0.2065,
+      "ci_95_high": 1.0
+    }
+  },
+  "p3_recall_and_scope_matched": {
+    "v3_scope_negation_true_reject": {
+      "k": 8,
+      "n": 8,
+      "rate": 1.0,
+      "ci_95_low": 0.6756,
+      "ci_95_high": 1.0
+    },
+    "v3_positive_utility_PASS": {
+      "k": 6,
+      "n": 6,
+      "rate": 1.0,
+      "ci_95_low": 0.6097,
+      "ci_95_high": 1.0
+    },
+    "p3_deleted_clause_true_detect": {
+      "k": 2,
+      "n": 2,
+      "rate": 1.0,
+      "ci_95_low": 0.3424,
+      "ci_95_high": 1.0
+    },
+    "p3_deleted_clause_clean_no_false_gap": {
+      "k": 1,
+      "n": 1,
+      "rate": 1.0,
+      "ci_95_low": 0.2065,
+      "ci_95_high": 1.0
+    },
+    "p3_overlap_masking_true_detect": {
+      "k": 2,
+      "n": 2,
+      "rate": 1.0,
+      "ci_95_low": 0.3424,
+      "ci_95_high": 1.0
+    },
+    "p3_overlap_clean_no_false_gap": {
+      "k": 1,
+      "n": 1,
+      "rate": 1.0,
+      "ci_95_low": 0.2065,
+      "ci_95_high": 1.0
+    }
+  },
+  "p0_3_heldout_multidomain": {
+    "v3_v4_true_reject_seeded": {
+      "k": 6,
+      "n": 6,
+      "rate": 1.0,
+      "ci_95_low": 0.6097,
+      "ci_95_high": 1.0
+    },
+    "v3_v4_false_accept_seeded": {
+      "k": 0,
+      "n": 6,
+      "rate": 0.0,
+      "ci_95_low": 0.0,
+      "ci_95_high": 0.3903
+    },
+    "v3_v4_clean_accept_utility": {
+      "k": 2,
+      "n": 2,
+      "rate": 1.0,
+      "ci_95_low": 0.3424,
+      "ci_95_high": 1.0
+    },
+    "v3_v4_false_reject_clean": {
+      "k": 0,
+      "n": 2,
+      "rate": 0.0,
+      "ci_95_low": 0.0,
+      "ci_95_high": 0.6576
+    },
+    "v3_v4_sla_passed": true
+  }
+}

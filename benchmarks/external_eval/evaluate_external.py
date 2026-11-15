@@ -122,6 +122,7 @@ def evaluate_external_corpus(
     model_name: str = "nvidia/nemotron-3-ultra-550b-a55b",
     api_key: str | None = None,
     timeout: float = 120.0,
+    thinking_mode: str = "nvidia_off",
 ) -> dict[str, Any]:
     """Run external recall, leave-one-out ablation, and escalation evaluation."""
     ann_resolved = assert_annotations_outside_repo(annotations_path)
@@ -142,6 +143,11 @@ def evaluate_external_corpus(
         resolved_key = api_key or os.environ.get("NVIDIA_API_KEY") or os.environ.get("LLM_API_KEY") or ""
         if not resolved_key:
             raise RuntimeError("Missing API key for --mode live.")
+        extra_body: dict[str, Any] = {}
+        if thinking_mode == "nvidia_off":
+            extra_body["chat_template_kwargs"] = {"enable_thinking": False}
+        elif thinking_mode == "none":
+            extra_body["reasoning_effort"] = "none"
         model = OpenAICompatibleModel(
             base_url=base_url,
             model=model_name,
@@ -150,6 +156,7 @@ def evaluate_external_corpus(
             max_tokens=4096,
             retries=1,
             response_format={"type": "json_object"},
+            extra_body=extra_body,
         )
         live_reader = LLMProposalReader(
             model=model,
@@ -306,23 +313,36 @@ def evaluate_external_corpus(
         tot_sentence_checks += sent_checks
         tot_gaps += gap_cnt
 
+        gaps_by_kind_c: dict[str, int] = {"quantity": 0, "textual": 0, "section": 0}
+        for _g in register.gap_divergences:
+            _gk = str(_g.get("kind") or "quantity")
+            gaps_by_kind_c[_gk] = gaps_by_kind_c.get(_gk, 0) + 1
+
         per_corpus.append({
             "corpus_id": cid,
             "domain": domain,
             "documents_total": len(sdocs),
             "documents_read_ok": read_ok_cnt,
+            "units_admitted": len(layer.units),
             "annotated_conflicts": len(conflicts),
             "conflicts_found": len(found_ids),
             "missed_conflict_ids": missed_ids,
-            "recall_wilson_95": wilson_ci(len(found_ids), len(conflicts)),
+            "recall_wilson_95": wilson_ci(len(found_ids), len(conflicts)) if conflicts else None,
             "sentence_checks": sent_checks,
             "reference_register_gaps": gap_cnt,
+            "gaps_by_kind": gaps_by_kind_c,
             "clean_control": is_clean,
             "escalates_on_gap": gap_cnt > 0,
             "reread_provenance": dict(register.reread_provenance),
         })
 
     ab_detected = sum(1 for r in ablation_rows if r.get("gap_detected"))
+    tot_units = sum(int(c["units_admitted"]) for c in per_corpus)
+    tot_escalated = sum(1 for c in per_corpus if c["escalates_on_gap"])
+    tot_gaps_by_kind = {
+        k: sum(int(c["gaps_by_kind"].get(k, 0)) for c in per_corpus)
+        for k in ("quantity", "textual", "section")
+    }
     return {
         "protocol_id": protocol.get("protocol_id"),
         "manifest_sha256": manifest.get("manifest_sha256"),
@@ -333,21 +353,27 @@ def evaluate_external_corpus(
             "corpora_total": len(per_corpus),
             "documents_total": tot_docs,
             "documents_read_ok": tot_read_ok,
+            "units_admitted_total": tot_units,
+            "corpora_escalated": tot_escalated,
+            "corpus_escalation_rate_wilson_95": wilson_ci(tot_escalated, len(per_corpus)),
+            "recall_status": "measured" if tot_annotated > 0 else "awaiting_external_human_annotation",
             "annotated_conflicts": tot_annotated,
             "conflicts_found": tot_found,
-            "reader_conflict_recall_wilson_95": wilson_ci(tot_found, tot_annotated),
+            "reader_conflict_recall_wilson_95": wilson_ci(tot_found, tot_annotated) if tot_annotated > 0 else None,
             "sentence_checks_total": tot_sentence_checks,
             "reference_register_gaps_total": tot_gaps,
+            "gaps_by_kind": tot_gaps_by_kind,
             "ablation": {
                 "conflicts_removed": len(ablation_rows),
                 "gaps_detected": ab_detected,
-                "detection_rate_wilson_95": wilson_ci(ab_detected, len(ablation_rows)),
+                "detection_rate_wilson_95": wilson_ci(ab_detected, len(ablation_rows)) if ablation_rows else None,
             },
             "clean_corpora_total": clean_corpora,
-            "clean_candidate_escalation_rate_wilson_95": wilson_ci(clean_escalated, clean_corpora),
-            "clean_corpus_false_gap_sentence_rate_wilson_95": wilson_ci(
-                min(clean_sents_with_gap, clean_sentence_checks),
-                clean_sentence_checks,
+            "clean_candidate_escalation_rate_wilson_95": wilson_ci(clean_escalated, clean_corpora) if clean_corpora else None,
+            "clean_corpus_false_gap_sentence_rate_wilson_95": (
+                wilson_ci(min(clean_sents_with_gap, clean_sentence_checks), clean_sentence_checks)
+                if clean_sentence_checks > 0
+                else None
             ),
             "clean_false_gaps_total": clean_false_gaps,
         },
@@ -362,6 +388,7 @@ def main() -> int:
     parser.add_argument("--annotations", type=Path, required=True, help="External human annotations JSON (outside repo).")
     parser.add_argument("--protocol", type=Path, default=_EXT_DIR / "protocol.json")
     parser.add_argument("--mode", choices=("live", "recorded"), default="recorded")
+    parser.add_argument("--thinking-mode", choices=("nvidia_off", "none", "default"), default="nvidia_off")
     parser.add_argument("--recordings-dir", type=Path, default=None)
     parser.add_argument("--save-recordings-dir", type=Path, default=None)
     parser.add_argument("--json-out", type=Path, default=None)
@@ -372,6 +399,7 @@ def main() -> int:
         annotations_path=args.annotations,
         protocol_path=args.protocol,
         mode=args.mode,
+        thinking_mode=args.thinking_mode,
         recordings_dir=args.recordings_dir,
         save_recordings_dir=args.save_recordings_dir,
     )

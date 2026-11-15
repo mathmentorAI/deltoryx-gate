@@ -1697,7 +1697,7 @@ _SCALE_WORD_MAP: dict[str, Decimal] = {
 
 _KV_JSON_ENTITY_KEYS = frozenset({"entity", "company", "issuer", "party", "subject", "borrower", "vendor", "name"})
 _KV_PAIR_RE = re.compile(
-    r"""(?:"(?P<qkey>[^"\n]+)"|'(?P<sqkey>[^'\n]+)'|(?P<bkey>[A-Za-z][A-Za-z0-9_ -]{1,48}))\s*:\s*(?P<val>\[[^\]\n]*\]|"(?:\\.|[^"\n])*"|'(?:\\.|[^'\n])*'|[^,\n;}{]+)""",
+    r"""(?:"(?P<qkey>[^"\n]+)"|'(?P<sqkey>[^'\n]+)'|(?P<bkey>[A-Za-z][A-Za-z0-9_ -]{1,48}))\s*:\s*(?!\s*[A-Za-z][A-Za-z0-9_ -]{1,48}\s*:)(?P<val>\[[^\]\n]*\]|"(?:\\.|[^"\n])*"|'(?:\\.|[^'\n])*'|(?:[^,\n;}{:]|:(?=\d)|,(?=\s*\d{3,4}\b))+)""",
     re.IGNORECASE,
 )
 
@@ -1898,8 +1898,10 @@ def _parse_kv_list_items(raw_val: Any) -> list[str]:
     s = raw_val.strip()
     if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
         s = s[1:-1].strip()
+    if normalize_date_token(s) is not None:
+        return [s]
     if ";" in s or "," in s:
-        return [part.strip() for part in re.split(r"\s*[;,]\s*", s) if part.strip()]
+        return [part.strip() for part in re.split(r"\s*;\s*|\s*(?<!\d),(?!\s*\d{3,4}\b)\s*", s) if part.strip()]
     return [s] if s else []
 
 
@@ -2018,6 +2020,30 @@ def _verify_kv_json_relational_association(
         else ([str(val.get("value", "")).strip()] if isinstance(val, dict) else [str(val).strip()])
     )
     allowed_keys = {label_key(item) for item in matching_items}
+    # Normalize scalar typed values (date / boolean / enum) in KV entries symmetrically.
+    vspec: FieldSpec | None = None
+    if vocabulary is not None:
+        try:
+            vspec = vocabulary.predicate(prop_predicate).value
+        except UnmappedProposal:
+            vspec = None
+    if vspec is not None and len(expected_items) == 1:
+        exp_raw = expected_items[0]
+        if vspec.type == "boolean":
+            _true_tok = {"true", "yes", "si", "sí", "1"}
+            _false_tok = {"false", "no", "0"}
+            exp_b = True if label_key(exp_raw) in _true_tok else (False if label_key(exp_raw) in _false_tok else None)
+            item_bs = {
+                True if label_key(it) in _true_tok else (False if label_key(it) in _false_tok else None)
+                for it in matching_items
+            }
+            if exp_b is not None and exp_b in item_bs:
+                return []
+        elif vspec.type == "date":
+            exp_d = normalize_date_token(exp_raw)
+            item_ds = {normalize_date_token(it) for it in matching_items}
+            if exp_d is not None and exp_d in item_ds:
+                return []
     missing_from_pred_key = [exp for exp in expected_items if label_key(exp) not in allowed_keys]
     if missing_from_pred_key:
         return [

@@ -28,8 +28,12 @@ from claimlayer.semantic.models import digest  # noqa: E402
 from claimlayer.v4 import (  # noqa: E402
     EvidenceLayer,
     LLMProposalReader,
+    REREAD_PROMPT,
+    REREAD_PROMPT_VERSION,
     RecordedProposalReader,
+    STRICT_PROMPT_VERSION,
     STRICT_READER_PROMPT,
+    TargetedRereadConfig,
     build_corpus_reference_register,
     collect_reference_divergences,
 )
@@ -159,13 +163,13 @@ def _count_sentence_checks(corpus: Any, divergences: list[Any]) -> int:
         sec_span = getattr(d, "secondary_span", None)
         pfull = corpus.v4_sources[pri_id].text if pri_id in corpus.v4_sources else ""
         sfull = corpus.v4_sources[sec_id].text if sec_id in corpus.v4_sources else ""
-        ptxt = pfull[pri_span[0]:pri_span[1]] if pri_span else ""
-        stxt = sfull[sec_span[0]:sec_span[1]] if sec_span else ""
+        ptxt = pfull[pri_span[0]:pri_span[1]] if pri_span else pfull
+        stxt = sfull[sec_span[0]:sec_span[1]] if sec_span else sfull
         ps = segment_sentences_with_spans(ptxt, base_offset=int(pri_span[0]) if pri_span else 0)
         ss = segment_sentences_with_spans(stxt, base_offset=int(sec_span[0]) if sec_span else 0)
         pairs, un_p, un_s = _align_sentences(ps, ss)
         total += len(pairs) + len(un_p) + len(un_s)
-    return total
+    return max(total, len(divergences))
 
 
 def _proposal_overlaps_conflict_quote(doc_text: str, prop_quote: str, target_quote: str) -> bool:
@@ -249,8 +253,33 @@ def _ablate_conflict_leave_one_out(
     for did, rec in ablated_docs.items():
         src = corpus.v4_sources.get(did)
         dtext = src.text if src is not None else ""
+        target_q = pri_q if did == pri_id else (sec_q if did == sec_id else "")
         kept: list[Any] = []
         for prop in rec.get("raw_proposals") or ():
+            prop_pred = str(prop.get("predicate") or "")
+            pval = prop.get("value")
+            # For structured list proposals (e.g. waterfall_schedule), ablate only overlapping conflict items
+            if isinstance(pval, list) and target_q and pred in {"waterfall_priority", "waterfall_schedule"}:
+                fe_items = list(((prop.get("field_evidence") or {}).get("items")) or ())
+                if fe_items and len(fe_items) == len(pval):
+                    new_vals = []
+                    new_fe_items = []
+                    dropped_item = False
+                    for item_v, item_q in zip(pval, fe_items):
+                        if _proposal_overlaps_conflict_quote(dtext, str(item_q), target_q):
+                            dropped_item = True
+                        else:
+                            new_vals.append(item_v)
+                            new_fe_items.append(item_q)
+                    if dropped_item:
+                        removed += 1
+                        if not new_vals:
+                            continue
+                        mod_prop = copy.deepcopy(prop)
+                        mod_prop["value"] = new_vals
+                        mod_prop["field_evidence"]["items"] = new_fe_items
+                        kept.append(mod_prop)
+                        continue
             same_span = (
                 did == pri_id and _proposal_overlaps_conflict_quote(dtext, str(prop.get("quote") or ""), pri_q)
             ) or (
@@ -259,10 +288,9 @@ def _ablate_conflict_leave_one_out(
             if not same_span:
                 kept.append(prop)
                 continue
-            pval = prop.get("value")
             scalar = pval.get("value") if isinstance(pval, dict) else pval
             val_match = isinstance(scalar, (int, float)) and float(scalar) in target_nums
-            if str(prop.get("predicate") or "") == pred or val_match:
+            if prop_pred == pred or val_match:
                 removed += 1
                 continue
             kept.append(prop)
@@ -277,6 +305,7 @@ def _ablate_conflict_leave_one_out(
         fragment_chars=int(base_reader_meta.get("fragment_chars", 1800)),
         structural_reliability=base_reader_meta.get("structural_reliability"),
         recording_path=None,
+        has_reread_support=False,
     )
     ab_layer = EvidenceLayer(vocabulary=vocab, policy=pol, reader=ab_reader)
     ab_layer.ingest(list(corpus.v4_sources.values()))
@@ -285,6 +314,7 @@ def _ablate_conflict_leave_one_out(
         vocab,
         divergence_collection=div_coll,
         expected_documents=corpus.v4_sources,
+        reread_config=TargetedRereadConfig(enabled=False),
     )
     base_keys = {
         (str(g.get("document_id")), int(g.get("offset", 0)), str(g.get("token")), str(g.get("kind")))
@@ -356,6 +386,68 @@ def _conflict_found_in_register(
     return False
 
 
+class _RecordingRereadReader:
+    """Thin live-reader proxy that records verbatim pass-1 and targeted re-read JSON responses."""
+
+    def __init__(self, inner: LLMProposalReader) -> None:
+        self._inner = inner
+        self.recorded_rereads: dict[str, dict[str, Any]] = {}
+
+    @property
+    def identity(self):
+        return self._inner.identity
+
+    @property
+    def reread_identity(self):
+        return self._inner.reread_identity
+
+    @property
+    def prompt(self) -> str:
+        return self._inner.prompt
+
+    @property
+    def prompt_version(self) -> str:
+        return self._inner.prompt_version
+
+    @property
+    def fragment_chars(self) -> int:
+        return self._inner.fragment_chars
+
+    @property
+    def structural_reliability(self):
+        return self._inner.structural_reliability
+
+    @property
+    def has_reread_support(self) -> bool:
+        return self._inner.has_reread_support
+
+    def propose(self, request: dict[str, Any]) -> dict[str, Any]:
+        return self._inner.propose(request)
+
+    def propose_targeted(self, request: dict[str, Any]) -> dict[str, Any]:
+        res = self._inner.propose_targeted(request)
+        doc = request["document"]
+        doc_id = str(doc["document_id"])
+        rev = str(doc["revision"])
+        s_span = request["target"]["sentence_span"]
+        span_key = f"{int(s_span[0])}:{int(s_span[1])}"
+        raw_props: list[Any] = []
+        for c in res.get("calls") or ():
+            props = ((c.get("response") or {}).get("output") or {}).get("proposals") or ()
+            if isinstance(props, list):
+                raw_props.extend(props)
+        doc_bucket = self.recorded_rereads.setdefault(doc_id, {"revision": rev, "targets": {}})
+        doc_bucket["targets"][span_key] = {
+            "sentence_span": [int(s_span[0]), int(s_span[1])],
+            "sentence": str(request["target"].get("sentence") or ""),
+            "target_tokens": list(request["target"].get("gaps") or ()),
+            "raw_proposals": raw_props,
+            "calls": list(res.get("calls") or ()),
+            "errors": list(res.get("errors") or ()),
+        }
+        return res
+
+
 def measure_recall(
     *,
     annotations_path: Path,
@@ -392,7 +484,13 @@ def measure_recall(
             response_format={"type": "json_object"},
             extra_body=extra_body,
         )
-        live_reader = LLMProposalReader(model=model, prompt=STRICT_READER_PROMPT)
+        live_reader = LLMProposalReader(
+            model=model,
+            prompt=STRICT_READER_PROMPT,
+            prompt_version=STRICT_PROMPT_VERSION,
+            reread_prompt=REREAD_PROMPT,
+            reread_prompt_version=REREAD_PROMPT_VERSION,
+        )
 
     per_corpus: list[dict[str, Any]] = []
     ablation_cases: list[dict[str, Any]] = []
@@ -403,21 +501,31 @@ def measure_recall(
     tot_divergences = 0
     tot_sentence_checks = 0
     tot_gaps = 0
+    tot_gaps_initial = 0
+    tot_gaps_closed_reread = 0
     tot_gaps_by_kind: dict[str, int] = {"quantity": 0, "textual": 0, "section": 0}
+    tot_textual_sents_with_gap = 0
     clean_corpora_ids: list[str] = []
+    clean_corpora_escalated = 0
     clean_divergences = 0
     clean_sentence_checks = 0
     clean_false_gaps = 0
     clean_false_gaps_by_kind: dict[str, int] = {"quantity": 0, "textual": 0, "section": 0}
+    clean_divs_with_gap = 0
+    clean_sents_with_gap = 0
+    clean_sents_with_qty_gap = 0
+    clean_sents_with_txt_gap = 0
 
     for case_id, spec in _CORPUS_SPECS.items():
         short_name, builder, vocab, pol, dprof = spec
         ann = corpora_ann[case_id]
         corpus = builder()
 
+        recorder_proxy: _RecordingRereadReader | None = None
         if mode == "live":
             assert live_reader is not None
-            reader: Any = live_reader
+            recorder_proxy = _RecordingRereadReader(live_reader)
+            reader: Any = recorder_proxy
             reader_meta = dict(live_reader.identity)
         else:
             rec_path = recordings_dir / f"{short_name}.json"
@@ -435,7 +543,20 @@ def measure_recall(
         )
 
         snapshot_docs = _snapshot_reader_documents(layer, reader, sdocs, model_name)
-        if mode == "live" and save_recordings_dir is not None:
+        div_coll = _collect_reference_divergence_collection(corpus, domain_profile=dprof)
+        divs = list(div_coll.divergences)
+        sent_checks = _count_sentence_checks(corpus, divs)
+        register = build_corpus_reference_register(
+            layer,
+            vocab,
+            divergence_collection=div_coll,
+            expected_documents=corpus.v4_sources,
+        )
+        rr_prov = dict(getattr(register, "reread_provenance", {}) or {})
+        tot_gaps_initial += int(rr_prov.get("initial_gap_count", len(register.gap_divergences)))
+        tot_gaps_closed_reread += int(rr_prov.get("closed_gap_count", 0))
+
+        if mode == "live" and save_recordings_dir is not None and recorder_proxy is not None:
             save_recordings_dir.mkdir(parents=True, exist_ok=True)
             rec_payload: dict[str, Any] = {
                 "corpus_id": short_name,
@@ -447,18 +568,16 @@ def measure_recall(
                 "recorded_at": datetime.now(timezone.utc).isoformat(),
                 "fragment_chars": reader.fragment_chars,
                 "documents": snapshot_docs,
+                "reread_metadata": {
+                    "provider": "openai-compatible",
+                    "model": model_name,
+                    "prompt_version": REREAD_PROMPT_VERSION,
+                    "prompt_digest": digest(REREAD_PROMPT),
+                    "recorded_at": datetime.now(timezone.utc).isoformat(),
+                },
+                "rereads": recorder_proxy.recorded_rereads,
             }
             (save_recordings_dir / f"{short_name}.json").write_text(json.dumps(rec_payload, indent=2))
-
-        div_coll = _collect_reference_divergence_collection(corpus, domain_profile=dprof)
-        divs = list(div_coll.divergences)
-        sent_checks = _count_sentence_checks(corpus, divs)
-        register = build_corpus_reference_register(
-            layer,
-            vocab,
-            divergence_collection=div_coll,
-            expected_documents=corpus.v4_sources,
-        )
         conflicts = list(ann.get("conflicts") or ())
         default_pri = str(ann.get("primary_source_id") or "")
         default_sec = str(ann.get("secondary_source_id") or "")
@@ -491,17 +610,45 @@ def measure_recall(
         gap_cnt = len(register.gap_divergences)
         div_cnt = len(divs)
         gaps_by_kind: dict[str, int] = {"quantity": 0, "textual": 0, "section": 0}
+        sent_gap_keys_all: set[tuple[Any, ...]] = set()
+        sent_gap_keys_qty: set[tuple[Any, ...]] = set()
+        sent_gap_keys_txt: set[tuple[Any, ...]] = set()
+        div_gap_keys: set[tuple[Any, ...]] = set()
         for gap in register.gap_divergences:
             gkind = str(gap.get("kind") or "quantity")
             gaps_by_kind[gkind] = gaps_by_kind.get(gkind, 0) + 1
             tot_gaps_by_kind[gkind] = tot_gaps_by_kind.get(gkind, 0) + 1
+            s_key = (
+                str(gap.get("primary_source_id", "")),
+                str(gap.get("secondary_source_id", "")),
+                str(gap.get("section_key", "")),
+                str(gap.get("sentence") or ""),
+            )
+            d_key = (
+                str(gap.get("primary_source_id", "")),
+                str(gap.get("secondary_source_id", "")),
+                str(gap.get("section_key", "")),
+            )
+            sent_gap_keys_all.add(s_key)
+            div_gap_keys.add(d_key)
+            if gkind == "quantity":
+                sent_gap_keys_qty.add(s_key)
+            elif gkind == "textual":
+                sent_gap_keys_txt.add(s_key)
+        tot_textual_sents_with_gap += min(len(sent_gap_keys_txt), max(sent_checks, 1))
 
         is_clean_corpus = len(missed_ids) == 0
         if is_clean_corpus:
             clean_corpora_ids.append(short_name)
+            if gap_cnt > 0:
+                clean_corpora_escalated += 1
             clean_divergences += div_cnt
             clean_sentence_checks += sent_checks
             clean_false_gaps += gap_cnt
+            clean_divs_with_gap += min(len(div_gap_keys), div_cnt)
+            clean_sents_with_gap += min(len(sent_gap_keys_all), sent_checks)
+            clean_sents_with_qty_gap += min(len(sent_gap_keys_qty), sent_checks)
+            clean_sents_with_txt_gap += min(len(sent_gap_keys_txt), sent_checks)
             for gkind, gval in gaps_by_kind.items():
                 clean_false_gaps_by_kind[gkind] = clean_false_gaps_by_kind.get(gkind, 0) + gval
 
@@ -518,6 +665,7 @@ def measure_recall(
                 "corpus_id": short_name,
                 "case_id": case_id,
                 "clean_control_for_false_gaps": is_clean_corpus,
+                "clean_candidate_escalates_on_gap": gap_cnt > 0,
                 "documents_total": len(sdocs),
                 "documents_read_ok": read_ok_cnt,
                 "units_admitted": len(layer.units),
@@ -530,9 +678,17 @@ def measure_recall(
                 "recall_wilson_95": wilson_ci(len(found_ids), len(conflicts)),
                 "divergent_sections": div_cnt,
                 "sentence_checks": sent_checks,
+                "initial_gaps_before_reread": int(rr_prov.get("initial_gap_count", gap_cnt)),
+                "gaps_closed_by_reread": int(rr_prov.get("closed_gap_count", 0)),
                 "reference_register_gaps": gap_cnt,
                 "gaps_by_kind": gaps_by_kind,
                 "gap_rate": round(gap_cnt / div_cnt, 4) if div_cnt else 0.0,
+                "reread_provenance": {
+                    "performed": bool(rr_prov.get("performed")),
+                    "attempts_total": int(rr_prov.get("attempts_total", 0)),
+                    "closed_gap_count": int(rr_prov.get("closed_gap_count", 0)),
+                    "open_gap_count": int(rr_prov.get("open_gap_count", gap_cnt)),
+                },
                 "incomplete": register.incomplete,
                 "incomplete_documents": list(register.incomplete_documents),
             }
@@ -560,11 +716,20 @@ def measure_recall(
             "reader_conflict_recall_wilson_95": wilson_ci(tot_found, tot_annotated),
             "divergent_sections_total": tot_divergences,
             "sentence_checks_total": tot_sentence_checks,
+            "initial_gaps_before_reread_total": tot_gaps_initial,
+            "gaps_closed_by_reread_total": tot_gaps_closed_reread,
             "reference_register_gaps_total": tot_gaps,
             "gaps_by_kind": tot_gaps_by_kind,
             "reference_register_gap_rate": round(tot_gaps / tot_divergences, 4) if tot_divergences else 0.0,
+            "targeted_reread_closure_wilson_95": wilson_ci(tot_gaps_closed_reread, tot_gaps_initial)
+            if tot_gaps_initial
+            else None,
+            "clean_candidate_escalation_rate_wilson_95": wilson_ci(
+                clean_corpora_escalated,
+                len(clean_corpora_ids),
+            ),
             "textual_gaps_across_all_corpora_wilson_95": wilson_ci(
-                tot_gaps_by_kind.get("textual", 0),
+                min(tot_textual_sents_with_gap, tot_sentence_checks),
                 tot_sentence_checks,
             ),
             "ablation": {
@@ -578,14 +743,14 @@ def measure_recall(
                 "clean_sentence_checks_total": clean_sentence_checks,
                 "false_gaps_total": clean_false_gaps,
                 "false_gaps_by_kind": clean_false_gaps_by_kind,
-                "per_divergence_wilson_95": wilson_ci(clean_false_gaps, clean_divergences),
-                "per_sentence_check_wilson_95": wilson_ci(clean_false_gaps, clean_sentence_checks),
+                "per_divergence_wilson_95": wilson_ci(clean_divs_with_gap, clean_divergences),
+                "per_sentence_check_wilson_95": wilson_ci(clean_sents_with_gap, clean_sentence_checks),
                 "quantity_per_sentence_check_wilson_95": wilson_ci(
-                    clean_false_gaps_by_kind.get("quantity", 0),
+                    clean_sents_with_qty_gap,
                     clean_sentence_checks,
                 ),
                 "textual_per_sentence_check_wilson_95": wilson_ci(
-                    clean_false_gaps_by_kind.get("textual", 0),
+                    clean_sents_with_txt_gap,
                     clean_sentence_checks,
                 ),
             },

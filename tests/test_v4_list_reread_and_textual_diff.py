@@ -513,3 +513,210 @@ def test_targeted_reread_unclosed_or_unfaithful_or_budget_exceeded_still_escalat
     dummy_graph = JustificationGraph(claims={}, steps=[], conclusion_id="")
     cov = verify_corpus_obligations_coverage(reg, dummy_graph, candidate_response="Minimum reserve is $10,000,000 per indenture.docx.")
     assert any(i["code"] == "REFERENCE_REGISTER_GAP" and not i["repairable"] for i in cov.issues)
+
+
+def test_textual_diff_same_coupon_plus_subordination_and_joint_numeric_shift():
+    """Mere overlap with non-differing unit OR joint numeric shift MUST emit kind='textual' gaps."""
+    from claimlayer.v4.corpus_obligations import build_corpus_reference_register
+    from claimlayer.v4.domain_profile import DomainProfile, PolicyConfiguration
+
+    vocab = Vocabulary(
+        name="textual-diff-test",
+        version="1.0.0",
+        units=SECURITIZATION_VOCABULARY.units,
+        predicates=(
+            PredicateSpec(
+                name="coupon_rate",
+                value=FieldSpec("quantity", dimensions=("ratio", "annual_rate")),
+                assertion_kinds=("requirement", "fact"),
+                required=True,
+            ),
+            PredicateSpec(
+                name="seniority",
+                value=FieldSpec("enum", enum=("senior", "subordinated")),
+                assertion_kinds=("requirement", "fact"),
+            ),
+        ),
+    )
+
+    # Case 1: Coupon matches (5.80% on both) + overlapping coupon spans the whole sentence,
+    # while "senior" vs "subordinated" differs -> MUST emit textual gap!
+    m_text = "Class B Notes bear interest at 5.80% and rank senior to Class C."
+    d_text = "Class B Notes bear interest at 5.80% and rank subordinated to Class C."
+    m_doc = _make_doc("indenture.docx", m_text, rank=100)
+    d_doc = _make_doc("draft_oc.docx", d_text, rank=60)
+    layer1 = EvidenceLayer(vocabulary=vocab, policy=SECURITIZATION_ACCEPTANCE_POLICY)
+    layer1.ingest([m_doc, d_doc])
+
+    def _prop(doc: SourceDocument, pred: str, val: Any, unit: str | None, quote: str) -> dict[str, Any]:
+        frags = _build_document_fragments({"document_id": doc.document_id, "revision": doc.revision, "text": doc.text}, 1800)
+        p: dict[str, Any] = {
+            "entity": "Class B Notes",
+            "predicate": pred,
+            "value": val,
+            "assertion_kind": "requirement",
+            "condition_status": "unconditional",
+            "basis": "explicit",
+            "evidence": [frags[0][0]],
+            "quote": quote,
+            "field_evidence": {"entity": "Class B Notes"},
+        }
+        if unit is not None:
+            p["unit"] = unit
+        items, rej = [], []
+        _bind_raw_proposals([p], dict(frags), doc.text, items, rej)
+        assert not rej
+        return items[0]
+
+    layer1.ingest_units(
+        [
+            _prop(m_doc, "coupon_rate", 5.8, "percent_per_annum", m_text),
+            _prop(d_doc, "coupon_rate", 5.8, "percent_per_annum", d_text),
+        ],
+        attestor="test_reader",
+    )
+    prof = DomainProfile(
+        profile_id="txt_diff_prof",
+        vocabulary=vocab,
+        policy=PolicyConfiguration(authority_ranks={"indenture.docx": 100, "draft_oc.docx": 60}),
+    )
+    loaded1 = {
+        "indenture.docx": LoadedDocument("D1", "indenture.docx", "governing_operative_agreement", "authoritative", 100, True, m_text, 1, ()),
+        "draft_oc.docx": LoadedDocument("D2", "draft_oc.docx", "disclosure_document", "standard", 60, False, d_text, 1, ()),
+    }
+    reg1 = build_corpus_reference_register(
+        layer1,
+        vocab,
+        divergence_collection=collect_reference_divergences(loaded1, prof),
+        expected_documents={"indenture.docx": m_doc, "draft_oc.docx": d_doc},
+        reread_config=TargetedRereadConfig(enabled=False),
+    )
+    txt_gaps1 = [g for g in reg1.gap_divergences if g.get("kind") == "textual"]
+    assert txt_gaps1, f"Expected textual gap for senior vs subordinated, got {reg1.gap_divergences}"
+    assert any("senior" in str(g.get("changed_text", "")) or "subordinated" in str(g.get("changed_text", "")) for g in txt_gaps1)
+    cov1 = verify_corpus_obligations_coverage(reg1, JustificationGraph(claims={}, steps=[], conclusion_id=""), candidate_response="Class B Notes 5.80%.")
+    assert any(i["code"] == "REFERENCE_REGISTER_GAP" for i in cov1.issues)
+
+    # Case 2: Joint numeric shift (5.80% -> 5.55%) AND textual shift ("senior" -> "subordinated")
+    # Even when coupon_rate conflict covers the rate span, uncovered "senior" <-> "subordinated" MUST emit textual gap!
+    d2_text = "Class B Notes bear interest at 5.55% and rank subordinated to Class C."
+    d2_doc = _make_doc("draft_oc.docx", d2_text, rank=60)
+    layer2 = EvidenceLayer(vocabulary=vocab, policy=SECURITIZATION_ACCEPTANCE_POLICY)
+    layer2.ingest([m_doc, d2_doc])
+    layer2.ingest_units(
+        [
+            _prop(m_doc, "coupon_rate", 5.8, "percent_per_annum", "bear interest at 5.80%"),
+            _prop(d2_doc, "coupon_rate", 5.55, "percent_per_annum", "bear interest at 5.55%"),
+        ],
+        attestor="test_reader",
+    )
+    loaded2 = {
+        "indenture.docx": loaded1["indenture.docx"],
+        "draft_oc.docx": LoadedDocument("D2", "draft_oc.docx", "disclosure_document", "standard", 60, False, d2_text, 1, ()),
+    }
+    reg2 = build_corpus_reference_register(
+        layer2,
+        vocab,
+        divergence_collection=collect_reference_divergences(loaded2, prof),
+        expected_documents={"indenture.docx": m_doc, "draft_oc.docx": d2_doc},
+        reread_config=TargetedRereadConfig(enabled=False),
+    )
+    txt_gaps2 = [g for g in reg2.gap_divergences if g.get("kind") == "textual"]
+    assert txt_gaps2, f"Expected textual gap when sentence has both rate diff and priority diff, got {reg2.gap_divergences}"
+    assert any("senior" in str(g.get("changed_text", "")) or "subordinated" in str(g.get("changed_text", "")) for g in txt_gaps2)
+
+    # Case 3: When differing seniority conflict IS extracted covering "senior"/"subordinated" spans -> 0 textual gaps!
+    layer3 = EvidenceLayer(vocabulary=vocab, policy=SECURITIZATION_ACCEPTANCE_POLICY)
+    layer3.ingest([m_doc, d_doc])
+    layer3.ingest_units(
+        [
+            _prop(m_doc, "coupon_rate", 5.8, "percent_per_annum", "bear interest at 5.80%"),
+            _prop(d_doc, "coupon_rate", 5.8, "percent_per_annum", "bear interest at 5.80%"),
+            _prop(m_doc, "seniority", "senior", None, "rank senior to Class C"),
+            _prop(d_doc, "seniority", "subordinated", None, "rank subordinated to Class C"),
+        ],
+        attestor="test_reader",
+    )
+    reg3 = build_corpus_reference_register(
+        layer3,
+        vocab,
+        divergence_collection=collect_reference_divergences(loaded1, prof),
+        expected_documents={"indenture.docx": m_doc, "draft_oc.docx": d_doc},
+        reread_config=TargetedRereadConfig(enabled=False),
+    )
+    assert reg3.gap_divergences == ()
+
+
+def test_textual_diff_catches_non_numeric_variants_and_ignores_formatting_and_doc_ids():
+    """Textual diff catches condition/party/timeframe shifts while ignoring formatting & structural doc ids."""
+    from claimlayer.v4.corpus_obligations import _divergence_gaps_for_item, build_corpus_reference_register
+    from claimlayer.v4.domain_profile import DomainProfile, PolicyConfiguration
+
+    vocab = Vocabulary(
+        name="txt-variants",
+        version="1.0.0",
+        units=SECURITIZATION_VOCABULARY.units,
+        predicates=(
+            PredicateSpec("fee", value=FieldSpec("quantity", dimensions=("ratio", "annual_rate")), assertion_kinds=("requirement",), required=True),
+        ),
+    )
+    prof = DomainProfile(
+        profile_id="var_prof",
+        vocabulary=vocab,
+        policy=PolicyConfiguration(authority_ranks={"master_indenture.pdf": 100, "draft_summary.pdf": 60}),
+    )
+
+    # 1. Varied non-numeric shifts MUST emit textual gaps
+    for pri_sent, sec_sent, expected_frag in (
+        (
+            "Servicer shall remit collections upon closing.",
+            "Master Servicer shall remit collections upon closing.",
+            "Master",
+        ),
+        (
+            "Interest distributions are payable monthly.",
+            "Interest distributions are payable monthly unless waived.",
+            "unless waived",
+        ),
+        (
+            "Notice takes effect upon closing.",
+            "Notice takes effect after written notice.",
+            "closing",
+        ),
+    ):
+        loaded = {
+            "master_indenture.pdf": LoadedDocument("D1", "master_indenture.pdf", "governing_operative_agreement", "authoritative", 100, True, pri_sent, 1, ()),
+            "draft_summary.pdf": LoadedDocument("D2", "draft_summary.pdf", "disclosure_document", "standard", 60, False, sec_sent, 1, ()),
+        }
+        coll = collect_reference_divergences(loaded, prof)
+        assert coll.divergences
+        gaps = _divergence_gaps_for_item(
+            coll.divergences[0],
+            doc_texts={"master_indenture.pdf": pri_sent, "draft_summary.pdf": sec_sent},
+            admitted_units=(),
+            unit_spans_by_doc={},
+            reader_obligations=(),
+            doc_metadata=coll.document_metadata,
+        )
+        txt_gaps = [g for g in gaps if g.get("kind") == "textual"]
+        assert txt_gaps, f"Expected textual gap for {pri_sent!r} vs {sec_sent!r}"
+        assert any(expected_frag.lower() in str(g.get("changed_text", "")).lower() or expected_frag.lower() in str(g.get("counterpart_changed_text", "")).lower() for g in txt_gaps)
+
+    # 2. Formatting-only (whitespace, punctuation, casing) AND structural doc-id aliases -> 0 textual gaps
+    fmt_pri = "Per Master Indenture, Class B Notes bear interest at 5.80% per annum!"
+    fmt_sec = "Per  draft summary,  class b notes,   bear interest at 5.80 % per annum."
+    loaded_fmt = {
+        "master_indenture.pdf": LoadedDocument("D1", "master_indenture.pdf", "governing_operative_agreement", "authoritative", 100, True, fmt_pri, 1, ()),
+        "draft_summary.pdf": LoadedDocument("D2", "draft_summary.pdf", "disclosure_document", "standard", 60, False, fmt_sec, 1, ()),
+    }
+    coll_fmt = collect_reference_divergences(loaded_fmt, prof)
+    for div in coll_fmt.divergences:
+        gaps = _divergence_gaps_for_item(
+            div,
+            doc_texts={"master_indenture.pdf": fmt_pri, "draft_summary.pdf": fmt_sec},
+            admitted_units=(),
+            unit_spans_by_doc={},
+            reader_obligations=(),
+            doc_metadata=coll_fmt.document_metadata,
+        )
+        assert gaps == []

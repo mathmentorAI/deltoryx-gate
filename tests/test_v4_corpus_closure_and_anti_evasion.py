@@ -1295,8 +1295,13 @@ def test_ac4_measure_reader_recall_ablation_and_wilson_ci():
     assert summary["ablation"]["conflicts_removed"] == 10
     assert summary["ablation"]["gaps_detected"] == 10
     assert summary["ablation"]["detection_rate_wilson_95"]["rate"] == 1.0
-    assert summary["textual_gaps_across_all_corpora_wilson_95"]["k"] == 0
-    assert summary["textual_gaps_across_all_corpora_wilson_95"]["n"] > 0
+    txt_ci = summary["textual_gaps_across_all_corpora_wilson_95"]
+    assert 0 <= txt_ci["k"] <= txt_ci["n"]
+    assert txt_ci["n"] > 0
+    assert 0.0 <= txt_ci["ci_95_low"] <= txt_ci["rate"] <= txt_ci["ci_95_high"] <= 1.0
+    by_cid = {c["corpus_id"]: c for c in rep["corpora"]}
+    assert by_cid["apex"]["gaps_by_kind"]["textual"] == 0
+    assert by_cid["ridgeline"]["gaps_by_kind"]["textual"] == 0
 
 
 def test_ac5_textual_only_diff_without_quantities_emits_textual_gap():

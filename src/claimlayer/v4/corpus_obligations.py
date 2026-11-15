@@ -7,6 +7,7 @@ agent-supplied graph, assertions, or metadata flags.
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
+import difflib
 import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
@@ -37,6 +38,7 @@ class ReferenceDivergenceCollection:
     excluded_documents: tuple[Mapping[str, Any], ...] = ()
     domain_profile_fingerprint: str | None = None
     document_texts: Mapping[str, str] = field(default_factory=dict)
+    document_metadata: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
 
 
 def _doc_attr(doc: Any, name: str, default: Any = "") -> Any:
@@ -67,6 +69,7 @@ def collect_reference_divergences(
     excluded_roles = dict(getattr(getattr(domain_profile, "policy", None), "excluded_comparison_roles", None) or {})
 
     doc_texts: dict[str, str] = {}
+    doc_meta: dict[str, dict[str, Any]] = {}
     included_docs: list[Any] = []
     candidate_excluded: list[dict[str, Any]] = []
     for doc in raw_docs:
@@ -76,9 +79,11 @@ def collect_reference_divergences(
             or _doc_attr(doc, "id", "")
         )
         text = str(_doc_attr(doc, "text", "") or "")
+        role = str(_doc_attr(doc, "role", "") or "").strip()
+        title = str(_doc_attr(doc, "title", "") or "").strip()
         if did:
             doc_texts[did] = text
-        role = str(_doc_attr(doc, "role", "") or "").strip()
+            doc_meta[did] = {"role": role, "title": title}
         if role and role in excluded_roles:
             candidate_excluded.append({
                 "document_id": did,
@@ -110,6 +115,7 @@ def collect_reference_divergences(
             excluded_documents=excluded_records,
             domain_profile_fingerprint=fp,
             document_texts=doc_texts,
+            document_metadata=doc_meta,
         )
 
     gov = max(comp_docs, key=lambda d: int(_doc_attr(d, "authority_rank", 50) or 50))
@@ -156,6 +162,7 @@ def collect_reference_divergences(
         excluded_documents=excluded_records,
         domain_profile_fingerprint=fp,
         document_texts=doc_texts,
+        document_metadata=doc_meta,
     )
 
 
@@ -499,6 +506,150 @@ def _align_sentences(
     return pairs, unmatched_pri, unmatched_sec
 
 
+_DIFF_WORD_RE = re.compile(r"[A-Za-z0-9]+(?:[.,_-][A-Za-z0-9]+)*")
+
+
+def _tokenize_with_spans(sentence: str, base_offset: int) -> list[tuple[str, int, int, str]]:
+    """Tokenize *sentence* into alphanumeric spans, ignoring whitespace, casing, and punctuation."""
+    out: list[tuple[str, int, int, str]] = []
+    for m in _DIFF_WORD_RE.finditer(sentence or ""):
+        raw = m.group(0)
+        out.append((raw.lower(), int(base_offset) + m.start(), int(base_offset) + m.end(), raw))
+    return out
+
+
+def _differing_spans_from_obligations(
+    reader_obligations: Sequence[VerificationObligation],
+    admitted_units: Sequence[Any] = (),
+    stored_fe_map: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
+) -> dict[str, list[tuple[int, int]]]:
+    """Collect spans in each document that belong to differing-value (conflict/override) obligations."""
+    diff_spans: dict[str, list[tuple[int, int]]] = {}
+    conflicting_uids: set[str] = set()
+    for ob in reader_obligations:
+        kind = str((ob.parameters or {}).get("corpus_obligation_kind", "") or "")
+        if kind not in ("material_conflict", "authority_override"):
+            continue
+        for uid in (ob.parameters or {}).get("unit_ids") or ():
+            conflicting_uids.add(str(uid))
+        for sp in (ob.parameters or {}).get("evidence_spans") or ():
+            did = str(sp.get("document_id", "") or "")
+            s_pos = sp.get("start")
+            e_pos = sp.get("end")
+            if did and s_pos is not None and e_pos is not None:
+                diff_spans.setdefault(did, []).append((int(s_pos), int(e_pos)))
+
+    if isinstance(stored_fe_map, Mapping) and conflicting_uids:
+        for u in admitted_units:
+            if str(getattr(u, "unit_id", "")) not in conflicting_uids:
+                continue
+            fe_for_unit = stored_fe_map.get(str(u.unit_id), {})
+            if not isinstance(fe_for_unit, Mapping):
+                continue
+            for fname, fref in fe_for_unit.items():
+                if not str(fname).startswith("value[") or not isinstance(fref, Mapping):
+                    continue
+                r_doc = str(fref.get("document_id", "") or "")
+                r_s = fref.get("start")
+                r_e = fref.get("end")
+                if r_doc and r_s is not None and r_e is not None:
+                    diff_spans.setdefault(r_doc, []).append((int(r_s), int(r_e)))
+    return diff_spans
+
+
+def _is_doc_id_diff_fragment(
+    tokens: Sequence[tuple[str, int, int, str]],
+    doc_id: str,
+    aliases: Sequence[str],
+    *,
+    doc_meta: Mapping[str, Any] | None = None,
+    other_doc_id: str = "",
+    other_meta: Mapping[str, Any] | None = None,
+    single_side: bool = False,
+) -> bool:
+    """Return True if *tokens* structurally match *doc_id*'s identifier/title/role aliases."""
+    if not tokens:
+        return False
+    norm_phrase = " ".join(t[0] for t in tokens)
+    raw_lower = doc_id.strip().lower()
+    stem_lower = _DOC_EXT_RE.sub("", raw_lower)
+    stem_words = " ".join(_doc_stem_words(doc_id))
+    exact_ids = {x for x in (raw_lower, stem_lower, stem_words) if x}
+    if norm_phrase in exact_ids:
+        return True
+    alias_set = {a.strip().lower() for a in aliases if a.strip()}
+    if single_side:
+        if norm_phrase in alias_set and (len(tokens) >= 2 or "." in norm_phrase):
+            return True
+    elif norm_phrase in alias_set:
+        return True
+    # Check if every token belongs exclusively to this document's structural metadata (id/title/role)
+    if len(tokens) >= 2:
+        title = str((doc_meta or {}).get("title", "") or "")
+        role = str((doc_meta or {}).get("role", "") or "")
+        o_title = str((other_meta or {}).get("title", "") or "")
+        o_role = str((other_meta or {}).get("role", "") or "")
+        own_words = set(_doc_stem_words(doc_id, title, role)) - _GENERIC_DOC_WORDS
+        other_words = set(_doc_stem_words(other_doc_id, o_title, o_role)) if other_doc_id else set()
+        unique_own = own_words - other_words
+        if unique_own and all(t[0] in unique_own for t in tokens):
+            return True
+    return False
+
+
+def _unit_predicates_on_doc(admitted_units: Sequence[Any], doc_id: str) -> set[str]:
+    preds: set[str] = set()
+    for u in admitted_units:
+        for ref in getattr(u, "evidence", ()) or ():
+            if str(getattr(ref, "document_id", "") or "") == doc_id:
+                pred = str((getattr(u, "proposition", {}) or {}).get("predicate", "") or "")
+                if pred:
+                    preds.add(pred)
+    return preds
+
+
+def _covered_by_disjoint_single_doc_unit(
+    admitted_units: Sequence[Any],
+    doc_id: str,
+    other_doc_preds: set[str],
+    target_span: tuple[int, int],
+) -> bool:
+    for u in admitted_units:
+        pred = str((getattr(u, "proposition", {}) or {}).get("predicate", "") or "")
+        if not pred or pred in other_doc_preds:
+            continue
+        for ref in getattr(u, "evidence", ()) or ():
+            if str(getattr(ref, "document_id", "") or "") != doc_id:
+                continue
+            r_s = getattr(ref, "start", None)
+            r_e = getattr(ref, "end", None)
+            if r_s is not None and r_e is not None and _spans_intersect((int(r_s), int(r_e)), target_span):
+                return True
+    return False
+
+
+def _bridges_two_differing_spans(
+    diff_spans: Sequence[tuple[int, int]],
+    tok_span: tuple[int, int],
+    sent_text: str,
+    sent_base: int,
+) -> bool:
+    """Return True if a 1-token insert/delete sits directly between two distinct differing spans."""
+    ts, te = int(tok_span[0]), int(tok_span[1])
+    left = [sp for sp in diff_spans if int(sp[0]) >= sent_base and int(sp[1]) <= ts]
+    right = [sp for sp in diff_spans if int(sp[0]) >= te and int(sp[1]) <= sent_base + len(sent_text)]
+    if not left or not right:
+        return False
+    nearest_left = max(left, key=lambda sp: int(sp[1]))
+    nearest_right = min(right, key=lambda sp: int(sp[0]))
+    if nearest_left == nearest_right:
+        return False
+    # Verify only whitespace/punctuation separates nearest_left -> token -> nearest_right
+    gap_l = sent_text[max(0, int(nearest_left[1]) - sent_base) : max(0, ts - sent_base)]
+    gap_r = sent_text[max(0, te - sent_base) : max(0, int(nearest_right[0]) - sent_base)]
+    return not re.search(r"[A-Za-z0-9]", gap_l) and not re.search(r"[A-Za-z0-9]", gap_r)
+
+
 def _unit_covers_doc_span(
     unit_spans_by_doc: Mapping[str, Sequence[tuple[int, int]]],
     doc_id: str,
@@ -516,6 +667,9 @@ def _divergence_gaps_for_item(
     admitted_units: Sequence[Any],
     unit_spans_by_doc: Mapping[str, Sequence[tuple[int, int]]],
     reader_obligations: Sequence[VerificationObligation],
+    *,
+    differing_spans_by_doc: Mapping[str, Sequence[tuple[int, int]]] | None = None,
+    doc_metadata: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Compute fine-grained quantity & textual reference-register gaps for a divergence."""
     pri_id = str(getattr(div, "primary_source_id", "") or "")
@@ -590,6 +744,17 @@ def _divergence_gaps_for_item(
             "secondary_source_id": sec_id,
         })
 
+    eff_diff_spans = (
+        differing_spans_by_doc
+        if differing_spans_by_doc is not None
+        else _differing_spans_from_obligations(reader_obligations, admitted_units)
+    )
+    pri_aliases, sec_aliases = _pair_doc_aliases(pri_id, sec_id, doc_metadata)
+    pri_meta = (doc_metadata or {}).get(pri_id, {})
+    sec_meta = (doc_metadata or {}).get(sec_id, {})
+    pri_preds = _unit_predicates_on_doc(admitted_units, pri_id)
+    sec_preds = _unit_predicates_on_doc(admitted_units, sec_id)
+
     # 1. Aligned differing sentence pairs
     for p_sent, s_sent in pairs:
         p_norm = _norm_sentence_eq(p_sent[2])
@@ -603,45 +768,174 @@ def _divergence_gaps_for_item(
         p_diff = [q for q in p_quants if q["token"] not in s_keys]
         s_diff = [q for q in s_quants if q["token"] not in p_keys]
 
-        if p_diff or s_diff:
-            for q in p_diff:
-                q_span = (int(q["span"][0]), int(q["span"][1]))
-                if not _unit_covers_doc_span(unit_spans_by_doc, pri_id, q_span):
-                    _emit_quantity_gap(pri_id, q, p_sent, sec_id, s_sent)
-            for q in s_diff:
-                q_span = (int(q["span"][0]), int(q["span"][1]))
-                if not _unit_covers_doc_span(unit_spans_by_doc, sec_id, q_span):
-                    _emit_quantity_gap(sec_id, q, s_sent, pri_id, p_sent)
-        else:
-            # 1(e): Differing aligned sentence pair with no distinct quantities
-            p_span = (int(p_sent[0]), int(p_sent[1]))
-            s_span = (int(s_sent[0]), int(s_sent[1]))
-            # Covered if one admitted unit spans both sentences OR admitted units exist overlapping each side
-            single_unit_both = any(
-                _obligation_overlaps_doc_span_raw(u, pri_id, p_span)
-                and _obligation_overlaps_doc_span_raw(u, sec_id, s_span)
-                for u in admitted_units
+        p_diff_q_spans = [(int(q["span"][0]), int(q["span"][1])) for q in p_diff]
+        s_diff_q_spans = [(int(q["span"][0]), int(q["span"][1])) for q in s_diff]
+
+        for q in p_diff:
+            q_span = (int(q["span"][0]), int(q["span"][1]))
+            if not _unit_covers_doc_span(unit_spans_by_doc, pri_id, q_span):
+                _emit_quantity_gap(pri_id, q, p_sent, sec_id, s_sent)
+        for q in s_diff:
+            q_span = (int(q["span"][0]), int(q["span"][1]))
+            if not _unit_covers_doc_span(unit_spans_by_doc, sec_id, q_span):
+                _emit_quantity_gap(sec_id, q, s_sent, pri_id, p_sent)
+
+        # Token-level diff check on ALL differing aligned sentence pairs (even when quantities differ).
+        p_tokens = _tokenize_with_spans(p_sent[2], int(p_sent[0]))
+        s_tokens = _tokenize_with_spans(s_sent[2], int(s_sent[0]))
+        sm = difflib.SequenceMatcher(
+            None,
+            [t[0] for t in p_tokens],
+            [t[0] for t in s_tokens],
+            autojunk=False,
+        )
+        for tag, i1, i2, j1, j2 in sm.get_opcodes():
+            if tag == "equal":
+                continue
+            p_slice = p_tokens[i1:i2]
+            s_slice = s_tokens[j1:j2]
+
+            p_non_qty = [
+                tok
+                for tok in p_slice
+                if not any(_spans_intersect((tok[1], tok[2]), qs) for qs in p_diff_q_spans)
+            ]
+            s_non_qty = [
+                tok
+                for tok in s_slice
+                if not any(_spans_intersect((tok[1], tok[2]), qs) for qs in s_diff_q_spans)
+            ]
+            p_uncov = [
+                tok
+                for tok in p_non_qty
+                if not _unit_covers_doc_span(eff_diff_spans, pri_id, (tok[1], tok[2]))
+            ]
+            s_uncov = [
+                tok
+                for tok in s_non_qty
+                if not _unit_covers_doc_span(eff_diff_spans, sec_id, (tok[1], tok[2]))
+            ]
+
+            # Strip leading/trailing or full structural doc-identifier tokens from uncovered slices.
+            def _strip_doc_prefix(
+                uncov: list[tuple[str, int, int, str]],
+                did: str,
+                aliases: Sequence[str],
+                d_meta: Mapping[str, Any],
+                o_did: str,
+                o_meta: Mapping[str, Any],
+                single: bool,
+            ) -> tuple[list[tuple[str, int, int, str]], bool]:
+                if not uncov:
+                    return uncov, False
+                if _is_doc_id_diff_fragment(
+                    uncov, did, aliases, doc_meta=d_meta, other_doc_id=o_did, other_meta=o_meta, single_side=single
+                ):
+                    return [], True
+                # Also strip a doc-id prefix subsequence (e.g. "Baseline Term Sheet:" before another clause)
+                for k in range(len(uncov) - 1, 0, -1):
+                    if _is_doc_id_diff_fragment(
+                        uncov[:k],
+                        did,
+                        aliases,
+                        doc_meta=d_meta,
+                        other_doc_id=o_did,
+                        other_meta=o_meta,
+                        single_side=True,
+                    ):
+                        return uncov[k:], True
+                return uncov, False
+
+            single_side_orig = tag in ("insert", "delete")
+            p_uncov, p_had_doc_ref = _strip_doc_prefix(
+                p_uncov, pri_id, pri_aliases, pri_meta, sec_id, sec_meta, single_side_orig
             )
-            both_sides_covered = single_unit_both or (
-                _unit_covers_doc_span(unit_spans_by_doc, pri_id, p_span)
-                and _unit_covers_doc_span(unit_spans_by_doc, sec_id, s_span)
+            s_uncov, s_had_doc_ref = _strip_doc_prefix(
+                s_uncov, sec_id, sec_aliases, sec_meta, pri_id, pri_meta, single_side_orig
             )
-            if not both_sides_covered:
-                uncovered_doc = sec_id if not _unit_covers_doc_span(unit_spans_by_doc, sec_id, s_span) else pri_id
-                uncovered_sent = s_sent if uncovered_doc == sec_id else p_sent
-                other_doc = pri_id if uncovered_doc == sec_id else sec_id
-                other_sent = p_sent if uncovered_doc == sec_id else s_sent
+
+            # One-sided extra clause already admitted cleanly on a predicate absent from counterpart doc
+            if p_uncov and not s_uncov and (tag == "delete" or s_had_doc_ref or not s_non_qty):
+                p_uncov = [
+                    tok
+                    for tok in p_uncov
+                    if not _covered_by_disjoint_single_doc_unit(admitted_units, pri_id, sec_preds, (tok[1], tok[2]))
+                ]
+            if s_uncov and not p_uncov and (tag == "insert" or p_had_doc_ref or not p_non_qty):
+                s_uncov = [
+                    tok
+                    for tok in s_uncov
+                    if not _covered_by_disjoint_single_doc_unit(admitted_units, sec_id, pri_preds, (tok[1], tok[2]))
+                ]
+
+            # 1-token structural clause join (e.g. "; " vs " and ") strictly bridging two differing spans
+            if tag == "delete" and len(p_uncov) == 1 and not s_uncov:
+                if _bridges_two_differing_spans(
+                    eff_diff_spans.get(pri_id, ()), (p_uncov[0][1], p_uncov[0][2]), p_sent[2], int(p_sent[0])
+                ):
+                    p_uncov = []
+            if tag == "insert" and len(s_uncov) == 1 and not p_uncov:
+                if _bridges_two_differing_spans(
+                    eff_diff_spans.get(sec_id, ()), (s_uncov[0][1], s_uncov[0][2]), s_sent[2], int(s_sent[0])
+                ):
+                    s_uncov = []
+
+            p_frag_text = " ".join(t[3] for t in p_uncov) if p_uncov else " ".join(t[3] for t in p_slice)
+            s_frag_text = " ".join(t[3] for t in s_uncov) if s_uncov else " ".join(t[3] for t in s_slice)
+            p_hunk_span = (
+                [p_uncov[0][1], p_uncov[-1][2]]
+                if p_uncov
+                else ([p_slice[0][1], p_slice[-1][2]] if p_slice else [int(p_sent[0]), int(p_sent[0])])
+            )
+            s_hunk_span = (
+                [s_uncov[0][1], s_uncov[-1][2]]
+                if s_uncov
+                else ([s_slice[0][1], s_slice[-1][2]] if s_slice else [int(s_sent[0]), int(s_sent[0])])
+            )
+
+            if p_uncov:
                 gaps.append({
                     "kind": "textual",
-                    "document_id": uncovered_doc,
-                    "offset": int(uncovered_sent[0]),
-                    "span": [int(uncovered_sent[0]), int(uncovered_sent[1])],
+                    "document_id": pri_id,
+                    "offset": int(p_uncov[0][1]),
+                    "span": [int(p_uncov[0][1]), int(p_uncov[-1][2])],
                     "token": "TEXTUAL_DIFF",
-                    "sentence": uncovered_sent[2],
-                    "sentence_span": [int(uncovered_sent[0]), int(uncovered_sent[1])],
-                    "counterpart_document_id": other_doc,
-                    "counterpart_offset": int(other_sent[0]),
-                    "counterpart_sentence": other_sent[2],
+                    "changed_text": pri_full[p_uncov[0][1] : p_uncov[-1][2]] if pri_full else p_frag_text,
+                    "sentence": p_sent[2],
+                    "sentence_span": [int(p_sent[0]), int(p_sent[1])],
+                    "counterpart_document_id": sec_id,
+                    "counterpart_offset": int(s_hunk_span[0]),
+                    "counterpart_span": [int(s_hunk_span[0]), int(s_hunk_span[1])],
+                    "counterpart_changed_text": (
+                        sec_full[s_hunk_span[0] : s_hunk_span[1]]
+                        if (sec_full and s_hunk_span[1] > s_hunk_span[0])
+                        else s_frag_text
+                    ),
+                    "counterpart_sentence": s_sent[2],
+                    "section_key": sec_key,
+                    "section_label": sec_label,
+                    "primary_source_id": pri_id,
+                    "secondary_source_id": sec_id,
+                })
+            if s_uncov:
+                gaps.append({
+                    "kind": "textual",
+                    "document_id": sec_id,
+                    "offset": int(s_uncov[0][1]),
+                    "span": [int(s_uncov[0][1]), int(s_uncov[-1][2])],
+                    "token": "TEXTUAL_DIFF",
+                    "changed_text": sec_full[s_uncov[0][1] : s_uncov[-1][2]] if sec_full else s_frag_text,
+                    "sentence": s_sent[2],
+                    "sentence_span": [int(s_sent[0]), int(s_sent[1])],
+                    "counterpart_document_id": pri_id,
+                    "counterpart_offset": int(p_hunk_span[0]),
+                    "counterpart_span": [int(p_hunk_span[0]), int(p_hunk_span[1])],
+                    "counterpart_changed_text": (
+                        pri_full[p_hunk_span[0] : p_hunk_span[1]]
+                        if (pri_full and p_hunk_span[1] > p_hunk_span[0])
+                        else p_frag_text
+                    ),
+                    "counterpart_sentence": p_sent[2],
                     "section_key": sec_key,
                     "section_label": sec_label,
                     "primary_source_id": pri_id,
@@ -1018,6 +1312,18 @@ def _compute_register_state(
 
     # Cross-check reader-derived obligations against sentence/quantity divergences
     reader_obligations = list(obligations)
+    differing_spans_by_doc = _differing_spans_from_obligations(
+        reader_obligations,
+        admitted,
+        stored_fe_map,
+    )
+    div_doc_meta: dict[str, dict[str, Any]] = {}
+    if divergence_collection is not None and divergence_collection.document_metadata:
+        for did, meta in divergence_collection.document_metadata.items():
+            div_doc_meta[str(did)] = dict(meta)
+    for did, st in (getattr(evidence, "document_read_statuses", {}) or {}).items():
+        if str(did) not in div_doc_meta and isinstance(st, Mapping):
+            div_doc_meta[str(did)] = {"role": st.get("role", ""), "title": st.get("title", "")}
     gap_divergences: list[dict[str, Any]] = []
     seen_gap_keys: set[tuple[Any, ...]] = set()
     sec_div_records: list[dict[str, Any]] = []
@@ -1048,6 +1354,8 @@ def _compute_register_state(
             admitted,
             unit_spans_by_doc,
             reader_obligations,
+            differing_spans_by_doc=differing_spans_by_doc,
+            doc_metadata=div_doc_meta,
         ):
             gkey = (
                 str(gap_item.get("kind", "")),
@@ -1540,9 +1848,9 @@ _GENERIC_DOC_WORDS = frozenset({
 })
 
 
-def _doc_stem_words(doc_id: str, title: str = "") -> list[str]:
+def _doc_stem_words(doc_id: str, title: str = "", role: str = "") -> list[str]:
     stem = _DOC_EXT_RE.sub("", str(doc_id or ""))
-    raw = f"{stem} {title}".strip()
+    raw = f"{stem} {title} {role}".strip()
     return [w.lower() for w in re.findall(r"[A-Za-z]+", raw) if w]
 
 
@@ -1557,7 +1865,8 @@ def _pair_doc_aliases(
     word_df: dict[str, int] = {}
     for did, meta in statuses.items():
         title = str((meta or {}).get("title", "") or "")
-        for w in set(_doc_stem_words(did, title)):
+        role = str((meta or {}).get("role", "") or "")
+        for w in set(_doc_stem_words(did, title, role)):
             word_df[w] = word_df.get(w, 0) + 1
 
     def _aliases_for(did: str, other_did: str) -> tuple[str, ...]:
@@ -1565,15 +1874,22 @@ def _pair_doc_aliases(
         other_meta = statuses.get(other_did, {}) or {}
         title = str(meta.get("title", "") or "")
         other_title = str(other_meta.get("title", "") or "")
-        words = _doc_stem_words(did, title)
-        other_words = set(_doc_stem_words(other_did, other_title))
-        stem_norm = " ".join(words)
-        other_stem_norm = " ".join(_doc_stem_words(other_did, other_title))
+        role = str(meta.get("role", "") or "")
+        other_role = str(other_meta.get("role", "") or "")
+        words = _doc_stem_words(did, title, role)
+        other_words = set(_doc_stem_words(other_did, other_title, other_role))
+        stem_norm = " ".join(_doc_stem_words(did))
+        other_stem_norm = " ".join(_doc_stem_words(other_did, other_title, other_role))
         cands: list[str] = [did.lower()]
         if stem_norm and stem_norm != other_stem_norm:
             cands.append(stem_norm)
         if title.strip():
             cands.append(title.strip().lower())
+        role_words = [w for w in re.findall(r"[A-Za-z]+", role.lower()) if w]
+        if role_words:
+            cands.append(" ".join(role_words))
+            if len(role_words) >= 2:
+                cands.append(" ".join(role_words[:2]))
         unique_words = [
             w for w in words
             if w not in other_words and w not in _GENERIC_DOC_WORDS and not w.isdigit()

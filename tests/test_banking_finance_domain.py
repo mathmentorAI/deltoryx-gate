@@ -77,7 +77,7 @@ def _build_synthetic_banking_corpus():
             "Financial Summary: Ridgeline Consolidated Adjusted EBITDA is $50,000,000 for LTM Q4.",
         ),
     ]
-    return _build_corpus_objects(
+    corpus = _build_corpus_objects(
         case_id="banking_finance_synthetic",
         task_id="banking-finance/analyze-counterparty-markup",
         dataset_role="synthetic_unit_test",
@@ -86,6 +86,38 @@ def _build_synthetic_banking_corpus():
         common_chars=600,
         total_lines=50,
     )
+    from claimlayer.v4.domains.banking_finance import BANKING_FINANCE_ACCEPTANCE_POLICY, BANKING_FINANCE_VOCABULARY
+    from claimlayer.v4.engine import EvidenceLayer
+    bank_layer = EvidenceLayer(vocabulary=BANKING_FINANCE_VOCABULARY, policy=BANKING_FINANCE_ACCEPTANCE_POLICY)
+    fac_src = corpus.v4_sources["original-term-sheet.docx"]
+    fac_q = "Senior Secured Term Loan Facility Commitment is $200,000,000"
+    fac_s = fac_src.text.index(fac_q)
+    bank_layer.ingest([fac_src])
+    bank_layer.ingest_units(
+        [
+            {
+                "proposal": {
+                    "entity": "Term Loan",
+                    "predicate": "facility_amount",
+                    "value": {"value": 200000000, "unit": "USD"},
+                    "assertion_kind": "fact",
+                    "condition_status": "unconditional",
+                },
+                "evidence": [
+                    {
+                        "document_id": fac_src.document_id,
+                        "revision": fac_src.revision,
+                        "start": fac_s,
+                        "end": fac_s + len(fac_q),
+                        "quote": fac_q,
+                    }
+                ],
+            }
+        ],
+        attestor="corpus_reference_builder",
+    )
+    from dataclasses import replace
+    return replace(corpus, evidence_layer=bank_layer)
 
 
 def test_banking_context_authority_resolution_and_adapter_selection():
@@ -241,4 +273,4 @@ def test_banking_adapter_accepts_context_grounded_v3_v4_and_repair_loop():
     assert loop_res["accepted"] is True
     assert loop_res["final_disposition"] == "ACCEPT"
     assert loop_res["iterations_used"] == 2
-    assert loop_res["operational_authorization"]["status"] == "ESCALATE"
+    assert loop_res["operational_authorization"]["status"] == "PASS"

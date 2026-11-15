@@ -49,6 +49,7 @@ from claimlayer import (
 )
 from claimlayer.v4 import (
     ClaimNode,
+    CorpusReferenceRegister,
     DomainProfile,
     InferenceStep,
     JustificationGraph,
@@ -56,6 +57,7 @@ from claimlayer.v4 import (
     SECURITIZATION_VOCABULARY,
     VerificationBudget,
     VerificationCache,
+    build_corpus_reference_register,
     review_response,
 )
 from claimlayer.v4.correspondence import compute_response_digest
@@ -373,7 +375,7 @@ def build_synthetic_securitization_corpus() -> LoadedCaseCorpus:
         ("D3", "cart-2024-2-offering-memorandum.docx", "disclosure_document", "standard", 60, False, 1, om_text),
     ]
     combined = "\n".join(x[-1] for x in docs_cfg)
-    return _build_corpus_objects(
+    corpus = _build_corpus_objects(
         case_id="cart_2024_2_synthetic_replay",
         task_id="structured-finance-securitization/synthetic-replay",
         dataset_role="synthetic_replay",
@@ -382,6 +384,75 @@ def build_synthetic_securitization_corpus() -> LoadedCaseCorpus:
         common_chars=len(combined),
         total_lines=len(combined.splitlines()),
     )
+    ind_src = corpus.v4_sources["cart-2024-2-indenture.docx"]
+    om_src = corpus.v4_sources["cart-2024-2-offering-memorandum.docx"]
+    corpus.evidence_layer.ingest([ind_src, om_src])
+    q_prin = "Class C Notes ($50,000,000 principal)"
+    s_prin = ind_src.text.index(q_prin)
+    q_coup_ind = "Class C Notes ($50,000,000 principal) bear interest at 6.75% per annum"
+    s_coup_ind = ind_src.text.index(q_coup_ind)
+    q_coup_om = "Class C Notes ($50,000,000 principal) 6.50% per annum"
+    s_coup_om = om_src.text.index(q_coup_om)
+    corpus.evidence_layer.ingest_units(
+        [
+            {
+                "proposal": {
+                    "entity": "Class C Notes",
+                    "predicate": "note_principal",
+                    "value": {"value": 50000000, "unit": "USD"},
+                    "assertion_kind": "fact",
+                    "condition_status": "unconditional",
+                },
+                "evidence": [
+                    {
+                        "document_id": ind_src.document_id,
+                        "revision": ind_src.revision,
+                        "start": s_prin,
+                        "end": s_prin + len(q_prin),
+                        "quote": q_prin,
+                    }
+                ],
+            },
+            {
+                "proposal": {
+                    "entity": "Class C Notes",
+                    "predicate": "coupon_rate",
+                    "value": {"value": 6.75, "unit": "percent_per_annum"},
+                    "assertion_kind": "fact",
+                    "condition_status": "unconditional",
+                },
+                "evidence": [
+                    {
+                        "document_id": ind_src.document_id,
+                        "revision": ind_src.revision,
+                        "start": s_coup_ind,
+                        "end": s_coup_ind + len(q_coup_ind),
+                        "quote": q_coup_ind,
+                    }
+                ],
+            },
+            {
+                "proposal": {
+                    "entity": "Class C Notes",
+                    "predicate": "coupon_rate",
+                    "value": {"value": 6.50, "unit": "percent_per_annum"},
+                    "assertion_kind": "fact",
+                    "condition_status": "unconditional",
+                },
+                "evidence": [
+                    {
+                        "document_id": om_src.document_id,
+                        "revision": om_src.revision,
+                        "start": s_coup_om,
+                        "end": s_coup_om + len(q_coup_om),
+                        "quote": q_coup_om,
+                    }
+                ],
+            },
+        ],
+        attestor="corpus_reference_builder",
+    )
+    return corpus
 
 
 def build_section_comparison_packet(
@@ -1054,6 +1125,13 @@ class PipelineVerificationResult:
     ledger_state_digest: str
     verifier_ms: float
     cache_metrics: dict[str, int]
+    corpus_obligations_total: int = 0
+    corpus_obligations_covered: int = 0
+    corpus_obligations_rejected: int = 0
+    corpus_obligation_ids: tuple[str, ...] = ()
+    corpus_covered_ids: tuple[str, ...] = ()
+    corpus_uncovered_ids: tuple[str, ...] = ()
+    corpus_rejected_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1402,7 +1480,37 @@ def evaluate_securitization_candidate(
     v4_review = None
     assessment_digest = None
     cache_metrics: dict[str, int] = {}
+    corpus_register: CorpusReferenceRegister | None = None
     if gate_mode == "v3_v4":
+        # Compute corpus reference register & origin="corpus" obligations independently of agent output.
+        layer = corpus.evidence_layer
+        if not layer.units and getattr(layer, "reader", None) is not None:
+            for sdoc in corpus.v4_sources.values():
+                try:
+                    layer.ingest([sdoc])
+                except Exception:
+                    pass
+                try:
+                    props = layer.reader.read(sdoc, layer.vocabulary)
+                    if props:
+                        layer.ingest_units(props, attestor=getattr(layer.reader, "reader_id", "corpus_reader"))
+                except Exception:
+                    pass
+        corpus_register = build_corpus_reference_register(
+            layer,
+            adapter.vocabulary,
+            question=parsed.question,
+        )
+        if not corpus_register.available:
+            issues.append({
+                "code": "REFERENCE_REGISTER_MISSING",
+                "source_layer": "v4",
+                "repairable": False,
+                "message": corpus_register.reason or "No corpus reference register is available.",
+                "remediation": "Provide a corpus reader or ingest units via EvidenceLayer.ingest_units before evaluating.",
+                "forbidden_shortcuts": [],
+            })
+
         if require_graph and parsed.graph is None:
             issues.append({"code": "MISSING_JUSTIFICATION_GRAPH", "source_layer": "v4",
                            "repairable": True, "message": "No model-proposed graph is available for response verification.",
@@ -1468,6 +1576,8 @@ def evaluate_securitization_candidate(
                 budget=budget,
                 operation_policy=prof,
                 authorize_operation_id=operation_id,
+                corpus_register=corpus_register,
+                require_reference_register=True,
             )
             assessment_digest = v4_review.assessment_digest
             cache_metrics = dict(v4_review.assessment.cache_metrics)
@@ -1528,8 +1638,11 @@ def evaluate_securitization_candidate(
 
     accepted = report_disp == "ACCEPT"
 
-    # Separate operational authorization: ALWAYS blocks autonomous execution if material document discrepancies exist
-    has_material_discrepancies = bool(parsed.metadata.get("has_material_discrepancies", True))
+    # Separate operational authorization: derived from corpus register (ignores agent metadata.has_material_discrepancies)
+    has_material_discrepancies = bool(
+        corpus_register is not None
+        and (corpus_register.has_material_conflicts or corpus_register.has_authority_overrides)
+    )
     if not accepted:
         op_auth = {
             "status": "RETRY" if report_disp == "RETRY" else "ESCALATE",
@@ -1566,6 +1679,22 @@ def evaluate_securitization_candidate(
         "anti_evasion_rule": "Do NOT delete existing valid sections or quantitative figures to silence an error; fix every cited defect in place.",
     }
     verifier_ms = (time.perf_counter() - t0) * 1000.0
+    cov_info = (
+        dict(v4_review.assessment.corpus_coverage)
+        if v4_review is not None and getattr(v4_review.assessment, "corpus_coverage", None)
+        else {}
+    )
+    ob_ids = tuple(
+        cov_info.get("obligation_ids")
+        or (corpus_register.obligation_ids if corpus_register is not None else ())
+    )
+    cov_ids = tuple(cov_info.get("covered_ids") or ())
+    uncov_ids = tuple(cov_info.get("uncovered_ids") or ())
+    rej_ids = tuple(cov_info.get("rejected_ids") or ())
+    total_obs = int(cov_info.get("total_obligations", len(ob_ids)))
+    covered_obs = int(cov_info.get("covered_count", len(cov_ids)))
+    rejected_obs = int(cov_info.get("rejected_count", len(rej_ids)))
+
     return PipelineVerificationResult(
         report_disposition=report_disp,
         accepted=accepted,
@@ -1579,6 +1708,13 @@ def evaluate_securitization_candidate(
         ledger_state_digest=ledger_state_digest,
         verifier_ms=verifier_ms,
         cache_metrics=cache_metrics,
+        corpus_obligations_total=total_obs,
+        corpus_obligations_covered=covered_obs,
+        corpus_obligations_rejected=rejected_obs,
+        corpus_obligation_ids=ob_ids,
+        corpus_covered_ids=cov_ids,
+        corpus_uncovered_ids=uncov_ids,
+        corpus_rejected_ids=rej_ids,
     )
 
 

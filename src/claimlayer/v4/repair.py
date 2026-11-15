@@ -17,6 +17,7 @@ from typing import Any, Callable, Mapping, Sequence
 from ..semantic.adapters import OpenAICompatibleModel
 from ..semantic.models import SourceDocument, canonical, digest
 from .authorization import AuthorizationVerdict, authorize
+from .corpus_obligations import CorpusReferenceRegister
 from .correspondence import compute_response_digest
 from .domain_profile import DomainProfile, PolicyConfiguration
 from .engine import EvidenceLayer
@@ -724,12 +725,25 @@ def _extract_issues_and_repairs(
         for idx, code in enumerate(codes):
             if suppress_insufficient_when_overclaimed and code == "TEMPORAL_PRECISION_INSUFFICIENT_FOR_EXACT_VALUE":
                 continue
-            if code in seen_codes:
+            dedup_key = f"{code}::{chk.obligation_id}" if code in ("CORPUS_OBLIGATION_UNCOVERED", "CORPUS_OBLIGATION_REJECTED") else code
+            if dedup_key in seen_codes:
                 continue
-            seen_codes.add(code)
+            seen_codes.add(dedup_key)
 
             spec = _REPAIR_SPEC_TABLE.get(code)
-            if spec is not None:
+            if code == "CORPUS_OBLIGATION_UNCOVERED":
+                is_rep = True
+                problem = str(chk.evidence.get("message") or f"Corpus obligation '{chk.obligation_id}' is uncovered.")
+                instruction = str(chk.evidence.get("remediation") or "Cover the corpus obligation in graph and text.")
+                allowed = ("add_verified_corpus_leaf_and_text_coverage",)
+                forbidden = ("omit_corpus_obligation", "prune_prior_obligation")
+            elif code in ("REFERENCE_REGISTER_MISSING", "CORPUS_OBLIGATION_REJECTED"):
+                is_rep = False
+                problem = str(chk.evidence.get("message") or f"Non-repairable corpus closure failure ({code}).")
+                instruction = str(chk.evidence.get("remediation") or "Escalate to human review.")
+                allowed = ("escalate_to_human",)
+                forbidden = ("accept_without_reference_register", "bypass_rejected_obligation")
+            elif spec is not None:
                 is_rep = bool(spec["repairable"])
                 problem = str(spec["problem"])
                 instruction = _contextualize_instruction(code, str(spec["instruction"]), assessment, chk.evidence)
@@ -799,6 +813,8 @@ def review_response(
     operation_policy: DomainProfile | PolicyConfiguration | None = None,
     authorize_operation_id: str | None = None,
     representation_mode: str | None = None,
+    corpus_register: CorpusReferenceRegister | None = None,
+    require_reference_register: bool = False,
 ) -> ReviewResult:
     """Evaluate a candidate response + justification against evidence and emit ACCEPT/RETRY/ESCALATE/ABSTAIN."""
     profile = domain_profile or DomainProfile(profile_id="default")
@@ -823,6 +839,8 @@ def review_response(
         question=question,
         candidate_response=candidate_response,
         representation_mode=rep_mode,
+        corpus_register=corpus_register,
+        require_reference_register=require_reference_register,
     )
 
     op_auth: AuthorizationVerdict | None = None
@@ -850,11 +868,18 @@ def review_response(
 
     # Detect formal structural errors immediately
     has_structural_error = any(i.code == "INVALID_JUSTIFICATION_GRAPH_STRUCTURE" for i in issues)
+    has_non_repairable_corpus = any(
+        i.code in ("REFERENCE_REGISTER_MISSING", "CORPUS_OBLIGATION_REJECTED")
+        for i in issues
+    )
     has_budget_deferral = any(i.code == "PENDING_BUDGET" for i in issues)
 
     if has_structural_error:
         disposition = "ESCALATE"
         summary = "Graph structure is invalid or cyclic; manual/structural re-extraction required."
+    elif has_non_repairable_corpus:
+        disposition = "ESCALATE"
+        summary = "Corpus reference register missing or obligation explicitly rejected; escalation required."
     elif issues:
         if any(i.code in ("PROBABILISTIC_ONLY_CRITICAL_STEP", "LEAF_EVIDENCE_MISSING") for i in issues) and not repairs:
             disposition = "ESCALATE"

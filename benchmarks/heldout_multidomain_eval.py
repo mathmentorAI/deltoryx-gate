@@ -67,7 +67,7 @@ def _build_meridian_securitization_corpus():
             ),
         ),
     ]
-    return _build_corpus_objects(
+    corpus = _build_corpus_objects(
         case_id="heldout_sec_meridian_2026",
         task_id="structured-finance-securitization/heldout-meridian-2026",
         dataset_role="unseen_heldout_case",
@@ -76,6 +76,34 @@ def _build_meridian_securitization_corpus():
         common_chars=480,
         total_lines=30,
     )
+    ind_src = corpus.v4_sources["meridian-2026-1-indenture.docx"]
+    q_prin = "Class B Notes ($40,000,000 initial principal)"
+    s_prin = ind_src.text.index(q_prin)
+    corpus.evidence_layer.ingest([ind_src])
+    corpus.evidence_layer.ingest_units(
+        [
+            {
+                "proposal": {
+                    "entity": "Class B Notes",
+                    "predicate": "note_principal",
+                    "value": {"value": 40000000, "unit": "USD"},
+                    "assertion_kind": "fact",
+                    "condition_status": "unconditional",
+                },
+                "evidence": [
+                    {
+                        "document_id": ind_src.document_id,
+                        "revision": ind_src.revision,
+                        "start": s_prin,
+                        "end": s_prin + len(q_prin),
+                        "quote": q_prin,
+                    }
+                ],
+            }
+        ],
+        attestor="corpus_reference_builder",
+    )
+    return corpus
 
 
 def _build_apex_banking_corpus():
@@ -131,7 +159,7 @@ def _build_apex_banking_corpus():
             "Financial Summary: Apex Consolidated Adjusted EBITDA is $30,000,000 for LTM Q4.",
         ),
     ]
-    return _build_corpus_objects(
+    corpus = _build_corpus_objects(
         case_id="heldout_bank_apex_2026",
         task_id="banking-finance/heldout-apex-2026",
         dataset_role="unseen_heldout_case",
@@ -140,6 +168,38 @@ def _build_apex_banking_corpus():
         common_chars=620,
         total_lines=50,
     )
+    from claimlayer.v4.domains.banking_finance import BANKING_FINANCE_ACCEPTANCE_POLICY, BANKING_FINANCE_VOCABULARY
+    from claimlayer.v4.engine import EvidenceLayer
+    bank_layer = EvidenceLayer(vocabulary=BANKING_FINANCE_VOCABULARY, policy=BANKING_FINANCE_ACCEPTANCE_POLICY)
+    fac_src = corpus.v4_sources["apex-baseline-term-sheet.docx"]
+    fac_q = "Senior Secured Term Loan Facility Commitment is $150,000,000"
+    fac_s = fac_src.text.index(fac_q)
+    bank_layer.ingest([fac_src])
+    bank_layer.ingest_units(
+        [
+            {
+                "proposal": {
+                    "entity": "Term Loan",
+                    "predicate": "facility_amount",
+                    "value": {"value": 150000000, "unit": "USD"},
+                    "assertion_kind": "fact",
+                    "condition_status": "unconditional",
+                },
+                "evidence": [
+                    {
+                        "document_id": fac_src.document_id,
+                        "revision": fac_src.revision,
+                        "start": fac_s,
+                        "end": fac_s + len(fac_q),
+                        "quote": fac_q,
+                    }
+                ],
+            }
+        ],
+        attestor="corpus_reference_builder",
+    )
+    from dataclasses import replace
+    return replace(corpus, evidence_layer=bank_layer)
 
 
 def _ev_ref(corpus, doc_id: str, quote: str) -> dict[str, Any]:

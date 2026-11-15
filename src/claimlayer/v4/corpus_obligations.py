@@ -6,13 +6,15 @@ agent-supplied graph, assertions, or metadata flags.
 """
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
+import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 from ..semantic.models import canonical, digest
 from .engine import EvidenceLayer
 from .justification import VerificationObligation
-from .vocabulary import Vocabulary, value_relation
+from .vocabulary import Vocabulary, label_key, value_relation
 
 
 @dataclass(frozen=True)
@@ -171,7 +173,7 @@ def build_corpus_reference_register(
         obligations.append(
             VerificationObligation(
                 obligation_id=ob_id,
-                family="grounding",
+                family="document_authority",
                 description=(
                     f"Cover admitted corpus predicate '{pred}' for entity "
                     f"'{top_unit.proposition.get('entity', '')}'."
@@ -309,4 +311,248 @@ def build_corpus_reference_register(
         has_material_conflicts=has_conflicts,
         has_authority_overrides=has_overrides,
         reason="Corpus reference register built deterministically from EvidenceLayer.",
+    )
+
+
+_GOVERNANCE_DISCLOSURE_RE = re.compile(
+    r"\b(?:governs?|governed\s+by|controls?|controlling|supersedes?|superseded\s+by|"
+    r"prevails?|prevailing|higher\s+authority|priority\s+over|according\s+to\s+[^.;,]{1,60}\s+over)\b",
+    re.IGNORECASE,
+)
+_UNRESOLVED_DISCLOSURE_RE = re.compile(
+    r"\b(?:unresolved|conflict(?:ing)?|discrepanc(?:y|ies)|contradict(?:s|ory|ion)?|"
+    r"inconsistent|cannot\s+be\s+resolved|not\s+resolved|unclear\s+which)\b",
+    re.IGNORECASE,
+)
+
+
+def _value_in_text(val: Any, text: str) -> bool:
+    if val is None or not text:
+        return False
+    if isinstance(val, Mapping) and "value" in val:
+        val = val["value"]
+    raw = str(val).strip()
+    if not raw:
+        return False
+    if raw.lower() in text.lower():
+        return True
+    try:
+        dec = Decimal(raw.replace(",", ""))
+    except (InvalidOperation, ValueError):
+        return False
+    norm = format(dec.normalize(), "f")
+    if "." in norm:
+        norm = norm.rstrip("0").rstrip(".")
+    # Match numeric token with optional trailing zeros / commas
+    for m in re.finditer(r"[-+]?\d[\d,]*(?:\.\d+)?", text):
+        tok = m.group(0).replace(",", "")
+        try:
+            if Decimal(tok) == dec:
+                return True
+        except (InvalidOperation, ValueError):
+            continue
+    return False
+
+
+def _claim_matches_obligation(node: Any, ob: VerificationObligation) -> bool:
+    if getattr(node, "kind", "") == "opinion" or getattr(node, "assertion_kind", "") == "opinion":
+        return False
+    params = ob.parameters or {}
+    ob_unit_ids = set(str(u) for u in (params.get("unit_ids") or ()))
+    node_unit_ids = set(str(u) for u in (getattr(node, "evidence_unit_ids", ()) or ()))
+    if ob_unit_ids and (ob_unit_ids & node_unit_ids):
+        return True
+    ob_ent = str(params.get("entity", ""))
+    ob_pred = str(params.get("predicate", ""))
+    if ob_pred and label_key(str(getattr(node, "predicate", ""))) != label_key(ob_pred):
+        return False
+    if ob_ent and getattr(node, "subject", "") and label_key(str(node.subject)) != label_key(ob_ent):
+        return False
+    return bool(ob_pred)
+
+
+@dataclass(frozen=True)
+class CorpusCoverageResult:
+    """Result of checking a JustificationGraph + candidate text against CorpusReferenceRegister."""
+
+    total_obligations: int
+    covered_ids: tuple[str, ...]
+    uncovered_ids: tuple[str, ...]
+    rejected_ids: tuple[str, ...]
+    all_obligation_ids: tuple[str, ...]
+    issues: tuple[dict[str, Any], ...]
+
+    @property
+    def covered_count(self) -> int:
+        return len(self.covered_ids)
+
+    @property
+    def rejected_count(self) -> int:
+        return len(self.rejected_ids)
+
+
+def verify_corpus_obligations_coverage(
+    register: CorpusReferenceRegister,
+    graph: Any,
+    candidate_response: str | None,
+    *,
+    refuted_claim_ids: set[str] | frozenset[str] = frozenset(),
+    correspondence_report: Mapping[str, Any] | None = None,
+) -> CorpusCoverageResult:
+    """Enforce closure rule: every corpus obligation must be a verified graph leaf AND linked in text."""
+    if not register.available:
+        return CorpusCoverageResult(
+            total_obligations=0,
+            covered_ids=(),
+            uncovered_ids=(),
+            rejected_ids=(),
+            all_obligation_ids=(),
+            issues=(
+                {
+                    "code": "REFERENCE_REGISTER_MISSING",
+                    "source_layer": "v4",
+                    "repairable": False,
+                    "message": register.reason or "No corpus reference register is available for this document.",
+                    "remediation": "Ingest units into EvidenceLayer or configure a corpus reader before evaluating.",
+                },
+            ),
+        )
+
+    rejected_map: Mapping[str, str] = getattr(graph, "rejected_obligations", {}) or {}
+    issues: list[dict[str, Any]] = []
+    covered_ids: list[str] = []
+    uncovered_ids: list[str] = []
+    rejected_ids: list[str] = []
+
+    # Collect explicit rejections (even if they name '*' or any corpus obligation)
+    for ob_id, reason in sorted(rejected_map.items()):
+        if ob_id in register.obligation_ids or ob_id == "*":
+            rejected_ids.append(ob_id)
+            issues.append({
+                "code": "CORPUS_OBLIGATION_REJECTED",
+                "source_layer": "v4",
+                "repairable": False,
+                "obligation_id": ob_id,
+                "message": f"Agent explicitly rejected corpus obligation '{ob_id}': {reason}",
+                "remediation": "Explicitly rejected obligations require human escalation; cannot ACCEPT.",
+            })
+        else:
+            rejected_ids.append(ob_id)
+            issues.append({
+                "code": "CORPUS_OBLIGATION_REJECTED",
+                "source_layer": "v4",
+                "repairable": False,
+                "obligation_id": ob_id,
+                "message": f"Agent explicitly rejected obligation '{ob_id}': {reason}",
+                "remediation": "Explicitly rejected obligations require human escalation; cannot ACCEPT.",
+            })
+
+    verified_leaves = [
+        node
+        for cid, node in sorted(getattr(graph, "claims", {}).items())
+        if cid not in refuted_claim_ids
+        and getattr(node, "kind", "") != "opinion"
+        and getattr(node, "assertion_kind", "") != "opinion"
+        and (getattr(node, "evidence", ()) or getattr(node, "evidence_unit_ids", ()))
+    ]
+    text = candidate_response or ""
+
+    for ob in register.obligations:
+        if ob.obligation_id in rejected_map or "*" in rejected_map:
+            continue
+        params = ob.parameters or {}
+        kind = str(params.get("corpus_obligation_kind", "mandatory_predicate"))
+        spans = list(params.get("evidence_spans") or ())
+        matching_leaves = [n for n in verified_leaves if _claim_matches_obligation(n, ob)]
+
+        in_graph = False
+        in_text = True if candidate_response is None else False
+
+        if kind in ("mandatory_predicate", "authority_override"):
+            if kind == "authority_override":
+                winner_id = str(params.get("winner_unit_id", ""))
+                winner_val = params.get("winner_value")
+                loser_val = params.get("loser_value")
+                in_graph = any(
+                    (winner_id and winner_id in set(getattr(n, "evidence_unit_ids", ()) or ()))
+                    or _value_in_text(winner_val, str(getattr(n, "value", "")))
+                    for n in matching_leaves
+                )
+                if candidate_response is not None and in_graph:
+                    has_winner = _value_in_text(winner_val, text)
+                    has_loser = _value_in_text(loser_val, text)
+                    has_gov = bool(_GOVERNANCE_DISCLOSURE_RE.search(text) or _UNRESOLVED_DISCLOSURE_RE.search(text))
+                    in_text = has_winner and (not has_loser or has_gov)
+            else:
+                expected_val = params.get("expected_value")
+                in_graph = bool(matching_leaves)
+                if candidate_response is not None and in_graph:
+                    in_text = any(
+                        _value_in_text(getattr(n, "value", None), text)
+                        for n in matching_leaves
+                    ) or _value_in_text(expected_val, text)
+
+        elif kind == "material_conflict":
+            conf_vals = list(params.get("conflicting_values") or ())
+            if len(conf_vals) >= 2:
+                v1, v2 = conf_vals[0].get("value"), conf_vals[1].get("value")
+                u1_id, u2_id = str(conf_vals[0].get("unit_id", "")), str(conf_vals[1].get("unit_id", ""))
+                covered_v1 = any(
+                    u1_id in set(getattr(n, "evidence_unit_ids", ()) or ())
+                    or _value_in_text(v1, str(getattr(n, "value", "")))
+                    for n in matching_leaves
+                )
+                covered_v2 = any(
+                    u2_id in set(getattr(n, "evidence_unit_ids", ()) or ())
+                    or _value_in_text(v2, str(getattr(n, "value", "")))
+                    for n in matching_leaves
+                )
+                in_graph = covered_v1 and covered_v2
+                if candidate_response is not None and in_graph:
+                    both_in_text = _value_in_text(v1, text) and _value_in_text(v2, text)
+                    disclosed = bool(
+                        _GOVERNANCE_DISCLOSURE_RE.search(text)
+                        or _UNRESOLVED_DISCLOSURE_RE.search(text)
+                    )
+                    in_text = both_in_text and disclosed
+            else:
+                in_graph = bool(matching_leaves)
+                in_text = candidate_response is None or bool(matching_leaves)
+
+        if in_graph and in_text:
+            covered_ids.append(ob.obligation_id)
+        else:
+            uncovered_ids.append(ob.obligation_id)
+            span_preview = spans[0] if spans else {}
+            if kind == "material_conflict":
+                remed = (
+                    f"Cover material conflict for '{params.get('predicate')}' on '{params.get('entity')}': "
+                    "include both conflicting values in the graph and text, and state which governs or declare the conflict unresolved."
+                )
+            else:
+                remed = (
+                    f"Cover corpus obligation '{ob.obligation_id}' ({params.get('predicate')} on '{params.get('entity')}') "
+                    f"as a verified graph leaf and linked text statement citing source span {span_preview}."
+                )
+            issues.append({
+                "code": "CORPUS_OBLIGATION_UNCOVERED",
+                "source_layer": "v4",
+                "repairable": True,
+                "obligation_id": ob.obligation_id,
+                "corpus_obligation_kind": kind,
+                "evidence_spans": spans,
+                "message": (
+                    f"Corpus obligation '{ob.obligation_id}' is not covered in "
+                    f"{'graph' if not in_graph else 'response text'}."
+                ),
+                "remediation": remed,
+            })
+
+    return CorpusCoverageResult(
+        total_obligations=len(register.obligations),
+        covered_ids=tuple(covered_ids),
+        uncovered_ids=tuple(uncovered_ids),
+        rejected_ids=tuple(rejected_ids),
+        all_obligation_ids=register.obligation_ids,
+        issues=tuple(issues),
     )

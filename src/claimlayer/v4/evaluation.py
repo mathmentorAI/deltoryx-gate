@@ -19,6 +19,11 @@ from .correspondence import (
     compute_response_digest,
     verify_response_graph_correspondence,
 )
+from .corpus_obligations import (
+    CorpusReferenceRegister,
+    build_corpus_reference_register,
+    verify_corpus_obligations_coverage,
+)
 from .domain_profile import DomainProfile
 from .engine import EvidenceLayer, evaluate_unit_admissibility
 from .fidelity import check_clause_boundary_completeness, verify_extraction_fidelity
@@ -184,6 +189,7 @@ class ResponseAssessment:
     mandatory_obligations: tuple[dict[str, Any], ...] = ()
     semantic_domain_info: dict[str, Any] = field(default_factory=dict)
     correspondence_report: dict[str, Any] = field(default_factory=dict)
+    corpus_coverage: dict[str, Any] = field(default_factory=dict)
     critical_coverage: float = 1.0
 
     def to_summary_dict(self) -> dict[str, Any]:
@@ -221,6 +227,7 @@ class ResponseAssessment:
             "mandatory_obligations": list(self.mandatory_obligations),
             "semantic_domain_info": dict(self.semantic_domain_info),
             "correspondence_report": dict(self.correspondence_report),
+            "corpus_coverage": dict(self.corpus_coverage),
         }
 
 
@@ -675,6 +682,8 @@ def evaluate_response(
     question: str | Mapping[str, Any] | None = None,
     candidate_response: str | None = None,
     representation_mode: str | None = None,
+    corpus_register: CorpusReferenceRegister | None = None,
+    require_reference_register: bool = False,
 ) -> ResponseAssessment:
     """Evaluate a generated response / JustificationGraph without requiring an authorization policy."""
     t_start = time.monotonic()
@@ -1372,6 +1381,97 @@ def evaluate_response(
             all_checks.append(chk)
             critical_check_keys.add((chk.step_id, chk.obligation_id))
 
+    eff_corpus_register = corpus_register
+    if eff_corpus_register is None and require_reference_register:
+        if profile.vocabulary is not None:
+            eff_corpus_register = build_corpus_reference_register(
+                layer,
+                profile.vocabulary,
+                question=question,
+            )
+        else:
+            eff_corpus_register = CorpusReferenceRegister(
+                available=False,
+                reason="REFERENCE_REGISTER_MISSING: no Vocabulary available to build reference register.",
+            )
+
+    corpus_coverage_dict: dict[str, Any] = {}
+    if eff_corpus_register is not None:
+        refuted_cids = {cid for cid, is_ref in node_refuted.items() if is_ref}
+        cov_res = verify_corpus_obligations_coverage(
+            eff_corpus_register,
+            graph,
+            candidate_response,
+            refuted_claim_ids=refuted_cids,
+            correspondence_report=correspondence_report,
+        )
+        corpus_coverage_dict = {
+            "available": eff_corpus_register.available,
+            "total_obligations": cov_res.total_obligations,
+            "covered_count": cov_res.covered_count,
+            "rejected_count": cov_res.rejected_count,
+            "obligation_ids": list(cov_res.all_obligation_ids),
+            "covered_ids": list(cov_res.covered_ids),
+            "uncovered_ids": list(cov_res.uncovered_ids),
+            "rejected_ids": list(cov_res.rejected_ids),
+            "issues": list(cov_res.issues),
+        }
+        corpus_step_id = "corpus::coverage"
+        if cov_res.issues:
+            conc_extra_steps.add(corpus_step_id)
+        for iss in cov_res.issues:
+            chk = VerifierResult(
+                obligation_id=str(iss.get("obligation_id") or iss["code"]),
+                step_id=corpus_step_id,
+                family="document_authority",
+                status="refuted",
+                guarantee_kind="deterministic_formal",
+                evidence=dict(iss),
+                reasons=(str(iss["code"]),),
+                verifier_id="corpus_obligation_closure",
+                verifier_version="1.0.0",
+            )
+            all_checks.append(chk)
+            critical_check_keys.add((chk.step_id, chk.obligation_id))
+    elif getattr(graph, "rejected_obligations", None):
+        corpus_step_id = "corpus::coverage"
+        conc_extra_steps.add(corpus_step_id)
+        rejected_ids = sorted(graph.rejected_obligations.keys())
+        corpus_coverage_dict = {
+            "available": False,
+            "total_obligations": 0,
+            "covered_count": 0,
+            "rejected_count": len(rejected_ids),
+            "obligation_ids": [],
+            "covered_ids": [],
+            "uncovered_ids": [],
+            "rejected_ids": rejected_ids,
+            "issues": [],
+        }
+        for ob_id, reason in sorted(graph.rejected_obligations.items()):
+            iss = {
+                "code": "CORPUS_OBLIGATION_REJECTED",
+                "source_layer": "v4",
+                "repairable": False,
+                "obligation_id": ob_id,
+                "message": f"Agent explicitly rejected obligation '{ob_id}': {reason}",
+                "remediation": "Explicitly rejected obligations require human escalation; cannot ACCEPT.",
+            }
+            corpus_coverage_dict["issues"].append(iss)
+            chk = VerifierResult(
+                obligation_id=ob_id,
+                step_id=corpus_step_id,
+                family="document_authority",
+                status="refuted",
+                guarantee_kind="deterministic_formal",
+                evidence=iss,
+                reasons=("CORPUS_OBLIGATION_REJECTED",),
+                verifier_id="corpus_obligation_closure",
+                verifier_version="1.0.0",
+            )
+            all_checks.append(chk)
+            critical_check_keys.add((chk.step_id, chk.obligation_id))
+
     raw_support, sup_lineages = _fuse_correlated_derivations(conc_derivations)
     raw_opposition, opp_lineages = _fuse_correlated_derivations(contradicting_derivations)
 
@@ -1550,4 +1650,5 @@ def evaluate_response(
         mandatory_obligations=tuple(mandatory_obligations_records),
         semantic_domain_info=semantic_domain_info,
         correspondence_report=correspondence_report,
+        corpus_coverage=corpus_coverage_dict,
     )

@@ -1814,6 +1814,7 @@ def run_securitization_repair_loop(
     current_candidate: Any = initial_candidate
     attempts: list[dict[str, Any]] = []
     seen_digests: set[str] = set()
+    seen_covered_corpus_ids: set[str] = set()
     prev_issue_sig: tuple[tuple[str, str], ...] | None = None
     stop_reason = "max_iterations_reached"
 
@@ -1826,29 +1827,54 @@ def run_securitization_repair_loop(
             cache=eff_cache,
             budget=ver_budget,
         )
+        curr_covered_corpus = set(res.corpus_covered_ids or ())
+        dropped_corpus = sorted(seen_covered_corpus_ids - curr_covered_corpus)
+        seen_covered_corpus_ids |= curr_covered_corpus
+
+        effective_issues = list(res.issues)
+        effective_disp = res.report_disposition
+        effective_accepted = res.accepted
+        if dropped_corpus:
+            effective_issues.append({
+                "code": "CORPUS_OBLIGATION_DROPPED",
+                "source_layer": "v4",
+                "repairable": iteration < max_iterations,
+                "dropped_obligation_ids": dropped_corpus,
+                "message": (
+                    f"Corpus obligation(s) {dropped_corpus} covered in a prior attempt "
+                    f"were dropped in attempt {iteration}."
+                ),
+                "remediation": "Restore all previously covered corpus obligations without pruning.",
+                "forbidden_shortcuts": ["Do not drop or rename previously covered corpus obligations."],
+            })
+            effective_accepted = False
+            effective_disp = "RETRY" if iteration < max_iterations else "ESCALATE"
+
         attempts.append({
             "iteration": iteration,
-            "disposition": res.report_disposition,
-            "accepted": res.accepted,
-            "issue_codes": [i["code"] for i in res.issues],
-            "issues": res.issues,
+            "disposition": effective_disp,
+            "accepted": effective_accepted,
+            "issue_codes": [i["code"] for i in effective_issues],
+            "issues": effective_issues,
             "operational_authorization": res.operational_authorization,
             "response_digest": res.response_digest,
             "verifier_ms": round(res.verifier_ms, 3),
             "cache_metrics": res.cache_metrics,
             "candidate": current_candidate,
+            "corpus_covered_ids": list(res.corpus_covered_ids),
+            "corpus_uncovered_ids": list(res.corpus_uncovered_ids),
         })
         if res.response_digest:
             seen_digests.add(res.response_digest)
 
-        if res.accepted:
+        if effective_accepted:
             stop_reason = "accepted"
             break
-        if res.report_disposition in ("ESCALATE", "ABSTAIN"):
-            stop_reason = f"non_repairable_{res.report_disposition.lower()}"
+        if effective_disp in ("ESCALATE", "ABSTAIN"):
+            stop_reason = f"non_repairable_{effective_disp.lower()}"
             break
 
-        curr_sig = tuple(sorted((i["code"], i["message"]) for i in res.issues))
+        curr_sig = tuple(sorted((i["code"], i["message"]) for i in effective_issues))
         if iteration >= 2 and prev_issue_sig is not None and curr_sig == prev_issue_sig:
             stop_reason = "stagnant_issues"
             break

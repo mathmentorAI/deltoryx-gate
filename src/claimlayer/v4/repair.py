@@ -1366,6 +1366,8 @@ class RepairOrchestrator:
         repair_agent: Any,
         as_of: str | None = None,
         representation_mode: str | None = None,
+        corpus_register: CorpusReferenceRegister | None = None,
+        require_reference_register: bool = False,
     ) -> RepairCycleResult:
         t_cycle_start = time.monotonic()
         ver_budget = VerificationBudget(
@@ -1378,6 +1380,7 @@ class RepairOrchestrator:
         current_graph_source = graph_or_adapter
         attempts: list[RepairAttemptRecord] = []
         seen_digests: set[str] = set()
+        seen_covered_corpus_ids: set[str] = set()
         prev_issue_sig: tuple[tuple[str, str], ...] | None = None
         stop_reason = "max_iterations_reached"
         previous_review: ReviewResult | None = None
@@ -1397,7 +1400,47 @@ class RepairOrchestrator:
                 operation_policy=self.operation_policy,
                 authorize_operation_id=self.authorize_operation_id,
                 representation_mode=representation_mode,
+                corpus_register=corpus_register,
+                require_reference_register=require_reference_register,
             )
+            curr_covered_corpus = set((review.assessment.corpus_coverage or {}).get("covered_ids") or ())
+            dropped_corpus = sorted(seen_covered_corpus_ids - curr_covered_corpus)
+            seen_covered_corpus_ids |= curr_covered_corpus
+            if dropped_corpus:
+                dropped_issue = ReviewIssue(
+                    code="CORPUS_OBLIGATION_DROPPED",
+                    severity="error",
+                    family="document_authority",
+                    obligation_id=dropped_corpus[0],
+                    step_id="corpus::coverage",
+                    message=f"Previously covered corpus obligation(s) dropped in attempt {iteration}: {dropped_corpus}.",
+                    target_claim_id=review.assessment.conclusion_id,
+                    evidence={"dropped_obligation_ids": dropped_corpus},
+                )
+                dropped_repair = RequiredRepair(
+                    repair_id=f"repair::corpus_dropped::{iteration}",
+                    obligation_id=dropped_corpus[0],
+                    family="document_authority",
+                    target_claim_id=review.assessment.conclusion_id,
+                    issue_code="CORPUS_OBLIGATION_DROPPED",
+                    problem=dropped_issue.message,
+                    instruction="Restore all previously covered corpus obligations in graph and text.",
+                    allowed_repairs=("restore_dropped_corpus_obligations",),
+                    forbidden_shortcuts=("prune_covered_corpus_obligation",),
+                )
+                new_disp = "RETRY" if iteration < self.budget.max_iterations else "ESCALATE"
+                review = ReviewResult(
+                    disposition=new_disp,
+                    summary=f"Corpus obligation(s) dropped in repair attempt {iteration}: {dropped_corpus}.",
+                    assessment=review.assessment,
+                    issues=tuple(review.issues) + (dropped_issue,),
+                    required_repairs=tuple(review.required_repairs) + (dropped_repair,),
+                    verified_elements=review.verified_elements,
+                    operational_authorization=review.operational_authorization,
+                    response_digest=review.response_digest,
+                    assessment_digest=review.assessment_digest,
+                    representation_mode=review.representation_mode,
+                )
             iter_ms = (time.monotonic() - t_iter) * 1000.0
             attempts.append(
                 RepairAttemptRecord(

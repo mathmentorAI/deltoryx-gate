@@ -553,9 +553,20 @@ def verify_waterfall_steps(
 
 SECURITIZATION_VOCABULARY = Vocabulary(
     name="securitization",
-    version="1.1.0",
+    version="1.2.0",
     require_explicit_condition_status=True,
     scope_keys=("tranche", "clause_id", "reporting_period", "event_id", "regime"),
+    register_status_terms=(
+        "no material discrepancy",
+        "no material discrepancies",
+        "no discrepancy",
+        "no discrepancies",
+        "no conflict",
+        "no conflicts",
+        "fully consistent",
+        "consistent across documents",
+        "no contradiction",
+    ),
     predicates=(
         PredicateSpec(
             name="coupon_rate",

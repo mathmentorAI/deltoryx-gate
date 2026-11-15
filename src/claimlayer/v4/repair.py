@@ -324,6 +324,45 @@ _REPAIR_SPEC_TABLE: dict[str, dict[str, Any]] = {
         "allowed": ("disclose_material_conflict_both_sides",),
         "forbidden": ("suppress_contradicting_evidence",),
     },
+    "REGISTER_STATUS_CONTRADICTED": {
+        "repairable": True,
+        "problem": "Response denies material discrepancies while the corpus reference register records unresolved conflicts or overrides.",
+        "instruction": (
+            "Remove false 'no material discrepancy' assurances and disclose all corpus conflicts and governing sources."
+        ),
+        "allowed": ("disclose_material_conflict_both_sides", "align_with_corpus_register_status"),
+        "forbidden": ("deny_recorded_corpus_discrepancy",),
+    },
+    "OPINION_CARRIES_FACT": {
+        "repairable": True,
+        "problem": "Opinion-marked clause asserts concrete factual values belonging to a Vocabulary predicate.",
+        "instruction": (
+            "Move concrete factual figures into grounded extraction/derivation leaves or confine the opinion "
+            "sentence strictly to interpretive assessment."
+        ),
+        "allowed": ("confine_opinion_to_interpretive_judgment", "promote_fact_to_extraction_leaf"),
+        "forbidden": ("smuggle_predicate_fact_into_opinion",),
+    },
+    "GOVERNING_VALUE_MISMATCH": {
+        "repairable": True,
+        "problem": "Response or opinion clause asserts a subordinate conflicting value instead of the governing value.",
+        "instruction": (
+            "State both values accurately and identify the higher-ranked governing source value rather than "
+            "asserting the subordinate value as applicable."
+        ),
+        "allowed": ("state_governing_value_and_hierarchy",),
+        "forbidden": ("assert_subordinate_value_as_governing",),
+    },
+    "OPINION_PREMISE_UNRELATED": {
+        "repairable": True,
+        "problem": "An opinion step cites premise claim(s) whose subject or lineage is unrelated to the opinion claim.",
+        "instruction": (
+            "Bind every opinion claim only to verified premises whose subject and evidence lineage directly support "
+            "the opinion's subject."
+        ),
+        "allowed": ("attach_subject_aligned_verified_premises",),
+        "forbidden": ("attach_unrelated_premise_to_opinion",),
+    },
     "AMBIGUOUS_OR_GENERIC_SEMANTIC_TYPE": {
         "repairable": True,
         "problem": "Claim uses an untyped generic predicate label without a declared Vocabulary FieldSpec.",

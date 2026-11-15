@@ -27,8 +27,9 @@ from typing import Any, Mapping, Sequence
 import unicodedata
 
 from ..semantic.models import SourceDocument, digest
+from .corpus_obligations import _value_in_segment_with_unit
 from .justification import JustificationGraph
-from .vocabulary import UnitRegistry
+from .vocabulary import UnitRegistry, label_key
 
 
 @dataclass(frozen=True)
@@ -2428,6 +2429,203 @@ def _clause_binds_to_graph_claim(
     )
 
 
+def _word_phrase_in_text(phrase: str, norm_text: str) -> bool:
+    p_norm = re.sub(r"\s+", " ", phrase.strip().lower())
+    return bool(p_norm) and bool(re.search(r"(?<!\w)" + re.escape(p_norm) + r"(?!\w)", norm_text))
+
+
+def _extract_register_conflict_pairs(
+    corpus_register: Any,
+) -> list[tuple[Any, Any, Any, Any]]:
+    """Return [(gov_val, gov_unit, sub_val, sub_unit)] for conflict/override corpus obligations."""
+    pairs: list[tuple[Any, Any, Any, Any]] = []
+    if corpus_register is None:
+        return pairs
+    for ob in getattr(corpus_register, "obligations", ()) or ():
+        params = getattr(ob, "parameters", None) or {}
+        kind = str(params.get("corpus_obligation_kind", "") or getattr(ob, "kind", ""))
+        if kind == "authority_override":
+            pairs.append((
+                params.get("winner_value"),
+                params.get("winner_unit"),
+                params.get("loser_value"),
+                params.get("loser_unit"),
+            ))
+        elif kind == "material_conflict":
+            conf_vals = list(params.get("conflicting_values") or ())
+            if len(conf_vals) >= 2:
+                c0, c1 = conf_vals[0], conf_vals[1]
+                r0 = int(c0.get("authority_rank", 0) or 0)
+                r1 = int(c1.get("authority_rank", 0) or 0)
+                if r0 != r1:
+                    win_c, lose_c = (c0, c1) if r0 > r1 else (c1, c0)
+                    pairs.append((
+                        win_c.get("value"),
+                        win_c.get("unit"),
+                        lose_c.get("value"),
+                        lose_c.get("unit"),
+                    ))
+                else:
+                    pairs.append((c0.get("value"), c0.get("unit"), c1.get("value"), c1.get("unit")))
+    return pairs
+
+
+def _check_register_status_contradiction(
+    sub_cl: str,
+    *,
+    vocabulary: Any = None,
+    corpus_register: Any = None,
+) -> dict[str, Any] | None:
+    """Flag clauses denying discrepancies when the corpus register holds unresolved conflicts/overrides."""
+    reg_terms = getattr(vocabulary, "register_status_terms", ()) if vocabulary is not None else ()
+    if not reg_terms or corpus_register is None:
+        return None
+    conflict_obs = [
+        ob
+        for ob in (getattr(corpus_register, "obligations", ()) or ())
+        if (getattr(ob, "parameters", None) or {}).get("corpus_obligation_kind")
+        in ("material_conflict", "authority_override")
+    ]
+    if not conflict_obs:
+        return None
+    norm_cl = re.sub(r"\s+", " ", sub_cl.strip().lower())
+    for term in reg_terms:
+        if _word_phrase_in_text(str(term), norm_cl):
+            return {
+                "code": "REGISTER_STATUS_CONTRADICTED",
+                "status": "refuted",
+                "reason": (
+                    f"Clause '{sub_cl}' asserts '{term}', contradicting the corpus reference "
+                    f"register ({len(conflict_obs)} conflict/override obligation(s) present)."
+                ),
+                "severity": "error",
+                "clause": sub_cl,
+                "matched_term": str(term),
+            }
+    return None
+
+
+def _val_matches_clause(val: Any, sub_cl: str, unit: Any = None) -> bool:
+    if val is None or isinstance(val, bool):
+        return False
+    if isinstance(val, Mapping):
+        return _value_in_segment_with_unit(val, sub_cl)
+    if unit is not None and str(unit).strip():
+        return _value_in_segment_with_unit({"value": val, "unit": str(unit)}, sub_cl)
+    return _value_in_segment_with_unit(val, sub_cl)
+
+
+def _collect_concrete_fact_values(
+    graph: JustificationGraph,
+    corpus_register: Any = None,
+) -> list[tuple[Any, str | None]]:
+    """Collect concrete scalar/quantity/enum fact values from corpus obligations and non-opinion graph nodes."""
+    vals: list[tuple[Any, str | None]] = []
+    seen: set[str] = set()
+
+    def _add(val: Any, unit: Any) -> None:
+        if val is None or isinstance(val, bool):
+            return
+        if isinstance(val, Mapping):
+            raw = val.get("value")
+            if raw is None or isinstance(raw, bool):
+                return
+            u_str = str(val.get("unit") or unit or "").strip() or None
+            key_str = f"{raw}|{u_str or ''}"
+            stored_val: Any = dict(val)
+        else:
+            v_str = str(val).strip()
+            if not v_str:
+                return
+            has_num = bool(re.search(r"\d", v_str))
+            if not has_num and len(v_str.split()) > 3:
+                return
+            u_str = str(unit).strip() if unit is not None and str(unit).strip() else None
+            key_str = f"{v_str}|{u_str or ''}"
+            stored_val = val
+        if key_str not in seen:
+            seen.add(key_str)
+            vals.append((stored_val, u_str))
+
+    if corpus_register is not None:
+        for ob in getattr(corpus_register, "obligations", ()) or ():
+            params = getattr(ob, "parameters", None) or {}
+            if "expected_value" in params:
+                _add(params.get("expected_value"), params.get("expected_unit"))
+            if "winner_value" in params:
+                _add(params.get("winner_value"), params.get("winner_unit"))
+            if "loser_value" in params:
+                _add(params.get("loser_value"), params.get("loser_unit"))
+            for cv in params.get("conflicting_values") or ():
+                if isinstance(cv, Mapping):
+                    _add(cv.get("value"), cv.get("unit"))
+    for node in graph.claims.values():
+        if getattr(node, "kind", "") == "opinion":
+            continue
+        _add(getattr(node, "value", None), getattr(node, "unit", None))
+    return vals
+
+
+def _audit_opinion_clause_factual_leakage(
+    sub_cl: str,
+    cl_nums: Sequence[Decimal],
+    graph: JustificationGraph,
+    *,
+    vocabulary: Any = None,
+    corpus_register: Any = None,
+) -> dict[str, Any] | None:
+    """Reject opinion-marked clauses that assert subordinate conflict values or Vocabulary predicate facts."""
+    for gov_val, gov_unit, sub_val, sub_unit in _extract_register_conflict_pairs(corpus_register):
+        if sub_val is not None and _val_matches_clause(sub_val, sub_cl, unit=sub_unit):
+            if gov_val is None or not _val_matches_clause(gov_val, sub_cl, unit=gov_unit):
+                return {
+                    "code": "GOVERNING_VALUE_MISMATCH",
+                    "status": "refuted",
+                    "reason": (
+                        f"Opinion clause '{sub_cl}' asserts subordinate/conflicting value '{sub_val}' "
+                        f"instead of governing value '{gov_val}'."
+                    ),
+                    "severity": "error",
+                    "clause": sub_cl,
+                }
+
+    norm_cl = re.sub(r"\s+", " ", sub_cl.strip().lower())
+    for ps in (getattr(vocabulary, "predicates", ()) or () if vocabulary is not None else ()):
+        pred_terms = (ps.name, ps.name.replace("_", " "), *(getattr(ps, "aliases", ()) or ()))
+        if not any(_word_phrase_in_text(str(t), norm_cl) for t in pred_terms):
+            continue
+        has_enum_val = (
+            ps.value.type in ("enum", "set")
+            and any(_word_phrase_in_text(str(ev).replace("_", " "), norm_cl) for ev in ps.value.enum)
+        )
+        if cl_nums or has_enum_val:
+            return {
+                "code": "OPINION_CARRIES_FACT",
+                "status": "refuted",
+                "reason": (
+                    f"Opinion clause '{sub_cl}' carries concrete factual value for vocabulary "
+                    f"predicate '{ps.name}'; factual claims must use extraction/derivation leaves."
+                ),
+                "severity": "error",
+                "clause": sub_cl,
+                "predicate": ps.name,
+            }
+
+    for val_item, u_str in _collect_concrete_fact_values(graph, corpus_register=corpus_register):
+        if _val_matches_clause(val_item, sub_cl, unit=u_str):
+            return {
+                "code": "OPINION_CARRIES_FACT",
+                "status": "refuted",
+                "reason": (
+                    f"Opinion clause '{sub_cl}' states factual value '{val_item}' instead of confining "
+                    "concrete values to verified extraction/derivation claims."
+                ),
+                "severity": "error",
+                "clause": sub_cl,
+            }
+    return None
+
+
 def _decompose_and_verify_clauses(
     clauses: list[str],
     graph: JustificationGraph,
@@ -2441,6 +2639,8 @@ def _decompose_and_verify_clauses(
     unit_registry: UnitRegistry | None = None,
     has_material_conflict: bool,
     semantic_evaluator: Any = None,
+    vocabulary: Any = None,
+    corpus_register: Any = None,
 ) -> tuple[bool, list[ResponseClauseClaim], list[ResponseRelationTuple], list[dict[str, Any]]]:
     """Decompose text into clauses, check conclusion polarity inversion, relational tuples & ungrounded claims."""
     conc_negative = _is_graph_conclusion_negative(graph)
@@ -2508,20 +2708,40 @@ def _decompose_and_verify_clauses(
 
             # Marked interpretive opinions bound to a kind='opinion' claim with premises
             # are explicitly permitted and do not require factual lexical grounding.
+            reg_issue = _check_register_status_contradiction(
+                sub_cl,
+                vocabulary=vocabulary,
+                corpus_register=corpus_register,
+            )
+            leak_issue: dict[str, Any] | None = None
             is_bound_opinion = False
-            if _OPINION_MARKER_RE.search(sub_cl):
-                op_ok, _ = _clause_binds_to_graph_claim(
+            if reg_issue is not None:
+                is_grounded = False
+                issues.append(reg_issue)
+            elif _OPINION_MARKER_RE.search(sub_cl):
+                leak_issue = _audit_opinion_clause_factual_leakage(
                     sub_cl,
                     cl_nums,
                     graph,
-                    role=role,
-                    has_material_conflict=has_material_conflict,
-                    doc_q_exact=exact_lex,
+                    vocabulary=vocabulary,
+                    corpus_register=corpus_register,
                 )
-                is_bound_opinion = op_ok
+                if leak_issue is not None:
+                    is_grounded = False
+                    issues.append(leak_issue)
+                else:
+                    op_ok, _ = _clause_binds_to_graph_claim(
+                        sub_cl,
+                        cl_nums,
+                        graph,
+                        role=role,
+                        has_material_conflict=has_material_conflict,
+                        doc_q_exact=exact_lex,
+                    )
+                    is_bound_opinion = op_ok
 
             # Flag ungrounded substantive non-numeric assertions (avoid noise on pure formulas/evasion)
-            if dedup_ungrounded and role != "formula" and not is_bound_opinion:
+            if dedup_ungrounded and role != "formula" and not is_bound_opinion and reg_issue is None and leak_issue is None:
                 sem_verdict = "refuted"
                 if (
                     semantic_evaluator is not None
@@ -2567,7 +2787,16 @@ def _decompose_and_verify_clauses(
                         "ungrounded_tokens": list(dedup_ungrounded),
                     })
 
-            if not any(i.get("code") == "UNSUPPORTED_FACTUAL_ADDITION" and i.get("clause") == sub_cl for i in issues):
+            if not any(
+                i.get("code") in (
+                    "UNSUPPORTED_FACTUAL_ADDITION",
+                    "REGISTER_STATUS_CONTRADICTED",
+                    "GOVERNING_VALUE_MISMATCH",
+                    "OPINION_CARRIES_FACT",
+                )
+                and i.get("clause") == sub_cl
+                for i in issues
+            ):
                 bound_ok, bind_reason = _clause_binds_to_graph_claim(
                     sub_cl,
                     cl_nums,
@@ -2623,6 +2852,8 @@ def verify_response_graph_correspondence(
     expected_subject: str | None = None,
     has_material_conflict: bool = False,
     semantic_evaluator: Any = None,
+    vocabulary: Any = None,
+    corpus_register: Any = None,
 ) -> dict[str, Any]:
     """Analyze claim-level, equational, conditional, and structural alignment between text and graph."""
     if candidate_response is None:
@@ -3023,6 +3254,8 @@ def verify_response_graph_correspondence(
         unit_registry=unit_registry,
         has_material_conflict=has_material_conflict,
         semantic_evaluator=semantic_evaluator,
+        vocabulary=vocabulary,
+        corpus_register=corpus_register,
     )
     existing_issue_keys = {(i.get("code"), i.get("clause")) for i in issues}
     for ci in clause_issues:

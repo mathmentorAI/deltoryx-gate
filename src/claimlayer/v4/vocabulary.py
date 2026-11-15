@@ -383,6 +383,7 @@ class Vocabulary:
     closed_entities: bool = False
     scope_keys: tuple[str, ...] = ('event_id',)
     require_explicit_condition_status: bool = False
+    register_status_terms: tuple[str, ...] = ()
 
     def __post_init__(self):
         require_string(self.name, 'vocabulary name')
@@ -419,7 +420,8 @@ class Vocabulary:
                 'predicates': [p.describe() for p in self.predicates],
                 'units': self.units.describe(),
                 'entities': {k: list(v) for k, v in self.entities}, 'closed_entities': self.closed_entities,
-                'scope_keys': list(self.scope_keys), 'assertion_kinds': sorted(KINDS)}
+                'scope_keys': list(self.scope_keys), 'assertion_kinds': sorted(KINDS),
+                'register_status_terms': list(self.register_status_terms)}
 
     def predicate(self, name: str) -> PredicateSpec:
         if not isinstance(name, str) or name not in self._predicates:

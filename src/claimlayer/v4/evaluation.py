@@ -38,6 +38,68 @@ from .justification import (
     infer_conclusion_semantic_domain,
 )
 from .models import AcceptancePolicy, EvidenceUnit
+from .vocabulary import label_key
+def _opinion_subjects_related(
+    sub_a: str | None,
+    sub_b: str | None,
+    vocabulary: Any = None,
+) -> bool:
+    """Return True when two subjects match by label_key, containment, or declared entity aliases."""
+    ka = label_key(sub_a or "")
+    kb = label_key(sub_b or "")
+    if not ka or not kb:
+        return False
+    if ka == kb or ka in kb or kb in ka:
+        return True
+    if vocabulary is not None:
+        alias_to_canon: dict[str, str] = {}
+        for canon, aliases in getattr(vocabulary, "entities", ()) or ():
+            c_key = label_key(canon)
+            alias_to_canon[c_key] = c_key
+            for al in aliases:
+                alias_to_canon[label_key(al)] = c_key
+        ca = alias_to_canon.get(ka)
+        cb = alias_to_canon.get(kb)
+        if ca and cb and ca == cb:
+            return True
+    return False
+
+
+def _opinion_premise_is_related(
+    opinion_node: ClaimNode,
+    premise_node: ClaimNode,
+    graph: JustificationGraph,
+    vocabulary: Any = None,
+) -> bool:
+    """Return True if a premise or its non-opinion lineage shares subject/content relevance with an opinion."""
+    op_subject = getattr(opinion_node, "subject", "") or ""
+    op_content = label_key(
+        f"{getattr(opinion_node, 'value', '') or ''} {getattr(opinion_node, 'text', '') or ''}"
+    )
+
+    def _node_matches(cand: ClaimNode) -> bool:
+        cand_subj = getattr(cand, "subject", "") or ""
+        if _opinion_subjects_related(op_subject, cand_subj, vocabulary=vocabulary):
+            return True
+        c_key = label_key(cand_subj)
+        if c_key and c_key in op_content:
+            return True
+        if vocabulary is not None:
+            for canon, aliases in getattr(vocabulary, "entities", ()) or ():
+                keys = [label_key(canon), *(label_key(a) for a in aliases)]
+                if c_key in keys and any(k and k in op_content for k in keys):
+                    return True
+        return False
+
+    if _node_matches(premise_node):
+        return True
+    for anc_id in graph.ancestor_claims(premise_node.claim_id):
+        anc = graph.claims.get(anc_id)
+        if anc is not None and getattr(anc, "kind", "") != "opinion" and _node_matches(anc):
+            return True
+    return False
+
+
 from .verifiers import (
     DEFAULT_VERIFIER_REGISTRY,
     VerifierContext,
@@ -863,6 +925,8 @@ def evaluate_response(
             documents=documents,
             unit_registry=profile.vocabulary.units if profile.vocabulary is not None else None,
             has_material_conflict=False,
+            vocabulary=profile.vocabulary,
+            corpus_register=eff_corpus_register,
         )
     else:
         preliminary_corr = {
@@ -1106,20 +1170,51 @@ def evaluate_response(
                         for ob in det_obs:
                             step_results.append(registry.verify_obligation(ob, det_ctx))
 
+                    is_opinion_step = getattr(node, "kind", "") == "opinion"
+                    unrelated_opinion_pids: list[str] = []
+                    if is_opinion_step and premises_nodes:
+                        unrelated_opinion_pids = [
+                            p.claim_id
+                            for p in premises_nodes
+                            if not _opinion_premise_is_related(
+                                node,
+                                p,
+                                graph,
+                                vocabulary=profile.vocabulary,
+                            )
+                        ]
+                        if unrelated_opinion_pids:
+                            rel_ob_id = f"{step.step_id}:opinion_premise_relevance"
+                            step_results.append(
+                                VerifierResult(
+                                    obligation_id=rel_ob_id,
+                                    step_id=step.step_id,
+                                    family="explicit_logic",
+                                    status="refuted",
+                                    guarantee_kind="deterministic_formal",
+                                    reasons=("OPINION_PREMISE_UNRELATED",),
+                                    verifier_id="opinion_premise_guard",
+                                    verifier_version="1.0.0",
+                                    evidence={"unrelated_premise_ids": unrelated_opinion_pids},
+                                )
+                            )
+                            critical_check_keys.add((step.step_id, rel_ob_id))
+                            conc_extra_steps.add(step.step_id)
+
                     for ob in sem_obs:
-                        if getattr(node, "kind", "") == "opinion" and len(step.premises) > 0:
+                        if is_opinion_step and len(step.premises) > 0:
                             step_results.append(
                                 VerifierResult(
                                     obligation_id=ob.obligation_id,
                                     step_id=step.step_id,
                                     family=ob.family,
-                                    status="verified",
+                                    status="refuted" if unrelated_opinion_pids else "verified",
                                     guarantee_kind=(
                                         "probabilistic_model"
                                         if ob.family == "open_semantics"
                                         else "deterministic_formal"
                                     ),
-                                    reasons=("OPINION_WITH_PREMISES",),
+                                    reasons=("OPINION_PREMISE_UNRELATED",) if unrelated_opinion_pids else ("OPINION_WITH_PREMISES",),
                                     verifier_id="opinion_premise_guard",
                                     verifier_version="1.0.0",
                                 )
@@ -1288,6 +1383,8 @@ def evaluate_response(
             unit_registry=profile.vocabulary.units if profile.vocabulary is not None else None,
             has_material_conflict=has_material_conflict,
             semantic_evaluator=profile.semantic_evaluator,
+            vocabulary=profile.vocabulary,
+            corpus_register=eff_corpus_register,
         )
     else:
         correspondence_report = {
@@ -1494,6 +1591,20 @@ def evaluate_response(
             "incomplete_documents": list(eff_corpus_register.incomplete_documents),
             "document_statuses": {k: dict(v) for k, v in eff_corpus_register.document_statuses.items()},
             "gap_divergences": [dict(g) for g in eff_corpus_register.gap_divergences],
+            "register_status_claim": ClaimNode(
+                claim_id="__engine__:register_status",
+                kind="register_status",
+                subject=str(eff_corpus_register.entity or "corpus"),
+                predicate="corpus_conflict_status",
+                value=(
+                    "conflicts_or_overrides_present"
+                    if any(
+                        (ob.parameters or {}).get("corpus_obligation_kind") in ("material_conflict", "authority_override")
+                        for ob in eff_corpus_register.obligations
+                    )
+                    else "no_material_conflicts_detected"
+                ),
+            ).to_dict(),
             "total_obligations": cov_res.total_obligations,
             "covered_count": cov_res.covered_count,
             "rejected_count": cov_res.rejected_count,

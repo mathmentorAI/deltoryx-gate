@@ -16,9 +16,20 @@ BANKING_SUBORDINATE_ROLES: frozenset[str] = frozenset({"counterparty_markup"})
 
 BANKING_FINANCE_VOCABULARY = Vocabulary(
     name="banking-finance",
-    version="1.1.0",
+    version="1.2.0",
     require_explicit_condition_status=False,
     scope_keys=("facility_id", "clause_id", "tranche", "covenant_type", "period"),
+    register_status_terms=(
+        "no material discrepancy",
+        "no material discrepancies",
+        "no discrepancy",
+        "no discrepancies",
+        "no conflict",
+        "no conflicts",
+        "fully consistent",
+        "consistent across documents",
+        "no contradiction",
+    ),
     predicates=(
         PredicateSpec(
             name="facility_amount",

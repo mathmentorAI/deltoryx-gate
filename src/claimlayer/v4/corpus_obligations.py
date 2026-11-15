@@ -553,11 +553,15 @@ def _normalize_pdf_ocr_with_map(
                     next_prefix.startswith(("|", "- ", "* ", "•"))
                     or re.match(r"^(?:\(\d+\)|\(\w\)|\d+\.\s)", next_prefix)
                 )
+                is_email_header_prev = bool(
+                    prev_line.endswith(">")
+                    or re.match(r"^(?:From|To|Cc|Bcc|Subject|Date|Sent|Reply-To)\s*:", prev_line, re.IGNORECASE)
+                )
                 # Real headings do not wrap onto a lowercase continuation word
                 header_only_prev = _SECTION_HEADER_ONLY_RE.match(prev_line) is not None and not (
                     next_prefix and next_prefix[0].islower()
                 )
-                if not header_only_prev and not is_structural_next and next_prefix and (
+                if not is_email_header_prev and not header_only_prev and not is_structural_next and next_prefix and (
                     next_prefix[0].islower()
                     or re.match(r"^(?:[A-Za-z0-9$\"'(])", next_prefix)
                 ):
@@ -620,12 +624,12 @@ def _align_sentences(
     rem_pri_idx = [
         i
         for i, (_, _, t) in enumerate(pri_sents)
-        if i not in used_pri and not _SECTION_HEADER_ONLY_RE.match(t.strip())
+        if i not in used_pri and not _is_pure_section_heading(t)
     ]
     rem_sec_idx = [
         i
         for i, (_, _, t) in enumerate(sec_sents)
-        if i not in used_sec and not _SECTION_HEADER_ONLY_RE.match(t.strip())
+        if i not in used_sec and not _is_pure_section_heading(t)
     ]
 
     pri_words = {i: _sentence_content_words(pri_sents[i][2]) for i in rem_pri_idx}
@@ -805,6 +809,511 @@ def _bridges_two_differing_spans(
     return not re.search(r"[A-Za-z0-9]", gap_l) and not re.search(r"[A-Za-z0-9]", gap_r)
 
 
+_HEADING_CLAUSE_VERB_RE = re.compile(
+    r"\b(?:shall|must|may|will|should|can|cannot|is|are|was|were|has|have|had|"
+    r"not|never|no|unless|except|provided|bear|bears|pay|pays|exceed|exceeds|"
+    r"includes?|excludes?|applies|apply|constitutes?|guarantees?|prohibit(?:ed|s)?|forbid(?:den)?)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_pure_section_heading(text: str) -> bool:
+    """Return True iff *text* is strictly a structural section header, not a clause containing a heading prefix."""
+    stripped = (text or "").strip()
+    if not stripped or _SECTION_HEADER_ONLY_RE.match(stripped) is None:
+        return False
+    if any(ch in stripped for ch in ("$", "%", "€", "£")):
+        return False
+    if _HEADING_CLAUSE_VERB_RE.search(stripped):
+        return False
+    return True
+
+
+_GAP_POLARITY_RE = re.compile(
+    r"\b(?:in\s+no\s+event|under\s+no\s+circumstances|shall\s+not|may\s+not|must\s+not|"
+    r"cannot|can\s+not|will\s+not|is\s+not|are\s+not|do\s+not|does\s+not|did\s+not|"
+    r"never|not|no|neither|nor|none|without|no\s+longer|prohibit(?:ed|s)?|forbid(?:den)?|"
+    r"unless|except|excluded|waived|unable|impermissible|unenforceable|void|"
+    r"en\s+ning[uú]n\s+caso|no\s+podr[aá]|nunca|jam[aá]s|sin|salvo|excepto|prohibid[oa])\b",
+    re.IGNORECASE,
+)
+
+_GAP_FRAMING_STOPWORDS = frozenset({
+    "a", "an", "and", "or", "the", "of", "at", "in", "on", "to", "for", "by", "as",
+    "is", "are", "was", "were", "be", "been", "being", "has", "have", "had",
+    "with", "from", "into", "that", "this", "these", "those", "which", "whose",
+    "it", "its", "their", "such", "per", "annum", "rate", "ratio", "margin",
+    "level", "threshold", "amount", "value", "step", "basis", "points", "percent",
+    "maximum", "minimum", "target", "initial", "current", "proposed", "acceptable",
+    "proposes", "states", "sets", "specified", "applicable",
+})
+
+
+def _extract_clause_polarity_tokens(text: str) -> frozenset[str]:
+    """Return normalized negation/polarity markers present in *text*."""
+    out: set[str] = set()
+    for m in _GAP_POLARITY_RE.finditer(text or ""):
+        tok = re.sub(r"\s+", " ", m.group(0).strip().lower())
+        if tok in ("shall not", "may not", "must not", "cannot", "can not", "will not", "is not", "are not", "do not", "does not", "did not"):
+            out.add("not")
+        else:
+            out.add(tok)
+    return frozenset(out)
+
+
+def _extract_unit_coverage_spec(
+    unit: Any,
+    conflict_obs_by_uid: Mapping[str, Sequence[VerificationObligation]],
+) -> dict[str, Any]:
+    """Build semantic coverage descriptor for an admitted unit."""
+    prop = getattr(unit, "proposition", {}) or {}
+    uid = str(getattr(unit, "unit_id", "") or "")
+    pred = str(prop.get("predicate", "") or "")
+    assertion_kind = str(prop.get("assertion_kind", "fact") or "fact").lower()
+    raw_val = prop.get("value")
+    raw_unit = str(prop.get("unit") or "").strip()
+
+    qty_tokens: set[str] = set()
+    scalar_nums: set[str] = set()
+    text_parts: list[str] = []
+
+    if isinstance(raw_val, Mapping):
+        v_num = str(raw_val.get("value", "") or "").strip()
+        v_u = str(raw_val.get("unit") or raw_unit or "").strip()
+        text_parts.extend([v_num, v_u])
+        if v_num:
+            try:
+                scalar_nums.add(_fmt_decimal_compact(Decimal(v_num.replace(",", ""))))
+            except Exception:
+                pass
+            u_clean = v_u.replace("_", " ").strip()
+            candidates = [f"{v_num} {u_clean}".strip(), v_num]
+            if "percent" in u_clean.lower() and "%" not in u_clean:
+                candidates.append(f"{v_num}%")
+            if ("step" in pred.lower() or "step" in u_clean.lower()) and v_num.isdigit():
+                qty_tokens.add(f"STEP:{int(v_num)}")
+            for cand in candidates:
+                for q in _extract_sentence_quantity_tokens(cand, 0):
+                    qty_tokens.add(str(q["token"]))
+    elif isinstance(raw_val, (list, tuple)):
+        for elem in raw_val:
+            if isinstance(elem, Mapping):
+                step_val = elem.get("step")
+                parts_elem: list[str] = []
+                if step_val is not None:
+                    st_str = str(step_val).strip()
+                    parts_elem.append(f"Step {st_str}")
+                    if st_str.isdigit():
+                        qty_tokens.add(f"STEP:{int(st_str)}")
+                for k_el, v_el in elem.items():
+                    if k_el == "step" and v_el is not None:
+                        continue
+                    if isinstance(v_el, Mapping):
+                        vn = str(v_el.get("value", "") or "").strip()
+                        vu = str(v_el.get("unit") or "").strip().replace("_", " ")
+                        parts_elem.append(f"{vn} {vu}".strip())
+                    elif v_el is not None:
+                        parts_elem.append(str(v_el).strip())
+                elem_text = " ".join(p for p in parts_elem if p)
+                if elem_text:
+                    text_parts.append(elem_text)
+                    for q in _extract_sentence_quantity_tokens(elem_text, 0):
+                        qty_tokens.add(str(q["token"]))
+            elif elem is not None:
+                el_str = str(elem).strip()
+                if el_str:
+                    text_parts.append(el_str)
+                    for q in _extract_sentence_quantity_tokens(el_str, 0):
+                        qty_tokens.add(str(q["token"]))
+    elif raw_val is not None:
+        v_str = str(raw_val).strip()
+        text_parts.append(v_str)
+        if raw_unit:
+            text_parts.append(raw_unit)
+        try:
+            scalar_nums.add(_fmt_decimal_compact(Decimal(v_str.replace(",", ""))))
+        except Exception:
+            pass
+        u_clean = raw_unit.replace("_", " ").strip()
+        candidates = [f"{v_str} {u_clean}".strip(), v_str]
+        if "percent" in u_clean.lower() and "%" not in u_clean:
+            candidates.append(f"{v_str}%")
+        if "step" in pred.lower() and v_str.isdigit():
+            qty_tokens.add(f"STEP:{int(v_str)}")
+        for cand in candidates:
+            for q in _extract_sentence_quantity_tokens(cand, 0):
+                qty_tokens.add(str(q["token"]))
+
+    cond = str(prop.get("condition_status", "") or "").strip()
+    joined_val = " ".join(p for p in text_parts if p)
+    pol_tokens = set(_extract_clause_polarity_tokens(joined_val))
+    if cond and cond.lower() not in ("unconditional", "unknown_condition", "conditional"):
+        pol_tokens.update(_extract_clause_polarity_tokens(cond))
+    is_negated = assertion_kind in ("negation", "absence", "prohibition") or bool(pol_tokens)
+
+    val_words: set[str] = set()
+    for tok in re.findall(r"[A-Za-z0-9áéíóúñüÁÉÍÓÚÑÜ]{2,}", joined_val.lower()):
+        if not tok.isdigit() and tok not in _GAP_FRAMING_STOPWORDS:
+            val_words.add(tok)
+    pred_words: set[str] = set()
+    for ptok in pred.lower().split("_"):
+        if len(ptok) >= 3 and ptok not in _GAP_FRAMING_STOPWORDS:
+            pred_words.add(ptok)
+
+    obs = conflict_obs_by_uid.get(uid, ())
+    is_conflict = bool(obs)
+    conflict_pol_flip = False
+    conflict_val_words: set[str] = set()
+    conflict_is_numeric_only = bool(isinstance(raw_val, Mapping) or (scalar_nums and not val_words))
+
+    for ob in obs:
+        params = ob.parameters or {}
+        vals_to_inspect: list[Any] = []
+        if params.get("winner_value") is not None:
+            vals_to_inspect.append(params.get("winner_value"))
+        if params.get("loser_value") is not None:
+            vals_to_inspect.append(params.get("loser_value"))
+        if params.get("expected_value") is not None:
+            vals_to_inspect.append(params.get("expected_value"))
+        for cv in params.get("conflicting_values") or ():
+            if isinstance(cv, Mapping) and cv.get("value") is not None:
+                vals_to_inspect.append(cv.get("value"))
+
+        side_strs: list[str] = []
+        for vv in vals_to_inspect:
+            if isinstance(vv, Mapping):
+                vv_str = str(vv.get("value", "") or "").strip()
+                side_strs.append(vv_str)
+            else:
+                vv_str = str(vv or "").strip()
+                side_strs.append(vv_str)
+                if vv_str and not re.fullmatch(r"[-+]?\d+(?:\.\d+)?%?", vv_str):
+                    conflict_is_numeric_only = False
+                    for wt in re.findall(r"[A-Za-z0-9áéíóúñüÁÉÍÓÚÑÜ]{2,}", vv_str.lower()):
+                        if wt not in _GAP_FRAMING_STOPWORDS:
+                            conflict_val_words.add(wt)
+        if len(side_strs) >= 2:
+            pols = {bool(_extract_clause_polarity_tokens(s)) for s in side_strs if s}
+            bools = {s.lower() for s in side_strs if s.lower() in ("true", "false", "yes", "no", "permitted", "prohibited")}
+            if len(pols) > 1 or len(bools) > 1:
+                conflict_pol_flip = True
+
+    return {
+        "unit_id": uid,
+        "predicate": pred,
+        "pred_words": frozenset(pred_words),
+        "qty_tokens": frozenset(qty_tokens),
+        "scalar_nums": frozenset(scalar_nums),
+        "val_words": frozenset(val_words),
+        "is_negated": is_negated,
+        "pol_tokens": frozenset(pol_tokens),
+        "is_conflict": is_conflict,
+        "conflict_pol_flip": conflict_pol_flip,
+        "conflict_val_words": frozenset(conflict_val_words),
+        "conflict_is_numeric_only": conflict_is_numeric_only,
+    }
+
+
+def _build_unit_coverage_index(
+    admitted_units: Sequence[Any],
+    reader_obligations: Sequence[VerificationObligation],
+    stored_fe_map: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
+) -> dict[str, tuple[list[int], list[tuple[int, int, dict[str, Any]]]]]:
+    """Build per-doc blocked/sorted interval index storing semantic unit descriptors."""
+    conflict_obs_by_uid: dict[str, list[VerificationObligation]] = {}
+    for ob in reader_obligations:
+        kind = str((ob.parameters or {}).get("corpus_obligation_kind", "") or "")
+        if kind not in ("material_conflict", "authority_override"):
+            continue
+        for uid in (ob.parameters or {}).get("unit_ids") or ():
+            conflict_obs_by_uid.setdefault(str(uid), []).append(ob)
+
+    raw_by_doc: dict[str, list[tuple[int, int, dict[str, Any]]]] = {}
+    for u in admitted_units:
+        spec = _extract_unit_coverage_spec(u, conflict_obs_by_uid)
+        uid = spec["unit_id"]
+        seen_spans: set[tuple[str, int, int]] = set()
+        for ref in getattr(u, "evidence", ()) or ():
+            r_doc = str(getattr(ref, "document_id", "") or "")
+            r_s = getattr(ref, "start", None)
+            r_e = getattr(ref, "end", None)
+            if r_doc and r_s is not None and r_e is not None and int(r_s) < int(r_e):
+                key = (r_doc, int(r_s), int(r_e))
+                if key not in seen_spans:
+                    seen_spans.add(key)
+                    raw_by_doc.setdefault(r_doc, []).append((int(r_s), int(r_e), spec))
+        if isinstance(stored_fe_map, Mapping):
+            fe_for_unit = stored_fe_map.get(uid)
+            if isinstance(fe_for_unit, Mapping):
+                for fname, fref in fe_for_unit.items():
+                    if not str(fname).startswith("value[") or not isinstance(fref, Mapping):
+                        continue
+                    r_doc = str(fref.get("document_id", "") or "")
+                    r_s = fref.get("start")
+                    r_e = fref.get("end")
+                    if r_doc and r_s is not None and r_e is not None and int(r_s) < int(r_e):
+                        key = (r_doc, int(r_s), int(r_e))
+                        if key not in seen_spans:
+                            seen_spans.add(key)
+                            raw_by_doc.setdefault(r_doc, []).append((int(r_s), int(r_e), spec))
+
+    index: dict[str, tuple[list[int], list[tuple[int, int, dict[str, Any]]]]] = {}
+    for doc_id, items in raw_by_doc.items():
+        items.sort(key=lambda x: (x[0], x[1], x[2]["unit_id"]))
+        # Maintain prefix running max_end for O(log N + k) interval overlap scan
+        starts = [it[0] for it in items]
+        prefix_max: list[int] = []
+        cur = -1
+        for _, ee, _ in items:
+            if ee > cur:
+                cur = ee
+            prefix_max.append(cur)
+        # Store (prefix_max_list_in_starts_slot? No, pack tuple (starts, items_with_max))
+        index[doc_id] = (starts, [(it[0], it[1], it[2], pm) for it, pm in zip(items, prefix_max)])  # type: ignore[misc]
+    return index
+
+
+def _query_overlapping_unit_specs(
+    cov_index: Mapping[str, tuple[list[int], list[Any]]],
+    doc_id: str,
+    target_span: tuple[int, int],
+) -> list[dict[str, Any]]:
+    """Return unit descriptors on *doc_id* whose span intersects *target_span* in O(log N + k)."""
+    ts, te = int(target_span[0]), int(target_span[1])
+    if ts >= te:
+        return []
+    entry = cov_index.get(doc_id)
+    if not entry:
+        return []
+    starts, entries = entry
+    idx = bisect_left(starts, te) - 1
+    out: list[dict[str, Any]] = []
+    seen_uids: set[str] = set()
+    while idx >= 0:
+        s_i, e_i, spec, p_max = entries[idx]
+        if p_max <= ts:
+            break
+        if e_i > ts and s_i < te:
+            uid = spec["unit_id"]
+            if uid not in seen_spans_local_sentinel(uid, seen_uids):
+                out.append(spec)
+        idx -= 1
+    return out
+
+
+def seen_spans_local_sentinel(uid: str, seen: set[str]) -> set[str]:
+    if uid not in seen:
+        seen.add(uid)
+        return set()
+    return seen
+
+
+def _unit_matches_quantity_token(spec: Mapping[str, Any], q_token: str) -> bool:
+    """Return True iff *spec*'s extracted value actually encodes quantity *q_token*."""
+    if q_token in spec["qty_tokens"]:
+        return True
+    if ":" not in q_token:
+        return False
+    num_part, unit_part = q_token.split(":", 1)
+    if unit_part == "MULTIPLIER" or unit_part == "NONE":
+        if num_part in spec["scalar_nums"]:
+            return True
+    elif unit_part == "PERCENT":
+        if f"{num_part}:PERCENT" in spec["qty_tokens"]:
+            return True
+        # Handle fraction form (e.g. value=0.058 for 5.80%) if numeric scalar ratio matches
+        try:
+            pct_val = Decimal(num_part)
+            for s in spec["scalar_nums"]:
+                sd = Decimal(s)
+                if sd == pct_val or (sd * Decimal("100")) == pct_val:
+                    if any("percent" in q or "bps" in q or "ratio" in spec["predicate"] or "rate" in spec["predicate"] or "margin" in spec["predicate"] or "coupon" in spec["predicate"] for q in spec["qty_tokens"]) or sd == pct_val:
+                        return True
+        except Exception:
+            pass
+    elif unit_part == "BPS":
+        try:
+            bps_val = Decimal(num_part)
+            for s in spec["scalar_nums"]:
+                sd = Decimal(s)
+                if sd == bps_val or (sd * Decimal("100")) == bps_val:
+                    if (
+                        "spread" in spec["predicate"].lower()
+                        or "bps" in spec["predicate"].lower()
+                        or any("percent" in q.lower() or "bps" in q.lower() for q in spec["qty_tokens"])
+                        or sd == bps_val
+                    ):
+                        return True
+        except Exception:
+            pass
+    elif unit_part == "DAY":
+        try:
+            d_val = Decimal(num_part)
+            if num_part in spec["scalar_nums"] and ("day" in spec["predicate"].lower() or "period" in spec["predicate"].lower() or any("DAY" in q for q in spec["qty_tokens"])):
+                return True
+            _ = d_val
+        except Exception:
+            pass
+    return False
+
+
+def _span_quantity_covered(
+    cov_index: Mapping[str, tuple[list[int], list[Any]]],
+    doc_id: str,
+    q_token: str,
+    q_span: tuple[int, int],
+    sent_text: str,
+) -> bool:
+    """Cover *q_token* only if an overlapping unit actually represents *q_token* and matches sentence polarity."""
+    specs = _query_overlapping_unit_specs(cov_index, doc_id, q_span)
+    if not specs:
+        return False
+    sent_pol = _extract_clause_polarity_tokens(sent_text)
+    for spec in specs:
+        if not _unit_matches_quantity_token(spec, q_token):
+            continue
+        # Do not let a non-negated unit mask a negated obligation/prohibition clause unless part of a polarity-aware conflict
+        if sent_pol and not spec["is_negated"] and not spec["conflict_pol_flip"]:
+            # Exception: pure threshold wording ("not to exceed", "no more than", "no less than")
+            low_s = (sent_text or "").lower()
+            if not re.search(r"\b(?:not\s+more\s+than|no\s+more\s+than|not\s+less\s+than|no\s+less\s+than|not\s+exceed|without\s+prior)\b", low_s):
+                continue
+        return True
+    return False
+
+
+_DOC_STRUCT_HDR_WORDS = frozenset({
+    "section", "sec", "article", "art", "clause", "item", "part", "schedule",
+    "exhibit", "annex", "draft", "offering", "circular", "memorandum", "indenture",
+    "agreement", "amendment", "supplement", "term", "sheet", "markup", "playbook",
+    "executed", "trust", "series",
+})
+
+
+def _stem_set(words: set[str] | frozenset[str]) -> set[str]:
+    out: set[str] = set()
+    for w in words:
+        out.add(w)
+        if len(w) >= 4 and w.endswith("s"):
+            out.add(w[:-1])
+        if len(w) >= 5 and w.endswith("es"):
+            out.add(w[:-2])
+    return out
+
+
+def _conflict_covers_text_hunk(
+    cov_index: Mapping[str, tuple[list[int], list[Any]]],
+    doc_id: str,
+    hunk_span: tuple[int, int],
+    hunk_tokens: Sequence[tuple[str, int, int, str]],
+    sent_text: str,
+    counterpart_sent_text: str,
+    other_hunk_tokens: Sequence[tuple[str, int, int, str]] = (),
+    doc_meta: Mapping[str, Any] | None = None,
+) -> bool:
+    """Return True iff overlapping conflict/override units substantively cover the textual diff hunk (without masking negations)."""
+    specs = [
+        sp
+        for sp in _query_overlapping_unit_specs(cov_index, doc_id, hunk_span)
+        if sp["is_conflict"]
+    ]
+    if not specs:
+        return False
+
+    hunk_pol = _extract_clause_polarity_tokens(" ".join(t[3] for t in hunk_tokens))
+    other_pol = _extract_clause_polarity_tokens(" ".join(t[3] for t in other_hunk_tokens))
+    sent_pol = _extract_clause_polarity_tokens(sent_text)
+    other_sent_pol = _extract_clause_polarity_tokens(counterpart_sent_text)
+
+    has_polarity_diff = bool((hunk_pol ^ other_pol) or (sent_pol ^ other_sent_pol))
+    if has_polarity_diff:
+        # Only cover a polarity/negation flip if a conflict obligation explicitly flips polarity/boolean!
+        return any(sp["conflict_pol_flip"] for sp in specs)
+
+    own_doc_words = set(
+        _doc_stem_words(
+            doc_id,
+            str((doc_meta or {}).get("title", "") or ""),
+            str((doc_meta or {}).get("role", "") or ""),
+        )
+    )
+    doc_struct_words = own_doc_words | _DOC_STRUCT_HDR_WORDS
+
+    content_words = {
+        t[0]
+        for t in hunk_tokens
+        if len(t[0]) >= 3
+        and not re.fullmatch(r"[\d.,]+", t[0])
+        and t[0] not in _GAP_FRAMING_STOPWORDS
+        and t[0] not in doc_struct_words
+    }
+    if not content_words:
+        return True
+
+    def _word_covered_by_stems(w: str, stems: set[str]) -> bool:
+        if w in stems:
+            return True
+        if len(w) >= 4 and w.endswith("s") and w[:-1] in stems:
+            return True
+        if len(w) >= 5 and w.endswith("es") and w[:-2] in stems:
+            return True
+        return False
+
+    for sp in specs:
+        sp_stems = _stem_set(sp["pred_words"] | sp["val_words"] | sp["conflict_val_words"])
+        # Note common finance synonym equivalence ONLY between interest/coupon predicates
+        if "coupon" in sp_stems:
+            sp_stems.add("interest")
+        if not sp["conflict_is_numeric_only"]:
+            if any(_word_covered_by_stems(w, sp_stems) for w in content_words) and all(
+                _word_covered_by_stems(w, sp_stems | _GAP_FRAMING_STOPWORDS) for w in content_words
+            ):
+                return True
+            if sp["conflict_val_words"] & content_words or sp["pred_words"] & content_words:
+                return True
+        if any(_word_covered_by_stems(w, sp_stems) for w in content_words):
+            if not other_hunk_tokens or all(
+                _word_covered_by_stems(w, sp_stems | _GAP_FRAMING_STOPWORDS) for w in content_words
+            ):
+                return True
+    return False
+
+
+def _unit_covers_unmatched_clause(
+    cov_index: Mapping[str, tuple[list[int], list[Any]]],
+    doc_id: str,
+    sent: tuple[int, int, str],
+) -> bool:
+    """Return True iff admitted unit(s) on *doc_id* cleanly cover both quantities, text, and polarity of *sent*."""
+    s_start, s_end, s_text = int(sent[0]), int(sent[1]), sent[2]
+    specs = _query_overlapping_unit_specs(cov_index, doc_id, (s_start, s_end))
+    if not specs:
+        return False
+
+    sent_pol = _extract_clause_polarity_tokens(s_text)
+    quants = _extract_sentence_quantity_tokens(s_text, s_start)
+    if quants:
+        # Every quantity token in the deleted clause must be validly matched
+        for q in quants:
+            q_tok = str(q["token"])
+            if not any(
+                _unit_matches_quantity_token(sp, q_tok)
+                and (not sent_pol or sp["is_negated"] or sp["conflict_pol_flip"] or re.search(r"\b(?:not\s+more\s+than|no\s+more\s+than|not\s+less\s+than|no\s+less\s+than|not\s+exceed)\b", s_text.lower()))
+                for sp in specs
+            ):
+                return False
+        return True
+
+    # Purely textual clause: require matching polarity and overlapping predicate/value substantive word
+    s_words = _sentence_content_words(s_text) - _GAP_FRAMING_STOPWORDS
+    for sp in specs:
+        if bool(sent_pol) != bool(sp["is_negated"]) and not sp["conflict_pol_flip"]:
+            continue
+        if (sp["val_words"] & s_words) or (sp["pred_words"] & s_words) or (sp["conflict_val_words"] & s_words):
+            return True
+    return False
+
+
 def _build_merged_span_index(
     spans_by_doc: Mapping[str, Sequence[tuple[int, int]]],
 ) -> dict[str, tuple[list[int], list[tuple[int, int]]]]:
@@ -867,6 +1376,7 @@ def _divergence_gaps_for_item(
     diff_span_index: Mapping[str, tuple[list[int], list[tuple[int, int]]]] | None = None,
     doc_pred_spans: Mapping[str, Sequence[tuple[str, int, int]]] | None = None,
     doc_pred_sets: Mapping[str, set[str]] | None = None,
+    unit_coverage_index: Mapping[str, tuple[list[int], list[Any]]] | None = None,
 ) -> list[dict[str, Any]]:
     """Compute fine-grained quantity & textual reference-register gaps for a divergence."""
     pri_id = str(getattr(div, "primary_source_id", "") or "")
@@ -1014,6 +1524,47 @@ def _divergence_gaps_for_item(
                     spans.append((int(r_s), int(r_e)))
         return _build_merged_span_index({target_doc: spans})
 
+    eff_cov_idx = (
+        unit_coverage_index
+        if unit_coverage_index is not None
+        else _build_unit_coverage_index(admitted_units, reader_obligations)
+    )
+
+    def _disjoint_unit_covers_hunk(
+        doc_id: str,
+        other_preds: set[str],
+        hunk_tokens: Sequence[tuple[str, int, int, str]],
+        sent_text: str,
+    ) -> bool:
+        if not hunk_tokens:
+            return False
+        hs, he = int(hunk_tokens[0][1]), int(hunk_tokens[-1][2])
+        specs = [
+            sp
+            for sp in _query_overlapping_unit_specs(eff_cov_idx, doc_id, (hs, he))
+            if sp["predicate"] and sp["predicate"] not in other_preds
+        ]
+        if not specs:
+            return False
+        hunk_text = " ".join(t[3] for t in hunk_tokens)
+        hunk_pol = _extract_clause_polarity_tokens(hunk_text)
+        hunk_quants = {q["token"] for q in _extract_sentence_quantity_tokens(hunk_text, 0)}
+        content_words = {
+            t[0]
+            for t in hunk_tokens
+            if len(t[0]) >= 3
+            and not re.fullmatch(r"[\d.,]+", t[0])
+            and t[0] not in _GAP_FRAMING_STOPWORDS
+        }
+        for sp in specs:
+            if hunk_pol and not sp["is_negated"]:
+                continue
+            if hunk_quants and any(_unit_matches_quantity_token(sp, qt) for qt in hunk_quants):
+                return True
+            if content_words and ((sp["pred_words"] & content_words) or (sp["val_words"] & content_words)):
+                return True
+        return False
+
     # 1. Aligned differing sentence pairs
     for p_sent, s_sent in pairs:
         p_norm = _norm_sentence_eq(p_sent[2])
@@ -1038,11 +1589,11 @@ def _divergence_gaps_for_item(
 
         for q in p_diff:
             q_span = (int(q["span"][0]), int(q["span"][1]))
-            if not _span_index_intersects(eff_unit_idx, pri_id, q_span):
+            if not _span_quantity_covered(eff_cov_idx, pri_id, str(q["token"]), q_span, p_sent[2]):
                 _emit_quantity_gap(pri_id, q, p_sent, sec_id, s_sent)
         for q in s_diff:
             q_span = (int(q["span"][0]), int(q["span"][1]))
-            if not _span_index_intersects(eff_unit_idx, sec_id, q_span):
+            if not _span_quantity_covered(eff_cov_idx, sec_id, str(q["token"]), q_span, s_sent[2]):
                 _emit_quantity_gap(sec_id, q, s_sent, pri_id, p_sent)
 
         # Token-level diff check on ALL differing aligned sentence pairs (even when quantities differ).
@@ -1076,18 +1627,15 @@ def _divergence_gaps_for_item(
                 for tok in s_slice
                 if not any(_spans_intersect((tok[1], tok[2]), qs) for qs in s_diff_q_spans)
             ]
-            p_uncov = [
-                tok
-                for tok in p_non_qty
-                if not _span_index_intersects(eff_diff_idx, pri_id, (tok[1], tok[2]))
-            ]
-            s_uncov = [
-                tok
-                for tok in s_non_qty
-                if not _span_index_intersects(eff_diff_idx, sec_id, (tok[1], tok[2]))
-            ]
 
-            # Strip leading/trailing or full structural doc-identifier tokens from uncovered slices.
+            p_hunk_raw_span = (
+                (int(p_non_qty[0][1]), int(p_non_qty[-1][2])) if p_non_qty else (int(p_sent[0]), int(p_sent[0]))
+            )
+            s_hunk_raw_span = (
+                (int(s_non_qty[0][1]), int(s_non_qty[-1][2])) if s_non_qty else (int(s_sent[0]), int(s_sent[0]))
+            )
+
+            # Strip doc-id/role prefixes BEFORE semantic conflict coverage so they never appear as content words
             def _strip_doc_prefix(
                 uncov: list[tuple[str, int, int, str]],
                 did: str,
@@ -1103,7 +1651,6 @@ def _divergence_gaps_for_item(
                     uncov, did, aliases, doc_meta=d_meta, other_doc_id=o_did, other_meta=o_meta, single_side=single
                 ):
                     return [], True
-                # Also strip a doc-id prefix subsequence (e.g. "Baseline Term Sheet:" before another clause)
                 for k in range(len(uncov) - 1, 0, -1):
                     if _is_doc_id_diff_fragment(
                         uncov[:k],
@@ -1119,29 +1666,43 @@ def _divergence_gaps_for_item(
 
             single_side_orig = tag in ("insert", "delete")
             p_uncov, p_had_doc_ref = _strip_doc_prefix(
-                p_uncov, pri_id, pri_aliases, pri_meta, sec_id, sec_meta, single_side_orig
+                p_non_qty, pri_id, pri_aliases, pri_meta, sec_id, sec_meta, single_side_orig
             )
             s_uncov, s_had_doc_ref = _strip_doc_prefix(
-                s_uncov, sec_id, sec_aliases, sec_meta, pri_id, pri_meta, single_side_orig
+                s_non_qty, sec_id, sec_aliases, sec_meta, pri_id, pri_meta, single_side_orig
             )
 
-            # One-sided extra clause already admitted cleanly on a predicate absent from counterpart doc
+            # Semantic conflict/override coverage check: must match non-framing content and never mask negation flips
+            if p_uncov and _conflict_covers_text_hunk(
+                eff_cov_idx,
+                pri_id,
+                (int(p_uncov[0][1]), int(p_uncov[-1][2])),
+                p_uncov,
+                p_sent[2],
+                s_sent[2],
+                other_hunk_tokens=s_uncov,
+                doc_meta=pri_meta,
+            ):
+                p_uncov = []
+            if s_uncov and _conflict_covers_text_hunk(
+                eff_cov_idx,
+                sec_id,
+                (int(s_uncov[0][1]), int(s_uncov[-1][2])),
+                s_uncov,
+                s_sent[2],
+                p_sent[2],
+                other_hunk_tokens=p_non_qty,
+                doc_meta=sec_meta,
+            ):
+                s_uncov = []
+
+            # One-sided extra clause already admitted cleanly on a disjoint predicate absent from counterpart doc
             if p_uncov and not s_uncov and (tag == "delete" or s_had_doc_ref or not s_non_qty):
-                if disjoint_pri_idx is None:
-                    disjoint_pri_idx = _get_disjoint_idx(pri_id, sec_preds)
-                p_uncov = [
-                    tok
-                    for tok in p_uncov
-                    if not _span_index_intersects(disjoint_pri_idx, pri_id, (tok[1], tok[2]))
-                ]
+                if _disjoint_unit_covers_hunk(pri_id, sec_preds, p_uncov, p_sent[2]):
+                    p_uncov = []
             if s_uncov and not p_uncov and (tag == "insert" or p_had_doc_ref or not p_non_qty):
-                if disjoint_sec_idx is None:
-                    disjoint_sec_idx = _get_disjoint_idx(sec_id, pri_preds)
-                s_uncov = [
-                    tok
-                    for tok in s_uncov
-                    if not _span_index_intersects(disjoint_sec_idx, sec_id, (tok[1], tok[2]))
-                ]
+                if _disjoint_unit_covers_hunk(sec_id, pri_preds, s_uncov, s_sent[2]):
+                    s_uncov = []
 
             # 1-token structural clause join (e.g. "; " vs " and ") strictly bridging two differing spans
             if tag == "delete" and len(p_uncov) == 1 and not s_uncov:
@@ -1155,6 +1716,7 @@ def _divergence_gaps_for_item(
                 ):
                     s_uncov = []
 
+            _ = p_hunk_raw_span, s_hunk_raw_span
             p_frag_text = " ".join(t[3] for t in p_uncov) if p_uncov else " ".join(t[3] for t in p_slice)
             s_frag_text = " ".join(t[3] for t in s_uncov) if s_uncov else " ".join(t[3] for t in s_slice)
             p_hunk_span = (
@@ -1217,22 +1779,66 @@ def _divergence_gaps_for_item(
                     "secondary_source_id": sec_id,
                 })
 
-    # 2. Unmatched sentences with quantities (in explicit bounded sections, or on the bounded divergent side)
+    # 2. Unmatched clauses (quantities AND deleted substantive clauses missing from counterpart)
     if pri_span is not None:
         for p_sent in unmatched_pri:
-            for q in _extract_sentence_quantity_tokens(p_sent[2], p_sent[0]):
+            p_quants = _extract_sentence_quantity_tokens(p_sent[2], p_sent[0])
+            for q in p_quants:
                 os, oe = _orig_sent_span(pri_id, p_sent, int(q["span"][0]), int(q["span"][1]), int(p_sent[0]))
                 q["span"] = [os, oe]
                 q_span = (os, oe)
-                if not _span_index_intersects(eff_unit_idx, pri_id, q_span):
+                if not _span_quantity_covered(eff_cov_idx, pri_id, str(q["token"]), q_span, p_sent[2]):
                     _emit_quantity_gap(pri_id, q, p_sent, sec_id, None)
+
+            # Deleted substantive clause check (P3 #10): non-header, non-doc-title clauses absent from sec_id
+            if not _is_pure_section_heading(p_sent[2]):
+                p_toks = [
+                    (norm_t, *_orig_sent_span(pri_id, p_sent, ts, te, int(p_sent[0])), raw_t)
+                    for norm_t, ts, te, raw_t in _tokenize_with_spans(p_sent[2], int(p_sent[0]))
+                ]
+                is_doc_title = _is_doc_id_diff_fragment(
+                    p_toks,
+                    pri_id,
+                    pri_aliases,
+                    doc_meta=pri_meta,
+                    other_doc_id=sec_id,
+                    other_meta=sec_meta,
+                    single_side=True,
+                ) or (
+                    not _HEADING_CLAUSE_VERB_RE.search(p_sent[2])
+                    and not p_quants
+                    and len(_sentence_content_words(p_sent[2])) <= 6
+                )
+                has_substance = len(_sentence_content_words(p_sent[2]) - _GAP_FRAMING_STOPWORDS) >= 2 or bool(
+                    _extract_clause_polarity_tokens(p_sent[2])
+                )
+                if not is_doc_title and has_substance and not _unit_covers_unmatched_clause(eff_cov_idx, pri_id, p_sent):
+                    gaps.append({
+                        "kind": "textual",
+                        "document_id": pri_id,
+                        "offset": int(p_sent[0]),
+                        "span": [int(p_sent[0]), int(p_sent[1])],
+                        "token": "DELETED_CLAUSE",
+                        "changed_text": pri_full[int(p_sent[0]) : int(p_sent[1])] if pri_full else p_sent[2],
+                        "sentence": p_sent[2],
+                        "sentence_span": [int(p_sent[0]), int(p_sent[1])],
+                        "counterpart_document_id": sec_id,
+                        "counterpart_offset": None,
+                        "counterpart_span": None,
+                        "counterpart_changed_text": "",
+                        "counterpart_sentence": None,
+                        "section_key": sec_key,
+                        "section_label": sec_label,
+                        "primary_source_id": pri_id,
+                        "secondary_source_id": sec_id,
+                    })
     if sec_span is not None:
         for s_sent in unmatched_sec:
             for q in _extract_sentence_quantity_tokens(s_sent[2], s_sent[0]):
                 os, oe = _orig_sent_span(sec_id, s_sent, int(q["span"][0]), int(q["span"][1]), int(s_sent[0]))
                 q["span"] = [os, oe]
                 q_span = (os, oe)
-                if not _span_index_intersects(eff_unit_idx, sec_id, q_span):
+                if not _span_quantity_covered(eff_cov_idx, sec_id, str(q["token"]), q_span, s_sent[2]):
                     _emit_quantity_gap(sec_id, q, s_sent, pri_id, None)
 
     return gaps
@@ -1701,6 +2307,7 @@ def _compute_register_state(
     )
     unit_span_index = _build_merged_span_index(unit_spans_by_doc)
     diff_span_index = _build_merged_span_index(differing_spans_by_doc)
+    unit_coverage_index = _build_unit_coverage_index(admitted, reader_obligations, stored_fe_map)
 
     # Pre-index reader obligations by document span for O(log R) divergence UID lookup.
     rob_unbounded_uids: dict[str, set[str]] = {}
@@ -1788,6 +2395,7 @@ def _compute_register_state(
             diff_span_index=diff_span_index,
             doc_pred_spans=doc_pred_spans,
             doc_pred_sets=doc_pred_sets,
+            unit_coverage_index=unit_coverage_index,
         ):
             gkey = (
                 str(gap_item.get("kind", "")),

@@ -740,7 +740,8 @@ def test_recorded_reads_v2_replay_preserves_ablation_and_closes_gaps():
     assert summary["ablation"]["conflicts_removed"] == 10
     assert summary["ablation"]["gaps_detected"] == 10
     assert summary["gaps_closed_by_reread_total"] == 2
-    assert summary["gaps_by_kind"]["quantity"] == 4
+    # P3 #11 also surfaces unextracted STEP:6 where only waterfall_priority='senior' existed (5 vs old masked 4)
+    assert summary["gaps_by_kind"]["quantity"] == 5
     assert summary["clean_corpus_false_gaps"]["false_gaps_total"] == 0
     assert summary["clean_candidate_escalation_rate_wilson_95"]["k"] == 0
     per_corpus = {c["corpus_id"]: c for c in rep["corpora"]}

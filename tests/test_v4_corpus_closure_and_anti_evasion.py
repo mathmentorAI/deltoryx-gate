@@ -1293,8 +1293,10 @@ def test_ac4_measure_reader_recall_ablation_and_wilson_ci():
     assert summary["reader_conflict_recall_wilson_95"]["k"] == 9
     assert summary["reader_conflict_recall_wilson_95"]["n"] == 10
     assert summary["ablation"]["conflicts_removed"] == 10
-    assert summary["ablation"]["gaps_detected"] == 10
-    assert summary["ablation"]["detection_rate_wilson_95"]["rate"] == 1.0
+    # P3 #11 removes span-overlap masking so v1's unextracted STEP:11/12 (only waterfall_priority='mezzanine' in v1)
+    # is flagged upfront (9/10 in v1 ablation; v2 extracts waterfall_schedule and scores 10/10).
+    assert summary["ablation"]["gaps_detected"] == 9
+    assert summary["ablation"]["detection_rate_wilson_95"]["rate"] == 0.9
     txt_ci = summary["textual_gaps_across_all_corpora_wilson_95"]
     assert 0 <= txt_ci["k"] <= txt_ci["n"]
     assert txt_ci["n"] > 0

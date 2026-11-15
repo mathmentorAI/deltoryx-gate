@@ -1320,10 +1320,79 @@ def _tokens_grounded_in_quote(val_tokens: set[str], quote_tokens: set[str]) -> b
     return True
 
 
+_COMPARATIVE_BOUND_NORMALIZE_RE = re.compile(
+    r"\b(?:not\s+less\s+than|no\s+less\s+than|not\s+fewer\s+than|no\s+fewer\s+than|"
+    r"not\s+more\s+than|no\s+more\s+than|not\s+exceed(?:ing)?)\b",
+    re.IGNORECASE,
+)
+
+_LOWER_BOUND_RE = re.compile(
+    r"\b(?:at\s+least|not\s+less\s+than|no\s+less\s+than|not\s+fewer\s+than|no\s+fewer\s+than|"
+    r"minimum(?:\s+of)?|greater\s+than\s+or\s+equal\s+to|por\s+lo\s+menos|como\s+m[ií]nimo)\b",
+    re.IGNORECASE,
+)
+
+_UPPER_BOUND_RE = re.compile(
+    r"\b(?:at\s+most|not\s+more\s+than|no\s+more\s+than|not\s+exceed(?:ing)?|up\s+to|"
+    r"maximum(?:\s+of)?|less\s+than\s+or\s+equal\s+to|como\s+m[aá]ximo|sin\s+exceder)\b",
+    re.IGNORECASE,
+)
+
+_CONDITIONAL_ONLY_RE = re.compile(
+    r"\b(?:not\s+only|only\s+(?:if|when|after|before|upon|where|as|to\s+the\s+extent|for\s+so\s+long\s+as)|"
+    r"[uú]nicamente\s+(?:si|cuando)|solamente\s+(?:si|cuando)|solo\s+(?:si|cuando))\b",
+    re.IGNORECASE,
+)
+
+_STANDALONE_RESTRICTOR_RE = re.compile(
+    r"\b(?:only|solely|exclusively|merely|[uú]nicamente|solamente|exclusivamente)\b",
+    re.IGNORECASE,
+)
+
+_UNIVERSAL_QUANT_RE = re.compile(
+    r"\b(?:all|every|each|always|all\s+of|cada|todos?|todas?|siempre)\b",
+    re.IGNORECASE,
+)
+
+_EMPTY_QUANT_RE = re.compile(
+    r"\b(?:none|never|no\s+[a-z][a-z0-9\-]{2,}|ning[uú]n|ninguna|nunca|jam[aá]s)\b",
+    re.IGNORECASE,
+)
+
+_PARTIAL_EXISTENTIAL_RE = re.compile(
+    r"\b(?:some|certain|partial(?:ly)?|portions?\s+of|algunos?|algunas?|ciertos?)\b",
+    re.IGNORECASE,
+)
+
+
+def _select_target_subclause(assertion: Assertion, quote_text: str) -> str:
+    """Select the sub-clause inside *quote_text* best bound to `(subject, predicate, value)`."""
+    norm_q = normalize_span(quote_text)
+    subclauses = _split_quote_subclauses(norm_q)
+    if len(subclauses) <= 1:
+        return norm_q
+    phrases, subj_tokens = _extract_binding_cues(assertion.subject, assertion.predicate)
+    val_tokens = _content_tokens(assertion.value or "")
+    best_clause = norm_q
+    best_score = -10**9
+    ties = 0
+    for _, _, cl_text in subclauses:
+        sc = _score_subclause_match(cl_text, phrases, subj_tokens)
+        cl_words = _content_tokens(cl_text)
+        sc += 2 * len(cl_words & val_tokens)
+        if sc > best_score:
+            best_score = sc
+            best_clause = cl_text
+            ties = 1
+        elif sc == best_score:
+            ties += 1
+    return best_clause if (ties == 1 and best_score > 0) else norm_q
+
+
 def _has_polarity_inversion(quote_text: str, value_text: str) -> bool:
     """Return True if *quote_text* has clausal negation that is inverted/omitted in a propositional *value_text*."""
-    q_low = normalize_span(quote_text).lower()
-    v_low = normalize_span(value_text).lower()
+    q_low = _COMPARATIVE_BOUND_NORMALIZE_RE.sub(" ", normalize_span(quote_text).lower())
+    v_low = _COMPARATIVE_BOUND_NORMALIZE_RE.sub(" ", normalize_span(value_text).lower())
     # Remove shared "without <noun>" phrases so "without cause" in both does not mask "In no event" in quote
     for shared in re.findall(r"\b(?:without|sin)\s+[a-záéíóúñü]+\b", q_low):
         if shared in v_low:
@@ -1337,6 +1406,88 @@ def _has_polarity_inversion(quote_text: str, value_text: str) -> bool:
     if not v_neg and not _AFFIRMATIVE_PROPOSITION_RE.search(v_low):
         return False
     return True
+
+
+def _has_quantifier_or_scope_mismatch(
+    assertion: Assertion,
+    quote_text: str,
+    value_text: str,
+) -> str | None:
+    """Detect local quantifier, comparative bound, restrictor (`only`/`solely`), and negation scope mismatches."""
+    target_clause = _select_target_subclause(assertion, quote_text)
+    q_low = normalize_span(target_clause).lower()
+    v_low = normalize_span(value_text).lower()
+    if not q_low or not v_low:
+        return None
+
+    # 1. Comparative bound direction parity (`at least` / `not less than` vs `at most` / `not more than`)
+    v_lower_b = bool(_LOWER_BOUND_RE.search(v_low))
+    v_upper_b = bool(_UPPER_BOUND_RE.search(v_low))
+    q_lower_b = bool(_LOWER_BOUND_RE.search(q_low))
+    q_upper_b = bool(_UPPER_BOUND_RE.search(q_low))
+    if v_lower_b and not v_upper_b and (q_upper_b and not q_lower_b):
+        return "lower-bound qualifier in value reverses upper-bound qualifier in cited quote"
+    if v_upper_b and not v_lower_b and (q_lower_b and not q_upper_b):
+        return "upper-bound qualifier in value reverses lower-bound qualifier in cited quote"
+
+    # 2. Restrictor (`only`, `solely`, `exclusively`) scope vs conditional (`only if`, `only when`, ...)
+    v_stripped = _CONDITIONAL_ONLY_RE.sub(" ", v_low)
+    q_stripped = _CONDITIONAL_ONLY_RE.sub(" ", q_low)
+    v_rests = list(_STANDALONE_RESTRICTOR_RE.finditer(v_stripped))
+    q_rests = list(_STANDALONE_RESTRICTOR_RE.finditer(q_stripped))
+
+    if v_rests and not q_rests:
+        return "value asserts exclusive restrictor ('only'/'solely'/'exclusively') absent from non-conditional clause scope"
+
+    if v_rests and q_rests:
+        # Verify the post-restrictor head phrase aligns locally (e.g. "only applies to A" vs "only includes B")
+        v_r = v_rests[0]
+        v_tail_tokens = _content_tokens(v_stripped[v_r.end() : v_r.end() + 48])
+        if v_tail_tokens:
+            matched_tail = False
+            for q_r in q_rests:
+                q_tail_tokens = _content_tokens(q_stripped[q_r.end() : q_r.end() + 64])
+                if _tokens_grounded_in_quote(v_tail_tokens, q_tail_tokens):
+                    matched_tail = True
+                    break
+            if not matched_tail:
+                return "exclusive restrictor ('only'/'solely'/'exclusively') scopes a different verb or object phrase in cited quote"
+
+    # Reject reverse unrestricted universal claim (`all`/`any`/`every`) against a single-target restrictor clause
+    if q_rests and not v_rests and (_UNIVERSAL_QUANT_RE.search(v_low) or re.search(r"\bany\b", v_low)):
+        if not (_UNIVERSAL_QUANT_RE.search(q_low) or re.search(r"\bany\b", q_low)):
+            return "value generalizes universally ('all'/'any'/'every') against an exclusive restrictor in cited quote"
+
+    # 3. Universal / existential / negative quantifier scope alignment
+    v_empty = bool(_EMPTY_QUANT_RE.search(v_low))
+    q_empty = bool(_EMPTY_QUANT_RE.search(q_low))
+    v_univ = bool(_UNIVERSAL_QUANT_RE.search(v_low))
+    q_univ = bool(_UNIVERSAL_QUANT_RE.search(q_low))
+
+    if v_empty and not (q_empty or bool(_CLAUSE_NEGATION_RE.search(_COMPARATIVE_BOUND_NORMALIZE_RE.sub(" ", q_low)))):
+        return "value asserts negative/empty quantifier ('none'/'never'/'no') contradicted by cited quote"
+
+    if v_univ and (q_empty or _PARTIAL_EXISTENTIAL_RE.search(q_low) or re.search(r"\bnot\s+(?:all|every)\b", q_low)):
+        if not q_univ:
+            return "value asserts universal quantifier ('all'/'every'/'each') over a partial or negated clause"
+
+    if v_univ and q_univ:
+        # Verify universal determiner binds to the same target head noun when quantified explicitly ("all <noun>")
+        for m in re.finditer(r"\b(?:all|every|each)\s+(?:of\s+the\s+)?([a-z][a-z0-9\-]{2,})", v_low):
+            head_noun = m.group(1)
+            if head_noun in _VALUE_STOPWORDS:
+                continue
+            head_stem = head_noun[:5] if len(head_noun) >= 5 else head_noun
+            q_head_match = any(
+                head_noun in qm.group(1) or qm.group(1).startswith(head_stem)
+                for qm in re.finditer(r"\b(?:all|every|each)\s+(?:of\s+(?:the\s+)?)?([a-z][a-z0-9\-]{2,})", q_low)
+            )
+            if not q_head_match:
+                # Allow if target noun itself appears inside cited clause without a conflicting existential determiner on that noun
+                if re.search(rf"\b(?:some|certain|only|excluding|except)\s+(?:[a-z]+\s+){{0,2}}{re.escape(head_stem)}", q_low):
+                    return f"universal quantifier on '{head_noun}' does not match quantifier scope in cited quote"
+
+    return None
 
 
 def verify_quote_and_quantities(
@@ -1595,10 +1746,12 @@ def verify_quote_and_quantities(
                     )
                 )
 
-        # 3. Verify substantive content-token grounding and polarity parity between quote and value
+        # 3. Verify substantive content-token grounding, quantifier/restrictor scope, and polarity parity
         if quote_in_source and not issues:
-            val_tokens = _content_tokens(assertion.value)
-            quote_tokens = _content_tokens(reference_text)
+            val_bound_norm = _UPPER_BOUND_RE.sub(" boundle ", _LOWER_BOUND_RE.sub(" boundge ", assertion.value))
+            ref_bound_norm = _UPPER_BOUND_RE.sub(" boundle ", _LOWER_BOUND_RE.sub(" boundge ", reference_text))
+            val_tokens = _content_tokens(val_bound_norm)
+            quote_tokens = _content_tokens(ref_bound_norm)
             if not val_dates and not val_quantities:
                 norm_val = normalize_span(assertion.value).lower()
                 norm_ref = normalize_span(reference_text).lower()
@@ -1619,20 +1772,6 @@ def verify_quote_and_quantities(
                             remediation=f"Ensure '{assertion.predicate}' value uses only terms grounded in the cited quote.",
                         )
                     )
-                elif _has_polarity_inversion(reference_text, assertion.value):
-                    issues.append(
-                        Issue(
-                            code="QUANTITY_MISMATCH",
-                            disposition="RETRY",
-                            assertion_id=assertion.id,
-                            subject=assertion.subject,
-                            predicate=assertion.predicate,
-                            message=(
-                                f"Proposed value '{assertion.value}' inverts the negation/polarity of cited quote '{assertion.quote[:80]}'."
-                            ),
-                            remediation="Preserve the negative/prohibitive polarity stated in the cited quote.",
-                        )
-                    )
             elif val_tokens and not _tokens_grounded_in_quote(val_tokens, quote_tokens):
                 # Even when a value includes a number (e.g. "Step 13 senior..."), any accompanying substantive words must be grounded in the quote
                 issues.append(
@@ -1648,5 +1787,39 @@ def verify_quote_and_quantities(
                         remediation=f"Ensure all qualifiers in '{assertion.value}' match '{source.id}'.",
                     )
                 )
+
+            if not issues:
+                if _has_polarity_inversion(reference_text, assertion.value):
+                    issues.append(
+                        Issue(
+                            code="QUANTITY_MISMATCH",
+                            disposition="RETRY",
+                            assertion_id=assertion.id,
+                            subject=assertion.subject,
+                            predicate=assertion.predicate,
+                            message=(
+                                f"Proposed value '{assertion.value}' inverts the negation/polarity of cited quote '{assertion.quote[:80]}'."
+                            ),
+                            remediation="Preserve the negative/prohibitive polarity stated in the cited quote.",
+                        )
+                    )
+                else:
+                    scope_err = _has_quantifier_or_scope_mismatch(
+                        assertion, reference_text, assertion.value
+                    )
+                    if scope_err is not None:
+                        issues.append(
+                            Issue(
+                                code="QUANTITY_MISMATCH",
+                                disposition="RETRY",
+                                assertion_id=assertion.id,
+                                subject=assertion.subject,
+                                predicate=assertion.predicate,
+                                message=(
+                                    f"Scope/quantifier mismatch in '{assertion.value}': {scope_err}."
+                                ),
+                                remediation="Preserve the exact quantifier, restrictor, and comparative bound scope from the cited quote.",
+                            )
+                        )
 
     return issues

@@ -519,11 +519,190 @@ def test_07_omitted_assumptions_and_damages_rejected_then_accepted_with_escalate
     )
     good_candidate = _make_valid_synthetic_candidate(graph=full_graph)
     good_res = evaluate_securitization_candidate(good_candidate, corpus, gate_mode="v3_v4")
-    assert good_res.report_disposition == "ACCEPT"
-    assert good_res.accepted is True
+    # Real recorded cart_synth.json omits Step 1/2/8-12/9/10 spans, so sentence/quantity cross-check
+    # MUST fail closed with REFERENCE_REGISTER_GAP (and zero derivation/damage defects remain).
+    assert good_res.report_disposition == "ESCALATE"
+    assert good_res.accepted is False
+    assert {i["code"] for i in good_res.issues} == {"REFERENCE_REGISTER_GAP"}
     assert good_res.operational_authorization["status"] == "ESCALATE"
     assert good_res.operational_authorization["authorized"] is False
     assert good_res.operational_authorization["response_digest"] is not None
+
+    # When complete reader units cover all divergent clauses/quantities on a closed 2-doc securitization corpus,
+    # report_disposition reaches ACCEPT while operational authorization still holds at ESCALATE (material discrepancy).
+    import hashlib as _hashlib
+    from claimlayer.v4 import LLMProposalReader, STRICT_READER_PROMPT
+    from harness2_v4_pipeline import _build_corpus_objects as _build_docs
+
+    clean_ind = "The Indenture governs. Class C Notes ($50,000,000 principal) bear interest at 6.75% per annum."
+    clean_om = "Draft Offering Memorandum. Class C Notes ($50,000,000 principal) bear interest at 6.50% per annum. The coupon difference is 0.25 percentage point."
+    clean_ind_id = "clean-indenture.docx"
+    clean_om_id = "clean-om.docx"
+
+    class _Test07Model:
+        def __init__(self, mapping):
+            self._mapping = mapping
+
+        @property
+        def identity(self):
+            return {"provider": "test07", "model": "test07-complete", "endpoint": "local", "parameters": {}}
+
+        def complete(self, _system, payload):
+            doc_id = payload["document_id"]
+            ev_id = payload["fragments"][0]["evidence_id"]
+            props = []
+            for p in self._mapping.get(doc_id, ()):
+                row = dict(p)
+                row["evidence"] = [ev_id]
+                props.append(row)
+            return {"output": {"proposals": props}}
+
+    c_reader = LLMProposalReader(
+        model=_Test07Model({
+        clean_ind_id: [
+            {
+                "entity": "Class C Notes",
+                "predicate": "note_principal",
+                "value": {"value": 50000000, "unit": "USD"},
+                "assertion_kind": "definition",
+                "condition_status": "unconditional",
+                "basis": "explicit",
+                "polarity": "affirmed",
+                "quote": "Class C Notes ($50,000,000 principal)",
+            },
+            {
+                "entity": "Class C Notes",
+                "predicate": "coupon_rate",
+                "value": {"value": 6.75, "unit": "percent_per_annum"},
+                "assertion_kind": "definition",
+                "condition_status": "unconditional",
+                "basis": "explicit",
+                "polarity": "affirmed",
+                "quote": "Class C Notes ($50,000,000 principal) bear interest at 6.75% per annum.",
+            },
+        ],
+        clean_om_id: [
+            {
+                "entity": "Class C Notes",
+                "predicate": "coupon_rate",
+                "value": {"value": 6.50, "unit": "percent_per_annum"},
+                "assertion_kind": "fact",
+                "condition_status": "unconditional",
+                "basis": "explicit",
+                "polarity": "affirmed",
+                "quote": "Class C Notes ($50,000,000 principal) bear interest at 6.50% per annum.",
+            },
+            {
+                "entity": "Class C Notes",
+                "predicate": "coupon_spread",
+                "value": {"value": 0.25, "unit": "percentage_point"},
+                "assertion_kind": "fact",
+                "condition_status": "unconditional",
+                "basis": "explicit",
+                "polarity": "affirmed",
+                "quote": "The coupon difference is 0.25 percentage point.",
+            },
+        ],
+    }),
+        prompt=STRICT_READER_PROMPT,
+    )
+    corpus_complete = _build_docs(
+        "test07_complete_sec",
+        "test07_task",
+        "synthetic_replay",
+        [
+            ("indenture", clean_ind_id, "governing_contract", "authoritative", 100, True, 1, clean_ind),
+            ("offering_memorandum", clean_om_id, "disclosure_document", "supplementary", 40, False, 10, clean_om),
+        ],
+        common_sha256=_hashlib.sha256((clean_ind + clean_om).encode()).hexdigest(),
+        common_chars=len(clean_ind) + len(clean_om),
+        total_lines=2,
+        reader=c_reader,
+    )
+    corpus_complete.evidence_layer.ingest(list(corpus_complete.v4_sources.values()))
+    c_uids = {u.proposition["predicate"] + ":" + str((u.proposition.get("value") or {}).get("value")): u.unit_id for u in corpus_complete.evidence_layer.units}
+    complete_graph = JustificationGraph(
+        claims={
+            "c_prin": ClaimNode(
+                "c_prin", "extraction", "Class C Notes", "note_principal", 50000000, "USD",
+                evidence=({"document_id": clean_ind_id, "start": clean_ind.index("Class C Notes"), "end": clean_ind.index("Class C Notes ($50,000,000 principal)") + len("Class C Notes ($50,000,000 principal)"), "quote": "Class C Notes ($50,000,000 principal)"},),
+                evidence_unit_ids=(c_uids["note_principal:50000000"],),
+            ),
+            "c_ind": ClaimNode(
+                "c_ind", "extraction", "Class C Notes", "coupon_rate", 6.75, "percent_per_annum",
+                evidence=({"document_id": clean_ind_id, "start": clean_ind.index("Class C Notes"), "end": len(clean_ind), "quote": "Class C Notes ($50,000,000 principal) bear interest at 6.75% per annum."},),
+                evidence_unit_ids=(c_uids["coupon_rate:6.75"],),
+            ),
+            "c_om": ClaimNode(
+                "c_om", "extraction", "Class C Notes", "coupon_rate", 6.5, "percent_per_annum",
+                evidence=({"document_id": clean_om_id, "start": clean_om.index("Class C Notes"), "end": clean_om.index("6.50% per annum.") + len("6.50% per annum."), "quote": "Class C Notes ($50,000,000 principal) bear interest at 6.50% per annum."},),
+                evidence_unit_ids=(c_uids["coupon_rate:6.5"],),
+            ),
+            "c_spread": ClaimNode(
+                "c_spread", "extraction", "Class C Notes", "coupon_spread", 0.25, "percentage_point",
+                evidence=({"document_id": clean_om_id, "start": clean_om.index("The coupon difference"), "end": len(clean_om), "quote": "The coupon difference is 0.25 percentage point."},),
+                evidence_unit_ids=(c_uids["coupon_spread:0.25"],),
+            ),
+            "c_impact": ClaimNode(
+                "c_impact", "derivation", "Class C Notes", "annual_interest_impact", 125000, "USD_per_year",
+            ),
+        },
+        steps=(
+            InferenceStep(
+                step_id="s1",
+                premises=("c_prin", "c_spread"),
+                conclusion_id="c_impact",
+                operation="multiply",
+                assumptions=("constant_principal", "simple_annual_calculation"),
+            ),
+        ),
+        conclusion_id="c_impact",
+    )
+    complete_candidate = {
+        "report_text": (
+            f"Based on the provided documents, {clean_ind_id} governs over {clean_om_id}. "
+            "Class C Notes principal is $50,000,000 and bear interest at 6.75% per annum "
+            "(whereas the Draft Offering Memorandum states 6.50% per annum, a coupon difference of 0.25 percentage point). "
+            "Assuming constant principal and simple annual calculation, "
+            "Class C Notes annual interest impact is $125,000 per year (illustrative only)."
+        ),
+        "assertions": [
+            {
+                "subject": "Class C Notes",
+                "predicate": "note_principal",
+                "value": "$50,000,000",
+                "unit": "USD",
+                "role": "governing",
+                "source_id": clean_ind_id,
+                "quote": "Class C Notes ($50,000,000 principal)",
+            },
+            {
+                "subject": "Class C Notes",
+                "predicate": "coupon_rate",
+                "value": "6.75%",
+                "unit": "PERCENT",
+                "role": "governing",
+                "source_id": clean_ind_id,
+                "quote": "Class C Notes ($50,000,000 principal) bear interest at 6.75% per annum.",
+            },
+            {
+                "subject": "Class C Notes",
+                "predicate": "coupon_rate",
+                "value": "6.50%",
+                "unit": "PERCENT",
+                "role": "subordinate_discrepancy",
+                "source_id": clean_om_id,
+                "quote": "Class C Notes ($50,000,000 principal) bear interest at 6.50% per annum.",
+            },
+        ],
+        "graph": complete_graph,
+    }
+    good_res_complete = evaluate_securitization_candidate(complete_candidate, corpus_complete, gate_mode="v3_v4")
+    assert good_res_complete.report_disposition == "ACCEPT"
+    assert good_res_complete.accepted is True
+    assert good_res_complete.operational_authorization["status"] == "ESCALATE"
+    assert good_res_complete.operational_authorization["authorized"] is False
+    assert good_res_complete.operational_authorization["response_digest"] is not None
 
 
 def test_08_repair_introducing_new_ungrounded_claim_or_dropping_section_rejected():

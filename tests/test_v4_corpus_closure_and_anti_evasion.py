@@ -737,14 +737,14 @@ def test_ac10_recorded_reader_gap_detected_on_meridian_and_apex():
     assert apex_full_reg.domain_profile_fingerprint == BANKING_FINANCE_DOMAIN_PROFILE.fingerprint()
     assert not apex_full_reg.gap_divergences
 
-    # Simulate a recorded miss on apex's leverage_ratio / interest_margin proposals while keeping reader_status ok
+    # Simulate a recorded miss on apex's leverage_ratio proposals ONLY (same section still has interest_margin)
     filtered_apex_docs = {
         did: {
             **entry,
             "raw_proposals": [
                 p
                 for p in (entry.get("raw_proposals") or ())
-                if p.get("predicate") not in ("leverage_ratio", "interest_margin")
+                if p.get("predicate") != "leverage_ratio"
             ],
         }
         for did, entry in apex_full_reader.documents.items()
@@ -759,25 +759,11 @@ def test_ac10_recorded_reader_gap_detected_on_meridian_and_apex():
 
     meridian_corpus = _build_meridian_securitization_corpus()
     meridian_full_reader = RecordedProposalReader.from_file(rec_dir / "meridian.json")
-    # Simulate a recorded miss on meridian's coupon_rate proposals while keeping reader_status ok
-    filtered_meridian_docs = {
-        did: {
-            **entry,
-            "raw_proposals": [p for p in (entry.get("raw_proposals") or ()) if p.get("predicate") != "coupon_rate"],
-        }
-        for did, entry in meridian_full_reader.documents.items()
-    }
-    meridian_miss_reader = RecordedProposalReader(
-        model_name=meridian_full_reader.model_name,
-        prompt_version=meridian_full_reader.prompt_version,
-        prompt_digest=meridian_full_reader.prompt_digest,
-        recorded_at=meridian_full_reader.recorded_at,
-        documents=filtered_meridian_docs,
-    )
-
-    for case_name, corpus, reader, vocab, base_profile in (
-        ("apex", apex_corpus, apex_miss_reader, BANKING_FINANCE_VOCABULARY, BANKING_FINANCE_DOMAIN_PROFILE),
-        ("meridian", meridian_corpus, meridian_miss_reader, SECURITIZATION_VOCABULARY, SECURITIZATION_DOMAIN_PROFILE),
+    # Even the UNMODIFIED meridian.json recording misses Step 8 in draft-oc.docx,
+    # and quantity/sentence cross-check MUST detect it without masking by coupon_rate!
+    for case_name, corpus, reader, vocab, base_profile, expected_sub in (
+        ("apex", apex_corpus, apex_miss_reader, BANKING_FINANCE_VOCABULARY, BANKING_FINANCE_DOMAIN_PROFILE, "3.75"),
+        ("meridian", meridian_corpus, meridian_full_reader, SECURITIZATION_VOCABULARY, SECURITIZATION_DOMAIN_PROFILE, "STEP:8"),
     ):
         layer = EvidenceLayer(vocabulary=vocab, reader=reader)
         layer.ingest(list(corpus.v4_sources.values()))
@@ -788,6 +774,7 @@ def test_ac10_recorded_reader_gap_detected_on_meridian_and_apex():
             comparison_divergences=divs,
         )
         assert reg.gap_divergences, f"{case_name} should record deterministic REFERENCE_REGISTER_GAP"
+        assert any(expected_sub in str(g.get("token")) for g in reg.gap_divergences)
         min_graph = JustificationGraph(
             claims={
                 "c0": ClaimNode(

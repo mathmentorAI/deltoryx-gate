@@ -466,16 +466,10 @@ def _build_heldout_scenarios() -> list[dict[str, Any]]:
             "scenario_id": "sec_meridian_clean",
             "domain": "securitization",
             "corpus": sec,
-            "kind": "clean_control",
+            # meridian.json genuinely misses Step 8 Reserve Account waterfall in draft-oc.docx,
+            # and this candidate omits the waterfall discrepancy -> v3_v4 MUST NOT accept (ESCALATE).
+            "kind": "seeded_defect",
             "initial": sec_clean,
-            "repair": sec_clean,
-        },
-        {
-            "scenario_id": "sec_meridian_repairable_authority",
-            "domain": "securitization",
-            "corpus": sec,
-            "kind": "repairable",
-            "initial": sec_bad_auth,
             "repair": sec_clean,
         },
         {

@@ -14,6 +14,13 @@ from typing import Any, Mapping, Sequence
 from ..models import Source
 from ..semantic.models import canonical, digest
 from ..verifiers.diff import build_comparison_policy
+from ..verifiers.quote_quantity import (
+    _SECTION_HEADER_ONLY_RE,
+    _STRUCTURAL_ID_RE,
+    extract_dates_with_spans,
+    extract_quantities,
+    segment_sentences_with_spans,
+)
 from .domain_profile import DomainProfile
 from .engine import EvidenceLayer
 from .justification import VerificationObligation
@@ -267,6 +274,395 @@ def _obligation_overlaps_doc_span(
         )
         if _spans_overlap(sp_doc, sp_range, doc_id, span):
             return True
+    return False
+
+
+_DEAL_SERIES_YEAR_RE = re.compile(
+    r"\b[A-Za-z][A-Za-z0-9&\-]{1,}\s+(?:19|20)\d{2}-\d+\b"
+)
+_MULTI_TRANCHE_RE = re.compile(
+    r"\b(?:Class|Classes|Tranche|Tranches|Series|Tier)\s+"
+    r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)?(?:\s*(?:,|and|&|/)\s*(?:Class\s+)?[A-Za-z0-9\-]+)+",
+    re.IGNORECASE,
+)
+_STEP_RANGE_RE = re.compile(
+    r"\b(?:Steps?|Priorities)\s+(?P<n1>\d+)\s*(?:[-–]|to|through|and)\s*(?P<n2>\d+)\b",
+    re.IGNORECASE,
+)
+_STEP_SINGLE_RE = re.compile(
+    r"\b(?:Step|Priority)\s*(?:#\s*)?(?P<num>\d+)\b",
+    re.IGNORECASE,
+)
+_SENTENCE_STOPWORDS = frozenset({
+    "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "has",
+    "have", "in", "into", "is", "it", "its", "of", "on", "or", "per", "shall", "that",
+    "the", "their", "this", "to", "was", "were", "will", "with", "any", "all",
+})
+
+
+def _mask_preserving_len(match: re.Match[str]) -> str:
+    return "~" * (match.end() - match.start())
+
+
+def _fmt_decimal_compact(val: Decimal) -> str:
+    txt = format(val.normalize(), "f")
+    if "." in txt:
+        txt = txt.rstrip("0").rstrip(".")
+    return txt or "0"
+
+
+def _spans_intersect(a: tuple[int, int], b: tuple[int, int]) -> bool:
+    return int(a[0]) < int(b[1]) and int(b[0]) < int(a[1])
+
+
+def _extract_sentence_quantity_tokens(
+    sentence: str, sentence_start: int = 0
+) -> list[dict[str, Any]]:
+    """Extract normalized quantity, step/priority, and date tokens with document offsets.
+
+    Uses v3's ``extract_quantities`` and ``extract_dates_with_spans`` while masking
+    structural identifiers (section/clause/series/tranche/deal-year references).
+    """
+    if not sentence:
+        return []
+
+    masked = _STRUCTURAL_ID_RE.sub(_mask_preserving_len, sentence)
+    masked = _DEAL_SERIES_YEAR_RE.sub(_mask_preserving_len, masked)
+    masked = _MULTI_TRANCHE_RE.sub(_mask_preserving_len, masked)
+
+    tokens: list[dict[str, Any]] = []
+    occupied: list[tuple[int, int]] = []
+
+    def _overlaps_occupied(s: int, e: int) -> bool:
+        return any(_spans_intersect((s, e), occ) for occ in occupied)
+
+    # 1. Explicit step/priority ranges and numbers ("Step 12", "Steps 8-12", "Priority 8")
+    for m in _STEP_RANGE_RE.finditer(masked):
+        s1, e1 = m.start("n1"), m.end("n1")
+        s2, e2 = m.start("n2"), m.end("n2")
+        if not _overlaps_occupied(m.start(), m.end()):
+            occupied.append((m.start(), m.end()))
+            tokens.append({
+                "token": f"STEP:{int(m.group('n1'))}",
+                "span": (sentence_start + s1, sentence_start + e1),
+                "raw": m.group("n1"),
+            })
+            tokens.append({
+                "token": f"STEP:{int(m.group('n2'))}",
+                "span": (sentence_start + s2, sentence_start + e2),
+                "raw": m.group("n2"),
+            })
+
+    for m in _STEP_SINGLE_RE.finditer(masked):
+        s_num, e_num = m.start("num"), m.end("num")
+        if not _overlaps_occupied(s_num, e_num):
+            occupied.append((m.start(), m.end()))
+            tokens.append({
+                "token": f"STEP:{int(m.group('num'))}",
+                "span": (sentence_start + s_num, sentence_start + e_num),
+                "raw": m.group("num"),
+            })
+
+    # 2. Dates via v3 extract_dates_with_spans
+    for (ds, de), iso in extract_dates_with_spans(masked, allow_slash=True):
+        if _overlaps_occupied(ds, de):
+            continue
+        occupied.append((ds, de))
+        tokens.append({
+            "token": f"DATE:{iso}",
+            "span": (sentence_start + ds, sentence_start + de),
+            "raw": sentence[ds:de],
+        })
+
+    # 3. Quantities via v3 extract_quantities (1-to-1 whitespace length preserved for exact spans)
+    len_safe_sentence = re.sub(r"\s", " ", masked)
+    for pq in extract_quantities(
+        len_safe_sentence,
+        apply_table_scale=False,
+    ):
+        qs, qe = int(pq.span[0]), int(pq.span[1])
+        qs = max(0, min(len(sentence), qs))
+        qe = max(qs, min(len(sentence), qe))
+        # Trim outer wrapper punctuation such as "(" or "," so spans hug the quantity text
+        while qs < qe and sentence[qs] in "([{ \t,;:\"'":
+            qs += 1
+        while qe > qs and sentence[qe - 1] in ")]} \t,;:\"'":
+            qe -= 1
+        if qs >= qe or _overlaps_occupied(qs, qe):
+            continue
+        # Keep typed quantities (amounts, %, bps, durations + counting basis, multiples) and large bare numbers >= 100
+        if pq.unit == "NONE" and abs(pq.magnitude) < Decimal("100"):
+            continue
+        occupied.append((qs, qe))
+        tok_key = f"{_fmt_decimal_compact(pq.magnitude)}:{pq.unit}"
+        tokens.append({
+            "token": tok_key,
+            "span": (sentence_start + qs, sentence_start + qe),
+            "raw": sentence[qs:qe],
+        })
+
+    tokens.sort(key=lambda t: (int(t["span"][0]), int(t["span"][1]), str(t["token"])))
+    return tokens
+
+
+def _norm_sentence_eq(text: str) -> str:
+    cleaned = re.sub(r"\s+", " ", (text or "").strip().lower())
+    return cleaned.rstrip(" .;:")
+
+
+def _sentence_content_words(text: str) -> set[str]:
+    words = {w for w in re.findall(r"[a-z]{2,}", (text or "").lower()) if w not in _SENTENCE_STOPWORDS}
+    return words
+
+
+def _align_sentences(
+    pri_sents: Sequence[tuple[int, int, str]],
+    sec_sents: Sequence[tuple[int, int, str]],
+    *,
+    single_pair_min_shared: int = 2,
+    min_jaccard: float = 0.20,
+) -> tuple[
+    list[tuple[tuple[int, int, str], tuple[int, int, str]]],
+    list[tuple[int, int, str]],
+    list[tuple[int, int, str]],
+]:
+    """Align sentences between two text regions (exact matches cancelled, remainder paired by content similarity)."""
+    used_pri: set[int] = set()
+    used_sec: set[int] = set()
+
+    sec_norms = [_norm_sentence_eq(s[2]) for s in sec_sents]
+    for pi, p in enumerate(pri_sents):
+        pn = _norm_sentence_eq(p[2])
+        if not pn:
+            used_pri.add(pi)
+            continue
+        for si, sn in enumerate(sec_norms):
+            if si not in used_sec and sn == pn:
+                used_pri.add(pi)
+                used_sec.add(si)
+                break
+
+    rem_pri_idx = [
+        i
+        for i, (_, _, t) in enumerate(pri_sents)
+        if i not in used_pri and not _SECTION_HEADER_ONLY_RE.match(t.strip())
+    ]
+    rem_sec_idx = [
+        i
+        for i, (_, _, t) in enumerate(sec_sents)
+        if i not in used_sec and not _SECTION_HEADER_ONLY_RE.match(t.strip())
+    ]
+
+    pri_words = {i: _sentence_content_words(pri_sents[i][2]) for i in rem_pri_idx}
+    sec_words = {j: _sentence_content_words(sec_sents[j][2]) for j in rem_sec_idx}
+
+    candidates: list[tuple[float, int, int, int, int]] = []
+    for pi in rem_pri_idx:
+        pw = pri_words[pi]
+        if not pw:
+            continue
+        for si in rem_sec_idx:
+            sw = sec_words[si]
+            if not sw:
+                continue
+            shared = len(pw & sw)
+            union = len(pw | sw)
+            jacc = shared / union if union else 0.0
+            req_shared = 1 if (len(rem_pri_idx) == 1 and len(rem_sec_idx) == 1) else single_pair_min_shared
+            if shared >= req_shared and (jacc >= min_jaccard or (len(rem_pri_idx) == 1 and len(rem_sec_idx) == 1)):
+                candidates.append((-jacc, -shared, abs(pi - si), pi, si))
+
+    candidates.sort()
+    paired_pri: set[int] = set()
+    paired_sec: set[int] = set()
+    pairs: list[tuple[tuple[int, int, str], tuple[int, int, str]]] = []
+    for _, _, _, pi, si in candidates:
+        if pi in paired_pri or si in paired_sec:
+            continue
+        paired_pri.add(pi)
+        paired_sec.add(si)
+        pairs.append((pri_sents[pi], sec_sents[si]))
+
+    unmatched_pri = [pri_sents[i] for i in rem_pri_idx if i not in paired_pri]
+    unmatched_sec = [sec_sents[j] for j in rem_sec_idx if j not in paired_sec]
+    return pairs, unmatched_pri, unmatched_sec
+
+
+def _unit_covers_doc_span(
+    unit_spans_by_doc: Mapping[str, Sequence[tuple[int, int]]],
+    doc_id: str,
+    target_span: tuple[int, int],
+) -> bool:
+    for u_s, u_e in unit_spans_by_doc.get(doc_id, ()):
+        if _spans_intersect((u_s, u_e), target_span):
+            return True
+    return False
+
+
+def _divergence_gaps_for_item(
+    div: Any,
+    doc_texts: Mapping[str, str],
+    admitted_units: Sequence[Any],
+    unit_spans_by_doc: Mapping[str, Sequence[tuple[int, int]]],
+    reader_obligations: Sequence[VerificationObligation],
+) -> list[dict[str, Any]]:
+    """Compute fine-grained quantity & textual reference-register gaps for a divergence."""
+    pri_id = str(getattr(div, "primary_source_id", "") or "")
+    sec_id = str(getattr(div, "secondary_source_id", "") or "")
+    sec_key = str(getattr(div, "section_key", "") or "")
+    sec_label = str(getattr(div, "section_label", "") or "")
+    pri_span = getattr(div, "primary_span", None)
+    sec_span = getattr(div, "secondary_span", None)
+
+    pri_full = doc_texts.get(pri_id, "")
+    sec_full = doc_texts.get(sec_id, "")
+
+    # Fallback when full source texts were not provided (synthetic minimal unit tests).
+    if not pri_full and not sec_full:
+        if _divergence_covered_by_reader_obligations(div, reader_obligations):
+            return []
+        return [{
+            "kind": "section",
+            "document_id": sec_id or pri_id,
+            "offset": int(sec_span[0]) if sec_span is not None else (int(pri_span[0]) if pri_span is not None else 0),
+            "sentence": sec_label or sec_key,
+            "token": "SECTION_DIVERGENCE",
+            "section_key": sec_key,
+            "section_label": sec_label,
+            "primary_source_id": pri_id,
+            "secondary_source_id": sec_id,
+            "primary_span": list(pri_span) if pri_span is not None else None,
+            "secondary_span": list(sec_span) if sec_span is not None else None,
+            "reason": str(getattr(div, "reason", "") or ""),
+        }]
+
+    pri_base = int(pri_span[0]) if pri_span is not None else 0
+    sec_base = int(sec_span[0]) if sec_span is not None else 0
+    pri_chunk = pri_full[int(pri_span[0]) : int(pri_span[1])] if (pri_full and pri_span is not None) else pri_full
+    sec_chunk = sec_full[int(sec_span[0]) : int(sec_span[1])] if (sec_full and sec_span is not None) else sec_full
+
+    pri_sents = segment_sentences_with_spans(pri_chunk, base_offset=pri_base) if pri_chunk else []
+    sec_sents = segment_sentences_with_spans(sec_chunk, base_offset=sec_base) if sec_chunk else []
+
+    both_bounded = pri_span is not None and sec_span is not None
+    pairs, unmatched_pri, unmatched_sec = _align_sentences(
+        pri_sents,
+        sec_sents,
+        single_pair_min_shared=2 if both_bounded else 2,
+        min_jaccard=0.20 if both_bounded else 0.25,
+    )
+
+    gaps: list[dict[str, Any]] = []
+
+    def _emit_quantity_gap(
+        doc_id: str,
+        q: Mapping[str, Any],
+        sent: tuple[int, int, str],
+        counterpart_id: str,
+        counterpart_sent: tuple[int, int, str] | None,
+    ) -> None:
+        qs, qe = int(q["span"][0]), int(q["span"][1])
+        gaps.append({
+            "kind": "quantity",
+            "document_id": doc_id,
+            "offset": qs,
+            "span": [qs, qe],
+            "token": str(q["token"]),
+            "raw_token": str(q.get("raw", "")),
+            "sentence": sent[2],
+            "sentence_span": [int(sent[0]), int(sent[1])],
+            "counterpart_document_id": counterpart_id,
+            "counterpart_sentence": counterpart_sent[2] if counterpart_sent is not None else None,
+            "section_key": sec_key,
+            "section_label": sec_label,
+            "primary_source_id": pri_id,
+            "secondary_source_id": sec_id,
+        })
+
+    # 1. Aligned differing sentence pairs
+    for p_sent, s_sent in pairs:
+        p_norm = _norm_sentence_eq(p_sent[2])
+        s_norm = _norm_sentence_eq(s_sent[2])
+        if p_norm == s_norm:
+            continue
+        p_quants = _extract_sentence_quantity_tokens(p_sent[2], p_sent[0])
+        s_quants = _extract_sentence_quantity_tokens(s_sent[2], s_sent[0])
+        p_keys = {q["token"] for q in p_quants}
+        s_keys = {q["token"] for q in s_quants}
+        p_diff = [q for q in p_quants if q["token"] not in s_keys]
+        s_diff = [q for q in s_quants if q["token"] not in p_keys]
+
+        if p_diff or s_diff:
+            for q in p_diff:
+                q_span = (int(q["span"][0]), int(q["span"][1]))
+                if not _unit_covers_doc_span(unit_spans_by_doc, pri_id, q_span):
+                    _emit_quantity_gap(pri_id, q, p_sent, sec_id, s_sent)
+            for q in s_diff:
+                q_span = (int(q["span"][0]), int(q["span"][1]))
+                if not _unit_covers_doc_span(unit_spans_by_doc, sec_id, q_span):
+                    _emit_quantity_gap(sec_id, q, s_sent, pri_id, p_sent)
+        else:
+            # 1(e): Differing aligned sentence pair with no distinct quantities
+            p_span = (int(p_sent[0]), int(p_sent[1]))
+            s_span = (int(s_sent[0]), int(s_sent[1]))
+            # Covered if one admitted unit spans both sentences OR admitted units exist overlapping each side
+            single_unit_both = any(
+                _obligation_overlaps_doc_span_raw(u, pri_id, p_span)
+                and _obligation_overlaps_doc_span_raw(u, sec_id, s_span)
+                for u in admitted_units
+            )
+            both_sides_covered = single_unit_both or (
+                _unit_covers_doc_span(unit_spans_by_doc, pri_id, p_span)
+                and _unit_covers_doc_span(unit_spans_by_doc, sec_id, s_span)
+            )
+            if not both_sides_covered:
+                uncovered_doc = sec_id if not _unit_covers_doc_span(unit_spans_by_doc, sec_id, s_span) else pri_id
+                uncovered_sent = s_sent if uncovered_doc == sec_id else p_sent
+                other_doc = pri_id if uncovered_doc == sec_id else sec_id
+                other_sent = p_sent if uncovered_doc == sec_id else s_sent
+                gaps.append({
+                    "kind": "textual",
+                    "document_id": uncovered_doc,
+                    "offset": int(uncovered_sent[0]),
+                    "span": [int(uncovered_sent[0]), int(uncovered_sent[1])],
+                    "token": "TEXTUAL_DIFF",
+                    "sentence": uncovered_sent[2],
+                    "sentence_span": [int(uncovered_sent[0]), int(uncovered_sent[1])],
+                    "counterpart_document_id": other_doc,
+                    "counterpart_offset": int(other_sent[0]),
+                    "counterpart_sentence": other_sent[2],
+                    "section_key": sec_key,
+                    "section_label": sec_label,
+                    "primary_source_id": pri_id,
+                    "secondary_source_id": sec_id,
+                })
+
+    # 2. Unmatched sentences with quantities (in explicit bounded sections, or on the bounded divergent side)
+    if pri_span is not None:
+        for p_sent in unmatched_pri:
+            for q in _extract_sentence_quantity_tokens(p_sent[2], p_sent[0]):
+                q_span = (int(q["span"][0]), int(q["span"][1]))
+                if not _unit_covers_doc_span(unit_spans_by_doc, pri_id, q_span):
+                    _emit_quantity_gap(pri_id, q, p_sent, sec_id, None)
+    if sec_span is not None:
+        for s_sent in unmatched_sec:
+            for q in _extract_sentence_quantity_tokens(s_sent[2], s_sent[0]):
+                q_span = (int(q["span"][0]), int(q["span"][1]))
+                if not _unit_covers_doc_span(unit_spans_by_doc, sec_id, q_span):
+                    _emit_quantity_gap(sec_id, q, s_sent, pri_id, None)
+
+    return gaps
+
+
+def _obligation_overlaps_doc_span_raw(unit: Any, doc_id: str, span: tuple[int, int]) -> bool:
+    for ref in getattr(unit, "evidence", ()) or ():
+        if str(getattr(ref, "document_id", "") or "") != doc_id:
+            continue
+        r_start = getattr(ref, "start", None)
+        r_end = getattr(ref, "end", None)
+        if r_start is not None and r_end is not None:
+            if _spans_overlap(doc_id, (int(r_start), int(r_end)), doc_id, span):
+                return True
     return False
 
 
@@ -663,9 +1059,34 @@ def build_corpus_reference_register(
                         )
                     )
 
-    # Cross-check reader-derived obligations against deterministic v3 section divergences
+    # Collect document full texts from divergence_collection, evidence layer, and expected_documents
+    doc_texts: dict[str, str] = {}
+    if divergence_collection is not None and divergence_collection.document_texts:
+        doc_texts.update({str(k): str(v) for k, v in divergence_collection.document_texts.items() if v})
+    for sdoc in getattr(evidence, "documents", ()) or ():
+        did = str(getattr(sdoc, "document_id", "") or "")
+        txt = str(getattr(sdoc, "text", "") or "")
+        if did and txt and did not in doc_texts:
+            doc_texts[did] = txt
+    if isinstance(expected_documents, Mapping):
+        for did, sdoc in expected_documents.items():
+            txt = str(getattr(sdoc, "text", "") or "")
+            if str(did) and txt and str(did) not in doc_texts:
+                doc_texts[str(did)] = txt
+
+    unit_spans_by_doc: dict[str, list[tuple[int, int]]] = {}
+    for u in admitted:
+        for ref in getattr(u, "evidence", ()) or ():
+            r_doc = str(getattr(ref, "document_id", "") or "")
+            r_s = getattr(ref, "start", None)
+            r_e = getattr(ref, "end", None)
+            if r_doc and r_s is not None and r_e is not None:
+                unit_spans_by_doc.setdefault(r_doc, []).append((int(r_s), int(r_e)))
+
+    # Cross-check reader-derived obligations against sentence/quantity divergences
     reader_obligations = list(obligations)
     gap_divergences: list[dict[str, Any]] = []
+    seen_gap_keys: set[tuple[Any, ...]] = set()
     sec_div_records: list[dict[str, Any]] = []
     for div in eff_divergences or ():
         pri_id = str(getattr(div, "primary_source_id", "") or "")
@@ -688,8 +1109,22 @@ def build_corpus_reference_register(
             "reason": str(getattr(div, "reason", "") or ""),
         }
         sec_div_records.append(div_rec)
-        if not _divergence_covered_by_reader_obligations(div, reader_obligations):
-            gap_divergences.append(div_rec)
+        for gap_item in _divergence_gaps_for_item(
+            div,
+            doc_texts,
+            admitted,
+            unit_spans_by_doc,
+            reader_obligations,
+        ):
+            gkey = (
+                str(gap_item.get("kind", "")),
+                str(gap_item.get("document_id", "")),
+                int(gap_item.get("offset", 0)),
+                str(gap_item.get("token", "")),
+            )
+            if gkey not in seen_gap_keys:
+                seen_gap_keys.add(gkey)
+                gap_divergences.append(gap_item)
 
         # Register every v3 section divergence as an origin='corpus' obligation (family='section_divergence')
         div_ob_id = f"corpus::section_divergence::{sec_key}::{digest([pri_id, sec_id, sec_key])[:12]}"
@@ -1209,20 +1644,31 @@ def verify_corpus_obligations_coverage(
 
     for gap in register.gap_divergences:
         sec_key = str(gap.get("section_key", "unknown"))
+        gap_doc = str(gap.get("document_id") or gap.get("secondary_source_id") or gap.get("primary_source_id") or "")
+        gap_offset = gap.get("offset")
+        gap_token = str(gap.get("token") or "")
+        gap_sent = str(gap.get("sentence") or "")
+        gap_kind = str(gap.get("kind") or "quantity")
+        gap_uid = digest([sec_key, gap_kind, gap_doc, gap_offset, gap_token, gap_sent])[:12]
         issues.append({
             "code": "REFERENCE_REGISTER_GAP",
             "source_layer": "v4",
             "repairable": False,
-            "obligation_id": f"corpus::gap::{sec_key}",
+            "kind": gap_kind,
+            "obligation_id": f"corpus::gap::{gap_uid}",
+            "document_id": gap_doc,
+            "offset": gap_offset,
+            "token": gap_token,
+            "sentence": gap_sent,
             "section_key": sec_key,
             "section_label": str(gap.get("section_label", sec_key)),
             "gap_divergence": dict(gap),
             "message": (
-                f"Cross-check detected divergent section '{gap.get('section_label', sec_key)}' "
-                f"between '{gap.get('primary_source_id')}' and '{gap.get('secondary_source_id')}' "
-                "with no associated reader obligation in the reference register."
+                f"Cross-check detected uncovered {gap_kind} divergence token '{gap_token}' "
+                f"in '{gap_doc}'@{gap_offset} ({gap_sent[:120]!r}) between "
+                f"'{gap.get('primary_source_id')}' and '{gap.get('secondary_source_id')}'."
             ),
-            "remediation": "Re-extract corpus obligations for all divergent sections before acceptance.",
+            "remediation": "Re-extract corpus obligations covering all divergent quantities and clauses before acceptance.",
         })
 
     # Collect explicit rejections (even if they name '*' or any corpus obligation)

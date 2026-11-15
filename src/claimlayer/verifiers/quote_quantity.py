@@ -1043,6 +1043,50 @@ def _enclosing_sentence_bounds(norm_source: str, quote_start: int, quote_end: in
     return sent_start, sent_end
 
 
+def segment_sentences_with_spans(text: str, base_offset: int = 0) -> list[tuple[int, int, str]]:
+    """Split *text* into trimmed ``(abs_start, abs_end, sentence)`` tuples preserving offsets.
+
+    Uses ``_is_sentence_boundary_dot`` so decimals (e.g. ``5.80%``), section numbers
+    (``Section 4.01``), and legal abbreviations (``Sec.``, ``Art.``, ``No.``) are never
+    treated as sentence boundaries. Also avoids splitting inside dotted filenames/emails
+    when the dot is immediately followed by a letter (e.g. ``.docx``, ``example.com``).
+    """
+    if not text:
+        return []
+    n = len(text)
+    raw_bounds: list[tuple[int, int]] = []
+    seg_start = 0
+    for i, ch in enumerate(text):
+        is_break = False
+        if ch in "\n;!?":
+            is_break = True
+        elif ch == ".":
+            next_ch = text[i + 1] if i + 1 < n else ""
+            prev_ch = text[i - 1] if i > 0 else ""
+            if (
+                prev_ch != "."
+                and not (next_ch and next_ch.isalpha())
+                and _is_sentence_boundary_dot(text, i)
+            ):
+                is_break = True
+        if is_break:
+            raw_bounds.append((seg_start, i + 1))
+            seg_start = i + 1
+    if seg_start < n:
+        raw_bounds.append((seg_start, n))
+
+    sentences: list[tuple[int, int, str]] = []
+    for raw_s, raw_e in raw_bounds:
+        chunk = text[raw_s:raw_e]
+        ltrim = len(chunk) - len(chunk.lstrip())
+        rtrim = len(chunk) - len(chunk.rstrip())
+        s = raw_s + ltrim
+        e = raw_e - rtrim
+        if s < e:
+            sentences.append((base_offset + s, base_offset + e, text[s:e]))
+    return sentences
+
+
 def _has_truncated_sentence_qualifier(norm_source: str, norm_quote: str) -> str | None:
     """Return the truncated prefix or suffix if *norm_quote* drops a negation or exception from its sentence."""
     idx = norm_source.lower().find(norm_quote.lower())

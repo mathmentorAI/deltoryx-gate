@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "description": "Independent human-annotated corpus conflicts across example and heldout evaluation corpora (not derived from verifier code).",
+  "description": "model-authored, pending human review (not independent human ground truth)",
   "corpora": {
     "cart_2024_2_synthetic_replay": {
       "domain": "securitization",
@@ -14,7 +14,9 @@
           "primary_quote": "Class C Notes ($50,000,000 principal) bear interest at 6.75% per annum.",
           "secondary_quote": "Class C Notes ($50,000,000 principal) 6.50% per annum",
           "primary_value": "6.75% per annum",
-          "secondary_value": "6.50% per annum"
+          "secondary_value": "6.50% per annum",
+          "annotator": "llm_draft_pending_human_review",
+          "annotated_at": "2026-11-15T00:00:00Z"
         },
         {
           "conflict_id": "cart_waterfall_reserve_priority",
@@ -23,7 +25,9 @@
           "primary_quote": "Step 13 Reserve Account Replenishment (junior to Class B and Class C principal)",
           "secondary_quote": "Step 6/10 Reserve Account Replenishment (placed senior/ahead of Class B and Class C principal)",
           "primary_value": "Step 13 (junior to Class B and Class C principal)",
-          "secondary_value": "Step 6/10 (senior/ahead of Class B and Class C principal)"
+          "secondary_value": "Step 6/10 (senior/ahead of Class B and Class C principal)",
+          "annotator": "llm_draft_pending_human_review",
+          "annotated_at": "2026-11-15T00:00:00Z"
         },
         {
           "conflict_id": "cart_events_of_default_cure_period",
@@ -32,7 +36,9 @@
           "primary_quote": "Failure to pay interest continuing for 5 business days constitutes an Event of Default.",
           "secondary_quote": "5 calendar days (or 3 business days) cure period variant.",
           "primary_value": "5 business days",
-          "secondary_value": "5 calendar days / 3 business days"
+          "secondary_value": "5 calendar days / 3 business days",
+          "annotator": "llm_draft_pending_human_review",
+          "annotated_at": "2026-11-15T00:00:00Z"
         },
         {
           "conflict_id": "cart_optional_redemption_threshold",
@@ -41,7 +47,9 @@
           "primary_quote": "Servicer may redeem Notes when Pool Balance falls to 10% of Initial Pool Balance.",
           "secondary_quote": "Servicer may redeem Notes when Pool Balance falls to 15% of Initial Pool Balance.",
           "primary_value": "10% of Initial Pool Balance",
-          "secondary_value": "15% of Initial Pool Balance"
+          "secondary_value": "15% of Initial Pool Balance",
+          "annotator": "llm_draft_pending_human_review",
+          "annotated_at": "2026-11-15T00:00:00Z"
         }
       ]
     },
@@ -57,7 +65,9 @@
           "primary_quote": "Class B Notes ($40,000,000 initial principal) bear interest at 5.80% per annum.",
           "secondary_quote": "Class B Notes bear interest at 5.55% per annum.",
           "primary_value": "5.80% per annum",
-          "secondary_value": "5.55% per annum"
+          "secondary_value": "5.55% per annum",
+          "annotator": "llm_draft_pending_human_review",
+          "annotated_at": "2026-11-15T00:00:00Z"
         },
         {
           "conflict_id": "meridian_reserve_waterfall_step",
@@ -66,7 +76,9 @@
           "primary_quote": "Step 11 Class B principal; Step 12 Reserve Account replenishment.",
           "secondary_quote": "Reserve Account replenishment occurs at Step 8 ahead of Class B principal.",
           "primary_value": "Step 12 (after Class B principal)",
-          "secondary_value": "Step 8 (ahead of Class B principal)"
+          "secondary_value": "Step 8 (ahead of Class B principal)",
+          "annotator": "llm_draft_pending_human_review",
+          "annotated_at": "2026-11-15T00:00:00Z"
         }
       ]
     },
@@ -82,7 +94,9 @@
           "primary_quote": "Applicable Margin of 4.25% per annum.",
           "secondary_quote": "Lender proposes Applicable Margin of 4.90% per annum",
           "primary_value": "4.25% per annum",
-          "secondary_value": "4.90% per annum"
+          "secondary_value": "4.90% per annum",
+          "annotator": "llm_draft_pending_human_review",
+          "annotated_at": "2026-11-15T00:00:00Z"
         },
         {
           "conflict_id": "apex_net_leverage_covenant",
@@ -93,7 +107,9 @@
           "primary_quote": "target Maximum Net Leverage is 4.25x.",
           "secondary_quote": "Maximum Net Leverage of 3.75x.",
           "primary_value": "4.25x (playbook target)",
-          "secondary_value": "3.75x (lender markup)"
+          "secondary_value": "3.75x (lender markup)",
+          "annotator": "llm_draft_pending_human_review",
+          "annotated_at": "2026-11-15T00:00:00Z"
         }
       ]
     },
@@ -109,7 +125,9 @@
           "primary_quote": "Applicable Margin of 4.50% per annum.",
           "secondary_quote": "Lender proposes Applicable Margin of 5.25% per annum",
           "primary_value": "4.50% per annum",
-          "secondary_value": "5.25% per annum"
+          "secondary_value": "5.25% per annum",
+          "annotator": "llm_draft_pending_human_review",
+          "annotated_at": "2026-11-15T00:00:00Z"
         },
         {
           "conflict_id": "ridgeline_net_leverage_covenant",
@@ -121,7 +139,9 @@
           "secondary_quote": "Maximum Net Leverage of 4.0x.",
           "primary_quote_old_note": "",
           "primary_value": "4.5x (playbook target)",
-          "secondary_value": "4.0x (lender markup)"
+          "secondary_value": "4.0x (lender markup)",
+          "annotator": "llm_draft_pending_human_review",
+          "annotated_at": "2026-11-15T00:00:00Z"
         }
       ]
     }

@@ -1017,3 +1017,402 @@ def test_ac11_bounded_opinion_and_vocabulary_register_status():
     reg_claim = (ass_ok.corpus_coverage or {}).get("register_status_claim") or {}
     assert reg_claim.get("kind") == "register_status"
     assert reg_claim.get("value") == "conflicts_or_overrides_present"
+
+
+def _make_recorded_reader_for_docs(
+    docs_map: dict[str, list[dict[str, Any]]],
+    sources_map: dict[str, SourceDocument],
+) -> Any:
+    from claimlayer.v4 import RecordedProposalReader
+    from claimlayer.v4.reader import _build_document_fragments
+
+    bound_docs: dict[str, dict[str, Any]] = {}
+    for did, props in docs_map.items():
+        sdoc = sources_map[did]
+        frags = _build_document_fragments({"document_id": did, "revision": sdoc.revision, "text": sdoc.text}, 1800)
+        ev_id = frags[0][0]
+        raw_props = []
+        for p in props:
+            row = dict(p)
+            row.setdefault("evidence", [ev_id])
+            raw_props.append(row)
+        bound_docs[did] = {"revision": sdoc.revision, "raw_proposals": raw_props, "calls": [], "errors": []}
+
+    return RecordedProposalReader(
+        model_name="synthetic-test-reader",
+        prompt_version="v4-proposals-3",
+        prompt_digest="test-digest",
+        recorded_at="2026-11-15T00:00:00Z",
+        documents=bound_docs,
+        fragment_chars=1800,
+        structural_reliability=0.95,
+    )
+
+
+@dataclass(frozen=True)
+class _DivDoc:
+    document_id: str
+    filename: str
+    role: str
+    authority_rank: int
+    text: str
+
+
+def test_ac1_headerless_multi_conflict_one_missed_never_masked():
+    """AC1: Two conflicts in headerless documents; missing the second emits REFERENCE_REGISTER_GAP + ESCALATE."""
+    from claimlayer.v4 import PolicyConfiguration, collect_reference_divergences
+    from claimlayer.v4.vocabulary import STANDARD_UNITS
+
+    rate_dim = STANDARD_UNITS.dimension_of("percent_per_annum")
+    vocab = Vocabulary(
+        name="ac1_vocab",
+        version="1.0",
+        predicates=(
+            PredicateSpec("fee_rate", value=FieldSpec("quantity", dimensions=(rate_dim,)), required=True),
+            PredicateSpec(
+                "waterfall_priority",
+                value=FieldSpec("enum", enum=("senior", "junior")),
+                required=True,
+            ),
+        ),
+    )
+    gov_id = "executed-credit-contract.docx"
+    draft_id = "summary-term-draft.docx"
+    gov_text = (
+        "Commitment fee accrues at 1.75% per annum from closing.\n"
+        "Tax reserve funding sits at Step 11 after Class B principal.\n"
+    )
+    draft_text = (
+        "Commitment fee accrues at 1.25% per annum from closing.\n"
+        "Tax reserve funding sits at Step 6 ahead of Class B principal.\n"
+    )
+    sources = {
+        gov_id: SourceDocument(gov_id, gov_text, authority_rank=100),
+        draft_id: SourceDocument(draft_id, draft_text, authority_rank=40),
+    }
+    reader = _make_recorded_reader_for_docs(
+        {
+            gov_id: [
+                {
+                    "entity": "Commitment Fee",
+                    "predicate": "fee_rate",
+                    "value": {"value": 1.75, "unit": "percent_per_annum"},
+                    "assertion_kind": "definition",
+                    "condition_status": "unconditional",
+                    "basis": "explicit",
+                    "polarity": "affirmed",
+                    "quote": "Commitment fee accrues at 1.75% per annum from closing.",
+                }
+            ],
+            draft_id: [
+                {
+                    "entity": "Commitment Fee",
+                    "predicate": "fee_rate",
+                    "value": {"value": 1.25, "unit": "percent_per_annum"},
+                    "assertion_kind": "fact",
+                    "condition_status": "unconditional",
+                    "basis": "explicit",
+                    "polarity": "affirmed",
+                    "quote": "Commitment fee accrues at 1.25% per annum from closing.",
+                }
+            ],
+        },
+        sources,
+    )
+    pol = PolicyConfiguration(authority_ranks={gov_id: 100, draft_id: 40})
+    prof = DomainProfile(profile_id="ac1_prof", vocabulary=vocab, policy=pol)
+    layer = EvidenceLayer(vocabulary=vocab, policy=pol, reader=reader)
+    layer.ingest(list(sources.values()))
+    div_coll = collect_reference_divergences(
+        {
+            gov_id: _DivDoc(document_id=gov_id, filename=gov_id, role="governing", authority_rank=100, text=gov_text),
+            draft_id: _DivDoc(document_id=draft_id, filename=draft_id, role="draft", authority_rank=40, text=draft_text),
+        },
+        prof,
+    )
+    reg = build_corpus_reference_register(
+        layer,
+        vocab,
+        divergence_collection=div_coll,
+        expected_documents=sources,
+    )
+    step_gaps = [g for g in reg.gap_divergences if "STEP:" in str(g.get("token"))]
+    assert step_gaps, f"Expected omitted Step 11/6 gap, got {reg.gap_divergences}"
+    assert any(
+        g["document_id"] == draft_id
+        and g["offset"] == draft_text.index("Step 6") + len("Step ")
+        and g["token"] == "STEP:6"
+        for g in step_gaps
+    )
+
+    u_gov = [u for u in layer.units if u.evidence[0].document_id == gov_id][0]
+    u_draft = [u for u in layer.units if u.evidence[0].document_id == draft_id][0]
+    graph = JustificationGraph(
+        claims={
+            "c_gov": ClaimNode(
+                "c_gov",
+                "extraction",
+                "Commitment Fee",
+                "fee_rate",
+                1.75,
+                "percent_per_annum",
+                evidence=u_gov.evidence,
+                evidence_unit_ids=(u_gov.unit_id,),
+            ),
+            "c_draft": ClaimNode(
+                "c_draft",
+                "extraction",
+                "Commitment Fee",
+                "fee_rate",
+                1.25,
+                "percent_per_annum",
+                evidence=u_draft.evidence,
+                evidence_unit_ids=(u_draft.unit_id,),
+            ),
+        },
+        steps=(),
+        conclusion_id="c_gov",
+    )
+    prose = (
+        f"According to {gov_id}, Commitment Fee is 1.75% per annum, whereas {draft_id} states 1.25% per annum; "
+        f"{gov_id} governs."
+    )
+    rev = review_response(
+        question="Compare commitment fee and waterfall",
+        candidate_response=prose,
+        evidence=layer,
+        graph_or_adapter=graph,
+        domain_profile=prof,
+        corpus_register=reg,
+        require_reference_register=True,
+    )
+    assert rev.disposition == "ESCALATE"
+    assert "REFERENCE_REGISTER_GAP" in {i.code for i in rev.issues}
+
+
+def test_ac2_meridian_candidate_fails_closed_with_reference_register_gap():
+    """AC2: Meridian clean candidate omitting Step 8 waterfall conflict must receive ESCALATE + REFERENCE_REGISTER_GAP."""
+    import heldout_multidomain_eval as hme
+
+    scenarios = {sc["scenario_id"]: sc for sc in hme._build_heldout_scenarios()}
+    clean_sc = scenarios["sec_meridian_clean"]
+    assert clean_sc["kind"] == "seeded_defect"
+    res = hme.evaluate_domain_candidate(clean_sc["initial"], clean_sc["corpus"], gate_mode="v3_v4")
+    assert res.accepted is False
+    assert res.report_disposition == "ESCALATE"
+    assert "REFERENCE_REGISTER_GAP" in {i.get("code") for i in res.issues}
+
+
+def test_ac3_single_section_amount_and_step_ignores_structural_ids():
+    """AC3: Section containing amount conflict + step conflict catches missing step while ignoring structural IDs."""
+    from claimlayer.v4 import PolicyConfiguration, collect_reference_divergences
+    from claimlayer.v4.vocabulary import STANDARD_UNITS
+
+    money_dim = STANDARD_UNITS.dimension_of("USD")
+    vocab = Vocabulary(
+        name="ac3_vocab",
+        version="1.0",
+        predicates=(
+            PredicateSpec("tranche_cap", value=FieldSpec("quantity", dimensions=(money_dim,)), required=True),
+        ),
+    )
+    gov_id = "master-2025-1.docx"
+    draft_id = "draft-2025-1.docx"
+    gov_text = (
+        "ARTICLE 4 RESERVES\n"
+        "Section 4.02 Class A-1 Series 2025-1 tranche cap is $15,000,000 paid at Step 14.\n"
+    )
+    draft_text = (
+        "ARTICLE 4 RESERVES\n"
+        "Section 4.02 Class A-1 Series 2025-1 tranche cap is $12,000,000 paid at Step 7.\n"
+    )
+    sources = {
+        gov_id: SourceDocument(gov_id, gov_text, authority_rank=100),
+        draft_id: SourceDocument(draft_id, draft_text, authority_rank=40),
+    }
+    reader = _make_recorded_reader_for_docs(
+        {
+            gov_id: [
+                {
+                    "entity": "Class A-1",
+                    "predicate": "tranche_cap",
+                    "value": {"value": 15000000, "unit": "USD"},
+                    "assertion_kind": "definition",
+                    "condition_status": "unconditional",
+                    "basis": "explicit",
+                    "polarity": "affirmed",
+                    "quote": "tranche cap is $15,000,000",
+                }
+            ],
+            draft_id: [
+                {
+                    "entity": "Class A-1",
+                    "predicate": "tranche_cap",
+                    "value": {"value": 12000000, "unit": "USD"},
+                    "assertion_kind": "fact",
+                    "condition_status": "unconditional",
+                    "basis": "explicit",
+                    "polarity": "affirmed",
+                    "quote": "tranche cap is $12,000,000",
+                }
+            ],
+        },
+        sources,
+    )
+    pol = PolicyConfiguration(authority_ranks={gov_id: 100, draft_id: 40})
+    prof = DomainProfile(profile_id="ac3_prof", vocabulary=vocab, policy=pol)
+    layer = EvidenceLayer(vocabulary=vocab, policy=pol, reader=reader)
+    layer.ingest(list(sources.values()))
+    div_coll = collect_reference_divergences(
+        {
+            gov_id: _DivDoc(document_id=gov_id, filename=gov_id, role="governing", authority_rank=100, text=gov_text),
+            draft_id: _DivDoc(document_id=draft_id, filename=draft_id, role="draft", authority_rank=40, text=draft_text),
+        },
+        prof,
+    )
+    reg = build_corpus_reference_register(layer, vocab, divergence_collection=div_coll, expected_documents=sources)
+    tokens = {g["token"] for g in reg.gap_divergences}
+    assert "STEP:14" in tokens and "STEP:7" in tokens
+    # Structural identifiers (4, 4.02, A-1, 2025-1) must not appear as divergent quantity gaps
+    assert not any(any(s in tok for s in ("4.02", "2025", "NUMBER:4")) for tok in tokens)
+
+
+def test_ac4_measure_reader_recall_ablation_and_wilson_ci():
+    """AC4: measure_reader_recall runs 10-conflict ablation, computes textual/quantity false gaps, and publishes Wilson CIs."""
+    from pathlib import Path
+    import measure_reader_recall as mrr
+
+    ci = mrr.wilson_ci(9, 10)
+    assert ci["k"] == 9 and ci["n"] == 10
+    assert 0.59 < ci["ci_95_low"] < 0.61
+    assert 0.98 <= ci["ci_95_high"] <= 0.99
+
+    ann_path = Path(__file__).resolve().parents[1] / "benchmarks" / "conflict_annotations.json"
+    rep = mrr.measure_recall(annotations_path=ann_path, mode="recorded")
+    summary = rep["summary"]
+    assert summary["reader_conflict_recall_wilson_95"]["k"] == 9
+    assert summary["reader_conflict_recall_wilson_95"]["n"] == 10
+    assert summary["ablation"]["conflicts_removed"] == 10
+    assert summary["ablation"]["gaps_detected"] == 10
+    assert summary["ablation"]["detection_rate_wilson_95"]["rate"] == 1.0
+    assert summary["textual_gaps_across_all_corpora_wilson_95"]["k"] == 0
+    assert summary["textual_gaps_across_all_corpora_wilson_95"]["n"] > 0
+
+
+def test_ac5_textual_only_diff_without_quantities_emits_textual_gap():
+    """AC5: Divergent aligned sentences lacking quantities and reader spans emit kind='textual' gap."""
+    from claimlayer.v4 import PolicyConfiguration, collect_reference_divergences
+    from claimlayer.v4.corpus_obligations import _divergence_gaps_for_item
+
+    vocab = Vocabulary(
+        name="ac5_vocab",
+        version="1.0",
+        predicates=(
+            PredicateSpec(
+                "recourse_scope",
+                value=FieldSpec("enum", enum=("uncapped_fraud", "excluded")),
+                required=True,
+            ),
+        ),
+    )
+    gov_id = "master-guarantee.docx"
+    draft_id = "draft-guarantee.docx"
+    gov_text = "Section 9.01 Guarantor liability is uncapped for intentional fraud."
+    draft_text = "Section 9.01 Guarantor liability is excluded for all claims whatsoever."
+    pol = PolicyConfiguration(authority_ranks={gov_id: 100, draft_id: 40})
+    prof = DomainProfile(profile_id="ac5_prof", vocabulary=vocab, policy=pol)
+    div_coll = collect_reference_divergences(
+        {
+            gov_id: _DivDoc(document_id=gov_id, filename=gov_id, role="governing", authority_rank=100, text=gov_text),
+            draft_id: _DivDoc(document_id=draft_id, filename=draft_id, role="draft", authority_rank=40, text=draft_text),
+        },
+        prof,
+    )
+    assert div_coll.divergences
+    gaps = _divergence_gaps_for_item(
+        div_coll.divergences[0],
+        doc_texts={gov_id: gov_text, draft_id: draft_text},
+        admitted_units=(),
+        unit_spans_by_doc={},
+        reader_obligations=(),
+    )
+    assert any(g.get("kind") == "textual" for g in gaps)
+    # Identical sentences produce zero textual gaps
+    clean_gaps = _divergence_gaps_for_item(
+        div_coll.divergences[0],
+        doc_texts={gov_id: gov_text, draft_id: gov_text},
+        admitted_units=(),
+        unit_spans_by_doc={},
+        reader_obligations=(),
+    )
+    assert clean_gaps == []
+
+
+def test_ac6_shared_divergence_collection_and_exclusion_provenance():
+    """AC6: Production & measurement share collect_reference_divergences and propagate excluded_comparison_roles receipts."""
+    import heldout_multidomain_eval as hme
+    import measure_reader_recall as mrr
+    from claimlayer.v4 import PolicyConfiguration, collect_reference_divergences
+    from claimlayer.v4.domains import BANKING_FINANCE_DOMAIN_PROFILE
+
+    alt_pol = PolicyConfiguration(
+        tau=BANKING_FINANCE_DOMAIN_PROFILE.policy.tau,
+        delta=BANKING_FINANCE_DOMAIN_PROFILE.policy.delta,
+        excluded_comparison_roles={"quantitative_financial_model": "alt_reason"},
+    )
+    alt_prof = DomainProfile(
+        profile_id=BANKING_FINANCE_DOMAIN_PROFILE.profile_id,
+        vocabulary=BANKING_FINANCE_DOMAIN_PROFILE.vocabulary,
+        policy=alt_pol,
+    )
+    assert alt_prof.fingerprint() != BANKING_FINANCE_DOMAIN_PROFILE.fingerprint()
+
+    apex = hme._build_apex_banking_corpus()
+    prod_coll = collect_reference_divergences(apex.documents, BANKING_FINANCE_DOMAIN_PROFILE)
+    eval_coll = mrr._collect_reference_divergence_collection(apex, domain_profile=BANKING_FINANCE_DOMAIN_PROFILE)
+    assert prod_coll.divergences == eval_coll.divergences
+    expected_excluded = {"apex-financial-summary.xlsx", "apex-partner-scope.eml"}
+    assert {e["document_id"] for e in prod_coll.excluded_documents} == expected_excluded
+
+    scenarios = {sc["scenario_id"]: sc for sc in hme._build_heldout_scenarios()}
+    clean_sc = scenarios["bank_apex_clean"]
+    res = hme.evaluate_domain_candidate(clean_sc["initial"], clean_sc["corpus"], gate_mode="v3_v4")
+    receipt_excl = res.signed_receipt.get("excluded_documents") or []
+    assert {e["document_id"] for e in receipt_excl} == expected_excluded
+    assert res.signed_receipt.get("domain_profile_fingerprint") is not None
+
+
+def test_ac7_conflict_annotations_provenance_honest():
+    """AC7: conflict_annotations.json marks model-authored provenance and timestamp/annotator per conflict."""
+    import json
+    from pathlib import Path
+
+    ann_path = Path(__file__).resolve().parents[1] / "benchmarks" / "conflict_annotations.json"
+    data = json.loads(ann_path.read_text(encoding="utf-8"))
+    desc = str(data.get("description") or "").lower()
+    assert "model-authored" in desc and "pending human review" in desc
+    assert not desc.startswith("independent human")
+    conflicts = [c for grp in (data.get("corpora") or {}).values() for c in (grp.get("conflicts") or ())]
+    assert len(conflicts) == 10
+    assert all(c.get("annotator") and c.get("annotated_at") for c in conflicts)
+
+
+def test_ac8_portable_relative_manifest_and_benchmark_paths():
+    """AC8: Manifest, gate script, and heldout suite use portable relative paths without /Users/ literals."""
+    from pathlib import Path
+    from examples.harness2_securitization.harness2_v4_pipeline import load_case_documents
+
+    root = Path(__file__).resolve().parents[1]
+    for rel in (
+        "benchmarks/heldout_multidomain_eval.py",
+        "benchmarks/reader_recall_baseline.json",
+        "examples/harness2_securitization/document_manifest.json",
+        "examples/harness2_securitization/harness_surface/scripts/claimlayer_gate.py",
+    ):
+        txt = (root / rel).read_text(encoding="utf-8")
+        assert "/Users/" not in txt, f"Found hardcoded /Users/ path in {rel}"
+
+    for cid in ("cart_2024_2", "banking_finance_ridgeline"):
+        loaded = load_case_documents(cid)
+        assert loaded.documents
+

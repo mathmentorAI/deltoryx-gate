@@ -414,7 +414,7 @@ _TRAILING_EXCEPTION_RE = re.compile(
 
 _SECTION_HEADER_ONLY_RE = re.compile(
     r"^\s*(?:section|sec\.?|article|art\.?|clause|cl[áa]usula|art[íi]culo|part|item|schedule|exhibit|annex)\s+"
-    r"[a-z0-9.\-]+(?:\s*[:.\-—]\s*[a-z0-9\s,&()\-]{1,60})?\.?\s*$",
+    r"[a-z0-9\-]+(?:\.[a-z0-9\-]+)*(?:\([a-z0-9]+\))*(?:\s*(?::|—|\.\s+|\s+[-–]\s+)\s*[a-z0-9\s,&()\-]{1,60})?\.?\s*$",
     re.IGNORECASE,
 )
 

@@ -1,41 +1,361 @@
 {
-  "mode": "live",
-  "measured_at": "2026-11-15T14:40:13.245601+00:00",
+  "mode": "recorded",
+  "measured_at": "2026-11-15T16:07:04.455950+00:00",
   "reader": {
-    "provider": "openai-compatible",
+    "provider": "recorded_model",
     "model": "nvidia/nemotron-3-ultra-550b-a55b",
-    "endpoint": "https://integrate.api.nvidia.com/v1",
-    "parameters": {
-      "temperature": 0,
-      "max_tokens": 8192,
-      "extra_body": {
-        "chat_template_kwargs": {
-          "enable_thinking": false
-        }
-      }
-    },
     "prompt_version": "v4-proposals-3",
     "prompt_digest": "5736166d93ad3ec377deea4111f9bd67e578cb6a78f445517cce5f4c4dc0a1b3",
+    "recorded_at": "2026-11-15T14:40:13.194859+00:00",
     "fragment_chars": 1800,
-    "window_fragments": 5,
-    "max_proposals": 40,
+    "recording_digest": "fee7360ad06b00150d45914fb8d1020185e4cf7e71f81233ae2c7928cd000238",
     "structural_reliability": null
   },
-  "annotations_path": "/Users/franciscohdb/Documents/Deltoryx Platform v1/claim-layer/benchmarks/conflict_annotations.json",
+  "annotations_path": "benchmarks/conflict_annotations.json",
+  "annotations_provenance": "model-authored, pending human review (not independent human ground truth)",
   "summary": {
     "documents_total": 15,
     "documents_read_ok": 15,
     "annotated_conflicts": 10,
     "conflicts_found": 9,
     "reader_conflict_recall": 0.9,
-    "divergent_sections_total": 17,
-    "reference_register_gaps_total": 1,
-    "reference_register_gap_rate": 0.0588
+    "reader_conflict_recall_wilson_95": {
+      "k": 9,
+      "n": 10,
+      "rate": 0.9,
+      "ci_95_low": 0.5958,
+      "ci_95_high": 0.9821
+    },
+    "divergent_sections_total": 13,
+    "sentence_checks_total": 32,
+    "reference_register_gaps_total": 8,
+    "gaps_by_kind": {
+      "quantity": 8,
+      "textual": 0,
+      "section": 0
+    },
+    "reference_register_gap_rate": 0.6154,
+    "textual_gaps_across_all_corpora_wilson_95": {
+      "k": 0,
+      "n": 32,
+      "rate": 0.0,
+      "ci_95_low": 0.0,
+      "ci_95_high": 0.1072
+    },
+    "ablation": {
+      "conflicts_removed": 10,
+      "gaps_detected": 10,
+      "detection_rate_wilson_95": {
+        "k": 10,
+        "n": 10,
+        "rate": 1.0,
+        "ci_95_low": 0.7225,
+        "ci_95_high": 1.0
+      }
+    },
+    "clean_corpus_false_gaps": {
+      "clean_corpora_ids": [
+        "cart_synth",
+        "apex",
+        "ridgeline"
+      ],
+      "clean_divergences_total": 12,
+      "clean_sentence_checks_total": 27,
+      "false_gaps_total": 7,
+      "false_gaps_by_kind": {
+        "quantity": 7,
+        "textual": 0,
+        "section": 0
+      },
+      "per_divergence_wilson_95": {
+        "k": 7,
+        "n": 12,
+        "rate": 0.5833,
+        "ci_95_low": 0.3195,
+        "ci_95_high": 0.8067
+      },
+      "per_sentence_check_wilson_95": {
+        "k": 7,
+        "n": 27,
+        "rate": 0.2593,
+        "ci_95_low": 0.1317,
+        "ci_95_high": 0.4468
+      },
+      "quantity_per_sentence_check_wilson_95": {
+        "k": 7,
+        "n": 27,
+        "rate": 0.2593,
+        "ci_95_low": 0.1317,
+        "ci_95_high": 0.4468
+      },
+      "textual_per_sentence_check_wilson_95": {
+        "k": 0,
+        "n": 27,
+        "rate": 0.0,
+        "ci_95_low": 0.0,
+        "ci_95_high": 0.1246
+      }
+    }
   },
+  "ablation": [
+    {
+      "corpus_id": "cart_synth",
+      "conflict_id": "cart_class_c_coupon",
+      "predicate": "coupon_rate",
+      "proposals_removed": 2,
+      "base_gaps": 7,
+      "ablated_gaps": 8,
+      "new_gaps_detected": 1,
+      "gap_detected": true,
+      "new_gap_kinds": {
+        "quantity": 1
+      },
+      "sample_new_gaps": [
+        {
+          "document_id": "cart-2024-2-indenture.docx",
+          "offset": 180,
+          "token": "6.75:PERCENT",
+          "kind": "quantity"
+        }
+      ]
+    },
+    {
+      "corpus_id": "cart_synth",
+      "conflict_id": "cart_waterfall_reserve_priority",
+      "predicate": "waterfall_priority",
+      "proposals_removed": 2,
+      "base_gaps": 7,
+      "ablated_gaps": 9,
+      "new_gaps_detected": 2,
+      "gap_detected": true,
+      "new_gap_kinds": {
+        "quantity": 2
+      },
+      "sample_new_gaps": [
+        {
+          "document_id": "cart-2024-2-indenture.docx",
+          "offset": 459,
+          "token": "STEP:13",
+          "kind": "quantity"
+        },
+        {
+          "document_id": "cart-2024-2-offering-memorandum.docx",
+          "offset": 273,
+          "token": "STEP:6",
+          "kind": "quantity"
+        }
+      ]
+    },
+    {
+      "corpus_id": "cart_synth",
+      "conflict_id": "cart_events_of_default_cure_period",
+      "predicate": "cure_period",
+      "proposals_removed": 3,
+      "base_gaps": 7,
+      "ablated_gaps": 8,
+      "new_gaps_detected": 1,
+      "gap_detected": true,
+      "new_gap_kinds": {
+        "quantity": 1
+      },
+      "sample_new_gaps": [
+        {
+          "document_id": "cart-2024-2-indenture.docx",
+          "offset": 635,
+          "token": "5:BUSINESS_DAYS",
+          "kind": "quantity"
+        }
+      ]
+    },
+    {
+      "corpus_id": "cart_synth",
+      "conflict_id": "cart_optional_redemption_threshold",
+      "predicate": "redemption_threshold",
+      "proposals_removed": 2,
+      "base_gaps": 7,
+      "ablated_gaps": 9,
+      "new_gaps_detected": 2,
+      "gap_detected": true,
+      "new_gap_kinds": {
+        "quantity": 2
+      },
+      "sample_new_gaps": [
+        {
+          "document_id": "cart-2024-2-indenture.docx",
+          "offset": 789,
+          "token": "10:PERCENT",
+          "kind": "quantity"
+        },
+        {
+          "document_id": "cart-2024-2-offering-memorandum.docx",
+          "offset": 526,
+          "token": "15:PERCENT",
+          "kind": "quantity"
+        }
+      ]
+    },
+    {
+      "corpus_id": "meridian",
+      "conflict_id": "meridian_class_b_coupon",
+      "predicate": "coupon_rate",
+      "proposals_removed": 2,
+      "base_gaps": 1,
+      "ablated_gaps": 2,
+      "new_gaps_detected": 1,
+      "gap_detected": true,
+      "new_gap_kinds": {
+        "quantity": 1
+      },
+      "sample_new_gaps": [
+        {
+          "document_id": "meridian-2026-1-draft-oc.docx",
+          "offset": 65,
+          "token": "5.55:PERCENT",
+          "kind": "quantity"
+        }
+      ]
+    },
+    {
+      "corpus_id": "meridian",
+      "conflict_id": "meridian_reserve_waterfall_step",
+      "predicate": "waterfall_priority",
+      "proposals_removed": 1,
+      "base_gaps": 1,
+      "ablated_gaps": 3,
+      "new_gaps_detected": 2,
+      "gap_detected": true,
+      "new_gap_kinds": {
+        "quantity": 2
+      },
+      "sample_new_gaps": [
+        {
+          "document_id": "meridian-2026-1-indenture.docx",
+          "offset": 200,
+          "token": "STEP:11",
+          "kind": "quantity"
+        },
+        {
+          "document_id": "meridian-2026-1-indenture.docx",
+          "offset": 227,
+          "token": "STEP:12",
+          "kind": "quantity"
+        }
+      ]
+    },
+    {
+      "corpus_id": "apex",
+      "conflict_id": "apex_applicable_margin_vs_markup",
+      "predicate": "interest_margin",
+      "proposals_removed": 2,
+      "base_gaps": 0,
+      "ablated_gaps": 2,
+      "new_gaps_detected": 2,
+      "gap_detected": true,
+      "new_gap_kinds": {
+        "quantity": 2
+      },
+      "sample_new_gaps": [
+        {
+          "document_id": "apex-baseline-term-sheet.docx",
+          "offset": 109,
+          "token": "4.25:PERCENT",
+          "kind": "quantity"
+        },
+        {
+          "document_id": "apex-lender-markup.docx",
+          "offset": 58,
+          "token": "4.9:PERCENT",
+          "kind": "quantity"
+        }
+      ]
+    },
+    {
+      "corpus_id": "apex",
+      "conflict_id": "apex_net_leverage_covenant",
+      "predicate": "leverage_covenant",
+      "proposals_removed": 2,
+      "base_gaps": 0,
+      "ablated_gaps": 2,
+      "new_gaps_detected": 2,
+      "gap_detected": true,
+      "new_gap_kinds": {
+        "quantity": 2
+      },
+      "sample_new_gaps": [
+        {
+          "document_id": "apex-lender-markup.docx",
+          "offset": 102,
+          "token": "3.75:MULTIPLIER",
+          "kind": "quantity"
+        },
+        {
+          "document_id": "apex-negotiation-playbook.docx",
+          "offset": 105,
+          "token": "4.25:MULTIPLIER",
+          "kind": "quantity"
+        }
+      ]
+    },
+    {
+      "corpus_id": "ridgeline",
+      "conflict_id": "ridgeline_applicable_margin_vs_markup",
+      "predicate": "interest_margin",
+      "proposals_removed": 2,
+      "base_gaps": 0,
+      "ablated_gaps": 2,
+      "new_gaps_detected": 2,
+      "gap_detected": true,
+      "new_gap_kinds": {
+        "quantity": 2
+      },
+      "sample_new_gaps": [
+        {
+          "document_id": "lender-markup-term-sheet.docx",
+          "offset": 58,
+          "token": "5.25:PERCENT",
+          "kind": "quantity"
+        },
+        {
+          "document_id": "original-term-sheet.docx",
+          "offset": 109,
+          "token": "4.5:PERCENT",
+          "kind": "quantity"
+        }
+      ]
+    },
+    {
+      "corpus_id": "ridgeline",
+      "conflict_id": "ridgeline_net_leverage_covenant",
+      "predicate": "leverage_covenant",
+      "proposals_removed": 2,
+      "base_gaps": 0,
+      "ablated_gaps": 2,
+      "new_gaps_detected": 2,
+      "gap_detected": true,
+      "new_gap_kinds": {
+        "quantity": 2
+      },
+      "sample_new_gaps": [
+        {
+          "document_id": "lender-markup-term-sheet.docx",
+          "offset": 102,
+          "token": "4:MULTIPLIER",
+          "kind": "quantity"
+        },
+        {
+          "document_id": "negotiation-playbook.docx",
+          "offset": 126,
+          "token": "4.5:MULTIPLIER",
+          "kind": "quantity"
+        }
+      ]
+    }
+  ],
   "corpora": [
     {
       "corpus_id": "cart_synth",
       "case_id": "cart_2024_2_synthetic_replay",
+      "clean_control_for_false_gaps": true,
       "documents_total": 3,
       "documents_read_ok": 3,
       "units_admitted": 24,
@@ -50,15 +370,29 @@
       ],
       "missed_conflict_ids": [],
       "recall": 1.0,
+      "recall_wilson_95": {
+        "k": 4,
+        "n": 4,
+        "rate": 1.0,
+        "ci_95_low": 0.5101,
+        "ci_95_high": 1.0
+      },
       "divergent_sections": 8,
-      "reference_register_gaps": 0,
-      "gap_rate": 0.0,
+      "sentence_checks": 18,
+      "reference_register_gaps": 7,
+      "gaps_by_kind": {
+        "quantity": 7,
+        "textual": 0,
+        "section": 0
+      },
+      "gap_rate": 0.875,
       "incomplete": false,
       "incomplete_documents": []
     },
     {
       "corpus_id": "meridian",
       "case_id": "heldout_sec_meridian_2026",
+      "clean_control_for_false_gaps": false,
       "documents_total": 2,
       "documents_read_ok": 2,
       "units_admitted": 5,
@@ -72,15 +406,29 @@
         "meridian_reserve_waterfall_step"
       ],
       "recall": 0.5,
+      "recall_wilson_95": {
+        "k": 1,
+        "n": 2,
+        "rate": 0.5,
+        "ci_95_low": 0.0945,
+        "ci_95_high": 0.9055
+      },
       "divergent_sections": 1,
-      "reference_register_gaps": 0,
-      "gap_rate": 0.0,
+      "sentence_checks": 5,
+      "reference_register_gaps": 1,
+      "gaps_by_kind": {
+        "quantity": 1,
+        "textual": 0,
+        "section": 0
+      },
+      "gap_rate": 1.0,
       "incomplete": false,
       "incomplete_documents": []
     },
     {
       "corpus_id": "apex",
       "case_id": "heldout_bank_apex_2026",
+      "clean_control_for_false_gaps": true,
       "documents_total": 5,
       "documents_read_ok": 5,
       "units_admitted": 8,
@@ -93,15 +441,29 @@
       ],
       "missed_conflict_ids": [],
       "recall": 1.0,
-      "divergent_sections": 4,
-      "reference_register_gaps": 1,
-      "gap_rate": 0.25,
+      "recall_wilson_95": {
+        "k": 2,
+        "n": 2,
+        "rate": 1.0,
+        "ci_95_low": 0.3424,
+        "ci_95_high": 1.0
+      },
+      "divergent_sections": 2,
+      "sentence_checks": 4,
+      "reference_register_gaps": 0,
+      "gaps_by_kind": {
+        "quantity": 0,
+        "textual": 0,
+        "section": 0
+      },
+      "gap_rate": 0.0,
       "incomplete": false,
       "incomplete_documents": []
     },
     {
       "corpus_id": "ridgeline",
       "case_id": "banking_finance_synthetic",
+      "clean_control_for_false_gaps": true,
       "documents_total": 5,
       "documents_read_ok": 5,
       "units_admitted": 9,
@@ -114,8 +476,21 @@
       ],
       "missed_conflict_ids": [],
       "recall": 1.0,
-      "divergent_sections": 4,
+      "recall_wilson_95": {
+        "k": 2,
+        "n": 2,
+        "rate": 1.0,
+        "ci_95_low": 0.3424,
+        "ci_95_high": 1.0
+      },
+      "divergent_sections": 2,
+      "sentence_checks": 5,
       "reference_register_gaps": 0,
+      "gaps_by_kind": {
+        "quantity": 0,
+        "textual": 0,
+        "section": 0
+      },
       "gap_rate": 0.0,
       "incomplete": false,
       "incomplete_documents": []

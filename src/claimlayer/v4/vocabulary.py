@@ -17,7 +17,7 @@ from typing import Any, Mapping
 
 from ..semantic.models import KINDS, canonical, digest, instant, require_string
 
-VALUE_TYPES = frozenset({'quantity', 'number', 'bound', 'boolean', 'enum', 'set', 'string', 'entity', 'date', 'record'})
+VALUE_TYPES = frozenset({'quantity', 'number', 'bound', 'boolean', 'enum', 'set', 'list', 'string', 'entity', 'date', 'record'})
 BOUND_OPERATORS = frozenset({'lt', 'le', 'gt', 'ge'})
 CONDITION_OPERATORS = frozenset({'eq', 'ne', 'lt', 'le', 'gt', 'ge'})
 CONDITION_STATUSES = frozenset({'unconditional', 'conditional', 'unknown_condition', 'unrepresentable_condition'})
@@ -158,6 +158,19 @@ def value_relation(spec: 'FieldSpec', a: Any, b: Any) -> str:
         return _text_relation(a, b)
     if spec.type == 'set' and isinstance(a, list) and isinstance(b, list):
         return 'compatible' if set(a) <= set(b) or set(b) <= set(a) else 'incompatible'
+    if spec.type == 'list' and isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            return 'incompatible'
+        if not a:
+            return 'equal'
+        if spec.element is not None:
+            relations = [value_relation(spec.element, ai, bi) for ai, bi in zip(a, b)]
+        else:
+            relations = ['equal' if canonical(ai) == canonical(bi) else 'incompatible' for ai, bi in zip(a, b)]
+        for verdict in ('incompatible', 'unknown', 'compatible'):
+            if verdict in relations:
+                return verdict
+        return 'equal'
     if spec.type == 'record' and isinstance(a, dict) and isinstance(b, dict):
         relations = []
         for name, child in spec.fields:
@@ -294,6 +307,8 @@ class FieldSpec:
     enum: tuple[str, ...] = ()
     fields: tuple[tuple[str, 'FieldSpec'], ...] = ()
     required: tuple[str, ...] | None = None
+    element: 'FieldSpec | None' = None
+    min_items: int = 0
     description: str = ''
 
     def __post_init__(self):
@@ -305,10 +320,22 @@ class FieldSpec:
             raise ValueError('Enum and set values need declared members')
         if self.type == 'record' and not self.fields:
             raise ValueError('Records need declared fields')
+        if self.type == 'list':
+            if not isinstance(self.element, FieldSpec):
+                raise ValueError('List values need an element FieldSpec')
+            if self.min_items < 0:
+                raise ValueError('List min_items cannot be negative')
+        elif self.element is not None or self.min_items:
+            raise ValueError('element and min_items apply only to list values')
 
     @classmethod
     def record(cls, description='', required=None, **fields):
         return cls('record', fields=tuple(sorted(fields.items())), required=None if required is None else tuple(sorted(required)), description=description)
+
+    @classmethod
+    def list(cls, element: 'FieldSpec', *, min_items: int = 1, description: str = ''):
+        """Construct an ordered list FieldSpec with typed elements."""
+        return cls('list', element=element, min_items=min_items, description=description)
 
     SHAPES = {
         'quantity': 'number in "value" with the unit name in "unit"; inside records or conditions use {"value": number, "unit": unit_name}',
@@ -317,6 +344,7 @@ class FieldSpec:
         'boolean': 'true or false',
         'enum': 'exactly one of the listed enum members (string)',
         'set': 'JSON array of listed enum members',
+        'list': 'ordered JSON array whose elements each conform to "element"',
         'string': 'text, compared verbatim after whitespace normalization',
         'entity': 'the name of an entity (string)',
         'date': 'ISO 8601 string at the precision the text states: YYYY, YYYY-MM, YYYY-MM-DD, or a date-time '
@@ -334,6 +362,10 @@ class FieldSpec:
         if self.fields:
             out['fields'] = {k: v.describe() for k, v in self.fields}
             out['required'] = list(self.required) if self.required is not None else [k for k, _ in self.fields]
+        if self.element is not None:
+            out['element'] = self.element.describe()
+        if self.min_items:
+            out['min_items'] = self.min_items
         if self.description:
             out['description'] = self.description
         return out
@@ -410,6 +442,8 @@ class Vocabulary:
         yield spec
         for _, child in spec.fields:
             yield from self._specs(child)
+        if spec.element is not None:
+            yield from self._specs(spec.element)
 
     @property
     def fingerprint(self) -> str:
@@ -478,6 +512,15 @@ class Vocabulary:
                 raise UnmappedProposal('set_required', path, value)
             members = sorted({self._member(spec, v, path) for v in value})
             return members, None
+        if t == 'list':
+            min_req = max(1, spec.min_items)
+            if type(value) not in (list, tuple) or len(value) < min_req:
+                raise UnmappedProposal('list_required', path, value)
+            items = []
+            for idx, elem in enumerate(value):
+                norm_elem, _ = self.value(spec.element, elem, None, f'{path}[{idx}]')
+                items.append(norm_elem)
+            return items, None
         if t == 'string':
             if not isinstance(value, str) or not value.strip():
                 raise UnmappedProposal('string_required', path, value)

@@ -53,11 +53,16 @@ Contract:
 12. Do not output confidence, authority, verdicts, IDs or commentary. Respect max_proposals.'''
 
 
+STRICT_PROMPT_VERSION = 'v4-proposals-4'
+
 STRICT_READER_PROMPT = READER_PROMPT + '''
 13. Always include "condition_status": one of "unconditional", "conditional", "unknown_condition", or
     "unrepresentable_condition". Never omit "condition_status" and never mark a restricted clause as "unconditional".
 14. Include "field_evidence": an object mapping "entity", "value", and (when conditional) "conditions" to exact
-    verbatim substrings of the cited fragment supporting each field.'''
+    verbatim substrings of the cited fragment supporting each field.
+15. When a predicate's declared value type is "list" (an ordered enumeration), emit every item in order in
+    "value" and include "field_evidence"."items": an array of the exact same length giving the verbatim
+    substring of the cited fragment supporting each corresponding element of "value".'''
 
 
 class ProposalReader(Protocol):
@@ -84,6 +89,27 @@ def _build_document_fragments(
         }
         fragments.append(('ev-' + digest(reference), reference))
     return fragments
+
+
+def _locate_subquote(
+    references: Mapping[str, Mapping[str, Any]],
+    ids: list[str],
+    subquote: str,
+    text: str,
+) -> dict[str, Any] | None:
+    if not isinstance(subquote, str) or not subquote.strip():
+        return None
+    for i in ids:
+        ref = references[i]
+        span = locate_quote(ref['quote'], subquote)
+        if span is None:
+            idx = ref['quote'].find(subquote)
+            if idx != -1:
+                span = (idx, idx + len(subquote))
+        if span is not None:
+            st, en = ref['start'] + span[0], ref['start'] + span[1]
+            return {**ref, 'start': st, 'end': en, 'quote': text[st:en]}
+    return None
 
 
 def _bind_raw_proposals(
@@ -113,27 +139,49 @@ def _bind_raw_proposals(
                 start, end = ref['start'] + span[0], ref['start'] + span[1]
                 located = {**ref, 'start': start, 'end': end, 'quote': text[start:end]}
                 break
-        resolved_fe = {}
-        if isinstance(raw.get('field_evidence'), dict):
-            for f_name, f_quote in raw['field_evidence'].items():
-                if not isinstance(f_quote, str) or not f_quote.strip():
+        resolved_fe: dict[str, dict[str, Any]] = {}
+        item_refs: list[dict[str, Any]] = []
+        raw_fe = raw.get('field_evidence')
+        if isinstance(raw_fe, dict):
+            for f_name, f_quote in raw_fe.items():
+                if f_name in {'items', 'value'} and isinstance(f_quote, list):
+                    for idx, item_q in enumerate(f_quote):
+                        fe_ref = _locate_subquote(references, ids, item_q, text) if isinstance(item_q, str) else None
+                        if fe_ref is not None:
+                            resolved_fe[f'value[{idx}]'] = fe_ref
+                            item_refs.append(fe_ref)
                     continue
-                for i in ids:
-                    ref = references[i]
-                    span = locate_quote(ref['quote'], f_quote)
-                    if span is None:
-                        idx = ref['quote'].find(f_quote)
-                        if idx != -1:
-                            span = (idx, idx + len(f_quote))
-                    if span is not None:
-                        st, en = ref['start'] + span[0], ref['start'] + span[1]
-                        resolved_fe[f_name] = {**ref, 'start': st, 'end': en, 'quote': text[st:en]}
-                        break
+                if isinstance(f_quote, str) and f_quote.strip():
+                    fe_ref = _locate_subquote(references, ids, f_quote, text)
+                    if fe_ref is not None:
+                        resolved_fe[f_name] = fe_ref
+                        if f_name.startswith('value[') and f_name.endswith(']'):
+                            item_refs.append(fe_ref)
+        bound_evidence = [located] if located else evidence
+        if item_refs:
+            all_inside_located = (
+                located is not None
+                and all(
+                    r['document_id'] == located['document_id']
+                    and located['start'] <= r['start']
+                    and r['end'] <= located['end']
+                    for r in item_refs
+                )
+            )
+            if not all_inside_located:
+                seen_spans: set[tuple[str, int, int]] = set()
+                combined_refs: list[dict[str, Any]] = []
+                for ref_cand in ([located] if located is not None else []) + item_refs:
+                    sk = (str(ref_cand['document_id']), int(ref_cand['start']), int(ref_cand['end']))
+                    if sk not in seen_spans:
+                        seen_spans.add(sk)
+                        combined_refs.append(ref_cand)
+                bound_evidence = combined_refs
         item_payload = {
             'proposal': proposal,
             'basis': raw['basis'],
-            'evidence': [located] if located else evidence,
-            'quote_located': located is not None,
+            'evidence': bound_evidence,
+            'quote_located': located is not None or bool(item_refs),
         }
         if resolved_fe:
             item_payload['field_evidence'] = resolved_fe

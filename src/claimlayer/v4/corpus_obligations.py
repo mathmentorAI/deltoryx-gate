@@ -1075,6 +1075,7 @@ def build_corpus_reference_register(
                 doc_texts[str(did)] = txt
 
     unit_spans_by_doc: dict[str, list[tuple[int, int]]] = {}
+    stored_fe_map = getattr(evidence, "field_evidences", {}) or {}
     for u in admitted:
         for ref in getattr(u, "evidence", ()) or ():
             r_doc = str(getattr(ref, "document_id", "") or "")
@@ -1082,6 +1083,16 @@ def build_corpus_reference_register(
             r_e = getattr(ref, "end", None)
             if r_doc and r_s is not None and r_e is not None:
                 unit_spans_by_doc.setdefault(r_doc, []).append((int(r_s), int(r_e)))
+        fe_for_unit = stored_fe_map.get(str(u.unit_id), {}) if isinstance(stored_fe_map, Mapping) else {}
+        if isinstance(fe_for_unit, Mapping):
+            for fname, fref in fe_for_unit.items():
+                if not str(fname).startswith("value[") or not isinstance(fref, Mapping):
+                    continue
+                r_doc = str(fref.get("document_id", "") or "")
+                r_s = fref.get("start")
+                r_e = fref.get("end")
+                if r_doc and r_s is not None and r_e is not None:
+                    unit_spans_by_doc.setdefault(r_doc, []).append((int(r_s), int(r_e)))
 
     # Cross-check reader-derived obligations against sentence/quantity divergences
     reader_obligations = list(obligations)

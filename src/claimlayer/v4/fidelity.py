@@ -411,6 +411,10 @@ def _value_markers_present(
                 return False
             elem_spec = FieldSpec("enum", enum=spec.enum)
             return all(_value_markers_present(item, text, units=units, spec=elem_spec) for item in value)
+        if t == "list":
+            if not isinstance(value, (list, tuple)) or not value or spec.element is None:
+                return False
+            return all(_value_markers_present(item, text, units=units, spec=spec.element) for item in value)
         if not isinstance(value, str):
             return False
         stripped = value.strip()
@@ -1547,6 +1551,10 @@ def _verify_relational_association(
         return table_findings
 
     # Check FieldEvidence relational alignment when explicit per-field spans are provided on the same document
+    if spec is not None and spec.type == "list":
+        # Per-element FieldEvidence spans and ordered document positions are verified in verify_extraction_fidelity
+        return []
+
     if "value" in by_field and ("predicate" in by_field or "entity" in by_field):
         fe_val = by_field["value"].evidence
         fe_pred = by_field.get("predicate")
@@ -1837,6 +1845,9 @@ def verify_extraction_fidelity(
                 )
             )
 
+    _list_item_re = re.compile(r"^value\[(\d+)\]$")
+    primary_doc_id = unit.evidence[0].document_id if unit.evidence else None
+
     for fe in field_evidence or ():
         ref = fe.evidence
         fe_text = documents[ref.document_id].text if (documents and ref.document_id in documents) else doc_text
@@ -1848,6 +1859,26 @@ def verify_extraction_fidelity(
                     field=fe.field,
                 )
             )
+            continue
+        list_item_match = _list_item_re.match(fe.field)
+        if list_item_match and val_spec is not None and val_spec.type == "list":
+            idx = int(list_item_match.group(1))
+            if not isinstance(val, (list, tuple)) or idx >= len(val):
+                findings.append(
+                    FidelityFinding(
+                        code="INVALID_FIELD_EVIDENCE",
+                        message=f"FieldEvidence '{fe.field}' index out of range for list value.",
+                        field=fe.field,
+                    )
+                )
+            elif not _value_markers_present(val[idx], ref.quote, units=unit_reg, spec=val_spec.element):
+                findings.append(
+                    FidelityFinding(
+                        code="VALUE_NOT_IN_FIELD_EVIDENCE",
+                        message=f"List element '{fe.field}' is not grounded in its declared FieldEvidence span '{ref.quote}'.",
+                        field=fe.field,
+                    )
+                )
             continue
         if fe.field == "entity" and prop.get("entity"):
             ent_labels = _entity_candidate_labels(str(prop["entity"]), vocabulary)
@@ -1903,6 +1934,40 @@ def verify_extraction_fidelity(
                     )
                 )
 
+    if val_spec is not None and val_spec.type == "list" and isinstance(val, (list, tuple)):
+        prev_start: int | None = None
+        for idx in range(len(val)):
+            fe_key = f"value[{idx}]"
+            fe_item = by_field.get(fe_key)
+            if fe_item is None:
+                findings.append(
+                    FidelityFinding(
+                        code="MISSING_FIELD_EVIDENCE",
+                        message=f"List element '{fe_key}' lacks an explicit FieldEvidence span.",
+                        field=fe_key,
+                    )
+                )
+                continue
+            item_ref = fe_item.evidence
+            if primary_doc_id and item_ref.document_id != primary_doc_id:
+                findings.append(
+                    FidelityFinding(
+                        code="INVALID_FIELD_EVIDENCE",
+                        message=f"List element '{fe_key}' references document '{item_ref.document_id}' instead of '{primary_doc_id}'.",
+                        field=fe_key,
+                    )
+                )
+                continue
+            if prev_start is not None and item_ref.start < prev_start:
+                findings.append(
+                    FidelityFinding(
+                        code="LIST_ORDER_MISMATCH",
+                        message=f"List element '{fe_key}' starts at {item_ref.start} before preceding element at {prev_start}.",
+                        field=fe_key,
+                    )
+                )
+            prev_start = item_ref.start
+
     # 5b. Relational association check: ensure (entity, predicate, value) align in same clause/row/column
     blocking_individual_codes = {
         "INVALID_EVIDENCE_SPAN",
@@ -1913,6 +1978,9 @@ def verify_extraction_fidelity(
         "VALUE_NOT_IN_FIELD_EVIDENCE",
         "ENTITY_NOT_IN_FIELD_EVIDENCE",
         "PREDICATE_NOT_IN_FIELD_EVIDENCE",
+        "MISSING_FIELD_EVIDENCE",
+        "INVALID_FIELD_EVIDENCE",
+        "LIST_ORDER_MISMATCH",
     }
     if not ({f.code for f in findings} & blocking_individual_codes):
         findings.extend(

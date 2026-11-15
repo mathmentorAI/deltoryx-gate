@@ -554,7 +554,7 @@ def verify_waterfall_steps(
 
 SECURITIZATION_VOCABULARY = Vocabulary(
     name="securitization",
-    version="1.2.0",
+    version="1.3.0",
     require_explicit_condition_status=True,
     scope_keys=("tranche", "clause_id", "reporting_period", "event_id", "regime"),
     register_status_terms=(
@@ -645,6 +645,30 @@ SECURITIZATION_VOCABULARY = Vocabulary(
             description="Waterfall payment priority tier.",
         ),
         PredicateSpec(
+            name="waterfall_schedule",
+            value=FieldSpec.list(
+                FieldSpec.record(
+                    description="Ordered distribution step in a payment waterfall schedule.",
+                    step=FieldSpec("string", description="Step identifier or range (e.g., '1', '3-7', '13')."),
+                    beneficiary=FieldSpec("string", description="Fee, note class, account, or payee at this step."),
+                ),
+                min_items=1,
+                description="Ordered sequence of payment priority steps in the waterfall.",
+            ),
+            conditions=(
+                ("sequential_paydown_active", FieldSpec("boolean")),
+            ),
+            assertion_kinds=("requirement", "definition", "fact"),
+            aliases=(
+                "priority of distributions",
+                "waterfall",
+                "flow of funds",
+                "available funds distribute",
+                "order of priority",
+            ),
+            description="Ordered waterfall distribution schedule across payment steps.",
+        ),
+        PredicateSpec(
             name="reporting_frequency",
             value=FieldSpec(
                 "enum",
@@ -701,7 +725,7 @@ SECURITIZATION_EXCLUDED_COMPARISON_ROLES: dict[str, str] = {}
 
 SECURITIZATION_DOMAIN_PROFILE = DomainProfile(
     profile_id="securitization_default",
-    version="1.0.0",
+    version="1.1.0",
     vocabulary=SECURITIZATION_VOCABULARY,
     policy=PolicyConfiguration(
         tau=SECURITIZATION_ACCEPTANCE_POLICY.tau,

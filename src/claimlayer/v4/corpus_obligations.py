@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 from ..models import Source
-from ..semantic.models import canonical, digest
+from ..semantic.models import SourceDocument, canonical, digest
 from ..verifiers.diff import build_comparison_policy
 from ..verifiers.quote_quantity import (
     _SECTION_HEADER_ONLY_RE,
@@ -160,6 +160,15 @@ def collect_reference_divergences(
 
 
 @dataclass(frozen=True)
+class TargetedRereadConfig:
+    """Budget and execution controls for blind gap-targeted re-reading."""
+
+    enabled: bool = True
+    max_attempts_per_document: int = 3
+    max_total_attempts: int = 12
+
+
+@dataclass(frozen=True)
 class CorpusReferenceRegister:
     """Reference register computed solely from admitted corpus evidence."""
 
@@ -180,6 +189,7 @@ class CorpusReferenceRegister:
     admitted_unit_refs: tuple[Mapping[str, Any], ...] = ()
     excluded_documents: tuple[Mapping[str, Any], ...] = ()
     domain_profile_fingerprint: str | None = None
+    reread_provenance: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def obligation_ids(self) -> tuple[str, ...]:
@@ -203,6 +213,7 @@ class CorpusReferenceRegister:
             "section_divergences": [dict(s) for s in self.section_divergences],
             "excluded_documents": [dict(e) for e in self.excluded_documents],
             "domain_profile_fingerprint": self.domain_profile_fingerprint,
+            "reread_provenance": dict(self.reread_provenance),
         }
 
 
@@ -707,109 +718,20 @@ def _divergence_covered_by_reader_obligations(
     return False
 
 
-def build_corpus_reference_register(
-    evidence: EvidenceLayer | None,
+def _compute_register_state(
+    evidence: EvidenceLayer,
     vocabulary: Vocabulary,
     *,
-    question: str | Mapping[str, Any] | None = None,
-    entity: str | None = None,
-    required_predicates: Sequence[str] | None = None,
-    comparison_divergences: Sequence[Any] = (),
-    divergence_collection: ReferenceDivergenceCollection | None = None,
-    min_relevant_authority_rank: int = 1,
-    expected_documents: Mapping[str, Any] | Sequence[str] | None = None,
-    excluded_documents: Sequence[Mapping[str, Any]] = (),
-    domain_profile_fingerprint: str | None = None,
-) -> CorpusReferenceRegister:
-    """Build a deterministic reference register and ``origin='corpus'`` obligations.
-
-    Does not inspect the candidate response, justification graph, assertions, or
-    any agent-supplied metadata flags.
-    """
-    if isinstance(comparison_divergences, ReferenceDivergenceCollection):
-        divergence_collection = comparison_divergences
-        comparison_divergences = ()
-    eff_excluded = tuple(
-        dict(e)
-        for e in (
-            excluded_documents
-            or (divergence_collection.excluded_documents if divergence_collection is not None else ())
-        )
-    )
-    eff_profile_fp = (
-        domain_profile_fingerprint
-        or (divergence_collection.domain_profile_fingerprint if divergence_collection is not None else None)
-    )
-    eff_divergences = (
-        divergence_collection.divergences
-        if divergence_collection is not None and not comparison_divergences
-        else comparison_divergences
-    )
-
-    if not isinstance(evidence, EvidenceLayer):
-        return CorpusReferenceRegister(
-            available=False,
-            entity=entity,
-            reason="REFERENCE_REGISTER_MISSING: no EvidenceLayer available.",
-            excluded_documents=eff_excluded,
-            domain_profile_fingerprint=eff_profile_fp,
-        )
-
-    doc_statuses = {k: dict(v) for k, v in (getattr(evidence, "document_read_statuses", {}) or {}).items()}
-    if expected_documents is not None:
-        if isinstance(expected_documents, Mapping):
-            for doc_id, sdoc in expected_documents.items():
-                did = str(doc_id)
-                if did not in doc_statuses:
-                    rank = int(getattr(sdoc, "authority_rank", min_relevant_authority_rank))
-                    rev = str(getattr(sdoc, "revision", "") or "")
-                    doc_statuses[did] = {
-                        "document_id": did,
-                        "revision": rev,
-                        "authority_rank": rank,
-                        "status": "not_read",
-                        "errors": [],
-                    }
-        else:
-            for doc_id in expected_documents:
-                did = str(doc_id)
-                if did not in doc_statuses:
-                    doc_statuses[did] = {
-                        "document_id": did,
-                        "revision": "",
-                        "authority_rank": int(min_relevant_authority_rank),
-                        "status": "not_read",
-                        "errors": [],
-                    }
-    relevant_incomplete = tuple(
-        sorted(
-            doc_id
-            for doc_id, st in doc_statuses.items()
-            if int(st.get("authority_rank", 0)) >= int(min_relevant_authority_rank)
-            and st.get("status") != "read_ok"
-        )
-    )
-    has_read_failures = any(
-        st.get("status") == "read_failed"
-        for doc_id, st in doc_statuses.items()
-        if int(st.get("authority_rank", 0)) >= int(min_relevant_authority_rank)
-    )
-    has_reader_incomplete = bool(
-        has_read_failures or (relevant_incomplete and getattr(evidence, "reader", None) is not None)
-    )
-
+    question: str | Mapping[str, Any] | None,
+    entity: str | None,
+    required_predicates: Sequence[str] | None,
+    eff_divergences: Sequence[Any],
+    divergence_collection: ReferenceDivergenceCollection | None,
+    expected_documents: Mapping[str, Any] | Sequence[str] | None,
+) -> dict[str, Any] | None:
     admitted = sorted(evidence.units, key=lambda u: str(u.unit_id))
     if not admitted:
-        return CorpusReferenceRegister(
-            available=False,
-            entity=entity,
-            reason="REFERENCE_REGISTER_MISSING: EvidenceLayer has no admitted units.",
-            incomplete=has_reader_incomplete,
-            incomplete_documents=relevant_incomplete if has_reader_incomplete else (),
-            document_statuses=doc_statuses,
-            excluded_documents=eff_excluded,
-            domain_profile_fingerprint=eff_profile_fp,
-        )
+        return None
 
     target_entity = entity
     if target_entity is None and isinstance(question, Mapping):
@@ -1207,24 +1129,384 @@ def build_corpus_reference_register(
         for sp in _unit_spans(u)
     )
 
+    return {
+        "entity": target_entity,
+        "required_predicates": req_preds,
+        "obligations": tuple(obligations),
+        "document_ids": doc_ids,
+        "unit_count": len(admitted),
+        "has_material_conflicts": has_conflicts,
+        "has_authority_overrides": has_overrides,
+        "gap_divergences": tuple(gap_divergences),
+        "section_divergences": tuple(sec_div_records),
+        "admitted_unit_refs": admitted_refs,
+    }
+
+
+def _gap_key(gap: Mapping[str, Any]) -> tuple[str, int, str, str]:
+    return (
+        str(gap.get("document_id", "")),
+        int(gap.get("offset", 0)),
+        str(gap.get("token", "")),
+        str(gap.get("kind", "")),
+    )
+
+
+def _execute_targeted_rereads(
+    evidence: EvidenceLayer,
+    vocabulary: Vocabulary,
+    *,
+    initial_gaps: Sequence[Mapping[str, Any]],
+    rereader: Any,
+    config: TargetedRereadConfig,
+    expected_documents: Mapping[str, Any] | Sequence[str] | None,
+    divergence_collection: ReferenceDivergenceCollection | None,
+) -> dict[str, Any]:
+    """Run blind bounded second reads ONLY on uncovered gap sentences and return provenance."""
+    docs_by_id: dict[str, SourceDocument] = {d.document_id: d for d in evidence.documents}
+    if isinstance(expected_documents, Mapping):
+        for did, sdoc in expected_documents.items():
+            if isinstance(sdoc, SourceDocument) and did not in docs_by_id:
+                docs_by_id[str(did)] = sdoc
+    if divergence_collection is not None and divergence_collection.document_texts:
+        for did, txt in divergence_collection.document_texts.items():
+            if did not in docs_by_id and txt:
+                docs_by_id[str(did)] = SourceDocument(document_id=str(did), text=str(txt))
+
+    # Group uncovered gaps deterministically by (document_id, sentence_span)
+    grouped: dict[tuple[str, tuple[int, int]], list[dict[str, Any]]] = {}
+    for g in initial_gaps:
+        doc_id = str(g.get("document_id") or "")
+        s_span_raw = g.get("sentence_span") or g.get("span") or [0, 0]
+        s_span = (int(s_span_raw[0]), int(s_span_raw[1]))
+        grouped.setdefault((doc_id, s_span), []).append(dict(g))
+
+    ordered_targets = sorted(grouped.items(), key=lambda kv: (kv[0][0], kv[0][1][0], kv[0][1][1]))
+    attempts_by_doc: dict[str, int] = {}
+    total_attempts = 0
+    attempt_records: list[dict[str, Any]] = []
+    reread_ident: dict[str, Any] = dict(
+        getattr(rereader, "reread_identity", None) or getattr(rereader, "identity", {}) or {}
+    )
+    vocab_desc = vocabulary.describe()
+    prof_desc = evidence.profile.describe()
+
+    for (doc_id, s_span), grp_gaps in ordered_targets:
+        sdoc = docs_by_id.get(doc_id)
+        doc_count = attempts_by_doc.get(doc_id, 0)
+        tokens = [str(g.get("token", "")) for g in grp_gaps]
+        if sdoc is None:
+            attempt_records.append({
+                "document_id": doc_id,
+                "sentence_span": list(s_span),
+                "gap_tokens": tokens,
+                "status": "document_unavailable",
+                "proposals_returned": 0,
+                "proposals_admitted": 0,
+                "proposals_rejected": 0,
+                "errors": [{"error_type": "SourceDocumentMissing", "document_id": doc_id}],
+            })
+            continue
+        if doc_count >= config.max_attempts_per_document or total_attempts >= config.max_total_attempts:
+            attempt_records.append({
+                "document_id": doc_id,
+                "sentence_span": list(s_span),
+                "gap_tokens": tokens,
+                "status": "skipped_budget_exceeded",
+                "proposals_returned": 0,
+                "proposals_admitted": 0,
+                "proposals_rejected": 0,
+                "errors": [],
+            })
+            continue
+
+        attempts_by_doc[doc_id] = doc_count + 1
+        total_attempts += 1
+        sent_text = str(grp_gaps[0].get("sentence") or sdoc.text[s_span[0]:s_span[1]])
+        # Blind request: contains ONLY source document slice, gap target, vocabulary, and profile.
+        request = {
+            "task": "targeted_reread",
+            "contract": "claimlayer-v4-reread/1",
+            "reader": reread_ident,
+            "document": {
+                "document_id": sdoc.document_id,
+                "revision": sdoc.revision,
+                "text": sdoc.text,
+            },
+            "target": {
+                "document_id": doc_id,
+                "sentence_span": list(s_span),
+                "sentence": sent_text,
+                "gaps": [
+                    {
+                        "kind": str(g.get("kind", "")),
+                        "offset": int(g.get("offset", 0)),
+                        "span": list(g.get("span") or []),
+                        "token": str(g.get("token", "")),
+                        "raw_token": str(g.get("raw_token") or g.get("token") or ""),
+                    }
+                    for g in grp_gaps
+                ],
+            },
+            "vocabulary": vocab_desc,
+            "profile": prof_desc,
+        }
+        try:
+            rr_res = rereader.propose_targeted(request)
+        except Exception as exc:
+            attempt_records.append({
+                "document_id": doc_id,
+                "sentence_span": list(s_span),
+                "gap_tokens": tokens,
+                "status": "reread_error",
+                "proposals_returned": 0,
+                "proposals_admitted": 0,
+                "proposals_rejected": 0,
+                "errors": [{"error_type": type(exc).__name__, "message": str(exc)}],
+            })
+            continue
+
+        if isinstance(rr_res, Mapping) and rr_res.get("reread_identity"):
+            reread_ident = dict(rr_res["reread_identity"])
+        rr_items = list(rr_res.get("items") or ())
+        rr_rejected_bind = list(rr_res.get("rejected") or ())
+        rr_errors = list(rr_res.get("errors") or ())
+        producer = {
+            "kind": "targeted_reread",
+            "identity": reread_ident,
+            "target_document": doc_id,
+            "target_span": list(s_span),
+        }
+        for bad in rr_rejected_bind:
+            evidence._reject(
+                bad.get("proposal"),
+                bad.get("basis"),
+                producer,
+                {"reason": bad.get("reason", "reader_contract"), "path": "", "detail": bad.get("detail")},
+                {"proposals_rejected": 0, "rejection_reasons": {}},
+            )
+        admit_sum = evidence.admit_reread_items(
+            rr_items,
+            producer=producer,
+            structural_reliability=getattr(rereader, "structural_reliability", None),
+        )
+        attempt_records.append({
+            "document_id": doc_id,
+            "sentence_span": list(s_span),
+            "gap_tokens": tokens,
+            "status": "ok" if not rr_errors else "reread_error",
+            "proposals_returned": len(rr_items) + len(rr_rejected_bind),
+            "proposals_admitted": int(admit_sum["units_admitted"]),
+            "proposals_rejected": len(rr_rejected_bind) + int(admit_sum["proposals_rejected"]),
+            "rejection_reasons": dict(admit_sum["rejection_reasons"]),
+            "errors": rr_errors,
+        })
+
+    return {
+        "performed": True,
+        "reader": reread_ident,
+        "budget_per_document": config.max_attempts_per_document,
+        "budget_total": config.max_total_attempts,
+        "attempts_total": total_attempts,
+        "attempts_by_document": attempts_by_doc,
+        "attempts": attempt_records,
+    }
+
+
+def build_corpus_reference_register(
+    evidence: EvidenceLayer | None,
+    vocabulary: Vocabulary,
+    *,
+    question: str | Mapping[str, Any] | None = None,
+    entity: str | None = None,
+    required_predicates: Sequence[str] | None = None,
+    comparison_divergences: Sequence[Any] = (),
+    divergence_collection: ReferenceDivergenceCollection | None = None,
+    min_relevant_authority_rank: int = 1,
+    expected_documents: Mapping[str, Any] | Sequence[str] | None = None,
+    excluded_documents: Sequence[Mapping[str, Any]] = (),
+    domain_profile_fingerprint: str | None = None,
+    reread_config: TargetedRereadConfig | None = None,
+    reread_reader: Any = None,
+) -> CorpusReferenceRegister:
+    """Build a deterministic reference register and ``origin='corpus'`` obligations.
+
+    Does not inspect the candidate response, justification graph, assertions, or
+    any agent-supplied metadata flags.
+    """
+    if isinstance(comparison_divergences, ReferenceDivergenceCollection):
+        divergence_collection = comparison_divergences
+        comparison_divergences = ()
+    eff_excluded = tuple(
+        dict(e)
+        for e in (
+            excluded_documents
+            or (divergence_collection.excluded_documents if divergence_collection is not None else ())
+        )
+    )
+    eff_profile_fp = (
+        domain_profile_fingerprint
+        or (divergence_collection.domain_profile_fingerprint if divergence_collection is not None else None)
+    )
+    eff_divergences = (
+        divergence_collection.divergences
+        if divergence_collection is not None and not comparison_divergences
+        else comparison_divergences
+    )
+
+    if not isinstance(evidence, EvidenceLayer):
+        return CorpusReferenceRegister(
+            available=False,
+            entity=entity,
+            reason="REFERENCE_REGISTER_MISSING: no EvidenceLayer available.",
+            excluded_documents=eff_excluded,
+            domain_profile_fingerprint=eff_profile_fp,
+        )
+
+    doc_statuses = {k: dict(v) for k, v in (getattr(evidence, "document_read_statuses", {}) or {}).items()}
+    if expected_documents is not None:
+        if isinstance(expected_documents, Mapping):
+            for doc_id, sdoc in expected_documents.items():
+                did = str(doc_id)
+                if did not in doc_statuses:
+                    rank = int(getattr(sdoc, "authority_rank", min_relevant_authority_rank))
+                    rev = str(getattr(sdoc, "revision", "") or "")
+                    doc_statuses[did] = {
+                        "document_id": did,
+                        "revision": rev,
+                        "authority_rank": rank,
+                        "status": "not_read",
+                        "errors": [],
+                    }
+        else:
+            for doc_id in expected_documents:
+                did = str(doc_id)
+                if did not in doc_statuses:
+                    doc_statuses[did] = {
+                        "document_id": did,
+                        "revision": "",
+                        "authority_rank": int(min_relevant_authority_rank),
+                        "status": "not_read",
+                        "errors": [],
+                    }
+    relevant_incomplete = tuple(
+        sorted(
+            doc_id
+            for doc_id, st in doc_statuses.items()
+            if int(st.get("authority_rank", 0)) >= int(min_relevant_authority_rank)
+            and st.get("status") != "read_ok"
+        )
+    )
+    has_read_failures = any(
+        st.get("status") == "read_failed"
+        for doc_id, st in doc_statuses.items()
+        if int(st.get("authority_rank", 0)) >= int(min_relevant_authority_rank)
+    )
+    has_reader_incomplete = bool(
+        has_read_failures or (relevant_incomplete and getattr(evidence, "reader", None) is not None)
+    )
+
+    state = _compute_register_state(
+        evidence,
+        vocabulary,
+        question=question,
+        entity=entity,
+        required_predicates=required_predicates,
+        eff_divergences=eff_divergences,
+        divergence_collection=divergence_collection,
+        expected_documents=expected_documents,
+    )
+    if state is None:
+        return CorpusReferenceRegister(
+            available=False,
+            entity=entity,
+            reason="REFERENCE_REGISTER_MISSING: EvidenceLayer has no admitted units.",
+            incomplete=has_reader_incomplete,
+            incomplete_documents=relevant_incomplete if has_reader_incomplete else (),
+            document_statuses=doc_statuses,
+            excluded_documents=eff_excluded,
+            domain_profile_fingerprint=eff_profile_fp,
+        )
+
+    eff_config = reread_config if reread_config is not None else TargetedRereadConfig()
+    eff_rereader = reread_reader if reread_reader is not None else getattr(evidence, "reader", None)
+    reread_supported = (
+        eff_rereader is not None
+        and callable(getattr(eff_rereader, "propose_targeted", None))
+        and bool(getattr(eff_rereader, "has_reread_support", True))
+    )
+    initial_gaps = tuple(state["gap_divergences"])
+    reread_prov: dict[str, Any] = {
+        "performed": False,
+        "initial_gap_count": len(initial_gaps),
+        "closed_gap_count": 0,
+        "open_gap_count": len(initial_gaps),
+        "closed_gaps": [],
+        "open_gaps": [
+            {"document_id": g.get("document_id"), "offset": g.get("offset"), "token": g.get("token"), "kind": g.get("kind")}
+            for g in initial_gaps
+        ],
+    }
+
+    if eff_config.enabled and initial_gaps and reread_supported:
+        prov = _execute_targeted_rereads(
+            evidence,
+            vocabulary,
+            initial_gaps=initial_gaps,
+            rereader=eff_rereader,
+            config=eff_config,
+            expected_documents=expected_documents,
+            divergence_collection=divergence_collection,
+        )
+        new_state = _compute_register_state(
+            evidence,
+            vocabulary,
+            question=question,
+            entity=entity,
+            required_predicates=required_predicates,
+            eff_divergences=eff_divergences,
+            divergence_collection=divergence_collection,
+            expected_documents=expected_documents,
+        )
+        if new_state is not None:
+            state = new_state
+        post_gaps = tuple(state["gap_divergences"])
+        post_keys = {_gap_key(g) for g in post_gaps}
+        closed = [g for g in initial_gaps if _gap_key(g) not in post_keys]
+        reread_prov = {
+            **prov,
+            "initial_gap_count": len(initial_gaps),
+            "closed_gap_count": len(closed),
+            "open_gap_count": len(post_gaps),
+            "closed_gaps": [
+                {"document_id": g.get("document_id"), "offset": g.get("offset"), "token": g.get("token"), "kind": g.get("kind")}
+                for g in closed
+            ],
+            "open_gaps": [
+                {"document_id": g.get("document_id"), "offset": g.get("offset"), "token": g.get("token"), "kind": g.get("kind")}
+                for g in post_gaps
+            ],
+        }
+
     return CorpusReferenceRegister(
         available=True,
-        entity=target_entity,
-        required_predicates=req_preds,
-        obligations=tuple(obligations),
-        document_ids=doc_ids,
-        unit_count=len(admitted),
-        has_material_conflicts=has_conflicts,
-        has_authority_overrides=has_overrides,
+        entity=state["entity"],
+        required_predicates=state["required_predicates"],
+        obligations=state["obligations"],
+        document_ids=state["document_ids"],
+        unit_count=state["unit_count"],
+        has_material_conflicts=state["has_material_conflicts"],
+        has_authority_overrides=state["has_authority_overrides"],
         reason="Corpus reference register built deterministically from EvidenceLayer.",
         incomplete=bool(relevant_incomplete),
         incomplete_documents=relevant_incomplete,
         document_statuses=doc_statuses,
-        gap_divergences=tuple(gap_divergences),
-        section_divergences=tuple(sec_div_records),
-        admitted_unit_refs=admitted_refs,
+        gap_divergences=state["gap_divergences"],
+        section_divergences=state["section_divergences"],
+        admitted_unit_refs=state["admitted_unit_refs"],
         excluded_documents=eff_excluded,
         domain_profile_fingerprint=eff_profile_fp,
+        reread_provenance=reread_prov,
     )
 
 

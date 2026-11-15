@@ -1759,6 +1759,7 @@ def evaluate_securitization_candidate(
         and (corpus_register.has_material_conflicts or corpus_register.has_authority_overrides)
     )
     excluded_docs = list(corpus_register.excluded_documents) if corpus_register is not None else []
+    reread_prov = dict(corpus_register.reread_provenance) if corpus_register is not None and getattr(corpus_register, "reread_provenance", None) else {}
     profile_fp = (
         corpus_register.domain_profile_fingerprint
         if corpus_register is not None and corpus_register.domain_profile_fingerprint
@@ -1780,6 +1781,7 @@ def evaluate_securitization_candidate(
     receipt_payload["corpus_obligation_ids"] = list(ob_ids)
     receipt_payload["excluded_documents"] = excluded_docs
     receipt_payload["domain_profile_fingerprint"] = profile_fp
+    receipt_payload["reread_provenance"] = reread_prov
     receipt_payload["corpus_coverage_digest"] = hashlib.sha256(
         json.dumps(
             {
@@ -1793,6 +1795,7 @@ def evaluate_securitization_candidate(
                 "corpus_obligation_ids": list(ob_ids),
                 "excluded_documents": excluded_docs,
                 "domain_profile_fingerprint": profile_fp,
+                "reread_provenance": reread_prov,
             },
             sort_keys=True,
         ).encode("utf-8")
@@ -1814,6 +1817,7 @@ def evaluate_securitization_candidate(
             "corpus_obligation_ids": list(ob_ids),
             "excluded_documents": excluded_docs,
             "domain_profile_fingerprint": profile_fp,
+            "reread_provenance": reread_prov,
             "receipt": receipt_payload,
         }
     elif has_material_discrepancies:
@@ -1830,6 +1834,7 @@ def evaluate_securitization_candidate(
             "corpus_obligation_ids": list(ob_ids),
             "excluded_documents": excluded_docs,
             "domain_profile_fingerprint": profile_fp,
+            "reread_provenance": reread_prov,
             "receipt": receipt_payload,
         }
     else:
@@ -1846,6 +1851,7 @@ def evaluate_securitization_candidate(
             "corpus_obligation_ids": list(ob_ids),
             "excluded_documents": excluded_docs,
             "domain_profile_fingerprint": profile_fp,
+            "reread_provenance": reread_prov,
             "receipt": receipt_payload,
         }
 
@@ -1859,6 +1865,7 @@ def evaluate_securitization_candidate(
         "corpus_obligations_covered": covered_obs,
         "corpus_obligations_rejected": rejected_obs,
         "corpus_obligation_ids": list(ob_ids),
+        "reread_provenance": reread_prov,
     }
     verifier_ms = (time.perf_counter() - t0) * 1000.0
 

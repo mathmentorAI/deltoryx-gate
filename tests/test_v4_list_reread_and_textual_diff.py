@@ -25,16 +25,26 @@ from claimlayer.v4 import (  # noqa: E402
     EXPLICIT,
     FieldEvidence,
     FieldSpec,
+    LLMProposalReader,
     PredicateSpec,
+    REREAD_PROMPT,
+    REREAD_PROMPT_VERSION,
+    RecordedProposalReader,
     STRICT_READER_PROMPT,
     SECURITIZATION_VOCABULARY,
+    TargetedRereadConfig,
     Vocabulary,
     build_corpus_reference_register,
     collect_reference_divergences,
     evaluate_unit_admissibility,
     verify_extraction_fidelity,
 )
-from claimlayer.v4.domains.securitization import SECURITIZATION_DOMAIN_PROFILE  # noqa: E402
+from claimlayer.v4.corpus_obligations import verify_corpus_obligations_coverage  # noqa: E402
+from claimlayer.v4.domains.securitization import (  # noqa: E402
+    SECURITIZATION_ACCEPTANCE_POLICY,
+    SECURITIZATION_DOMAIN_PROFILE,
+)
+from claimlayer.v4.justification import ClaimNode, JustificationGraph  # noqa: E402
 from claimlayer.v4.reader import _bind_raw_proposals, _build_document_fragments  # noqa: E402
 from claimlayer.v4.vocabulary import value_relation  # noqa: E402
 from harness2_v4_pipeline import LoadedDocument  # noqa: E402
@@ -44,7 +54,7 @@ def _make_doc(doc_id: str, text: str, *, rank: int = 100) -> SourceDocument:
     return SourceDocument(
         document_id=doc_id,
         text=text,
-        attribution="authoritative" if rank >= 90 else "standard",
+        attribution="controlling_instrument" if rank >= 90 else "source_statement",
         authority_rank=rank,
     )
 
@@ -215,7 +225,7 @@ def test_list_predicate_bind_and_covers_n_waterfall_steps_without_step_gaps():
 
     layer = EvidenceLayer(
         vocabulary=vocab,
-        policy=AcceptancePolicy(allowed_source_attributions=("authoritative", "standard")),
+        policy=SECURITIZATION_ACCEPTANCE_POLICY,
     )
     layer.ingest([master, draft])
     layer.ingest_units(
@@ -290,3 +300,216 @@ def test_list_predicate_bind_and_covers_n_waterfall_steps_without_step_gaps():
     assert reg.has_authority_overrides is True
     # Every step number is inside verified list item spans -> 0 quantity step gaps!
     assert [g for g in reg.gap_divergences if g.get("kind") == "quantity"] == []
+
+
+class _StubTargetedModel:
+    """Deterministic stub OpenAICompatibleModel supporting targeted re-read tests."""
+
+    def __init__(self, handler):
+        self.handler = handler
+        self.calls: list[tuple[str, Any]] = []
+
+    @property
+    def identity(self) -> dict[str, Any]:
+        return {"provider": "stub", "model": "stub-reread-model"}
+
+    def complete(self, system_prompt: str, payload: Any) -> dict[str, Any]:
+        self.calls.append((system_prompt, payload))
+        return {"output": {"proposals": self.handler(system_prompt, payload)}}
+
+
+def test_targeted_reread_closes_gap_blind_with_fidelity_and_budget_and_provenance():
+    master_text = (
+        "Section 2.04 Rates: Tranche B carries 5.80% per annum.\n"
+        "Section 5.01 Distribution Sequence: Step 1 Trustee Fee; Step 2 Reserve Deposit; Step 3 Class B Principal."
+    )
+    draft_text = (
+        "Section 2.04 Rates: Tranche B carries 5.55% per annum.\n"
+        "Section 5.01 Distribution Sequence: Step 1 Trustee Fee; Step 2 Class B Principal; Step 3 Reserve Deposit."
+    )
+    master = _make_doc("indenture.docx", master_text, rank=100)
+    draft = _make_doc("memorandum.docx", draft_text, rank=60)
+    docs_loaded = {
+        "indenture.docx": LoadedDocument(
+            doc_key="D1",
+            filename="indenture.docx",
+            role="governing_operative_agreement",
+            authority_tier="authoritative",
+            authority_rank=100,
+            governs_on_conflict=True,
+            text=master_text,
+            start_line=1,
+            sections=(),
+        ),
+        "memorandum.docx": LoadedDocument(
+            doc_key="D2",
+            filename="memorandum.docx",
+            role="disclosure_document",
+            authority_tier="standard",
+            authority_rank=60,
+            governs_on_conflict=False,
+            text=draft_text,
+            start_line=1,
+            sections=(),
+        ),
+    }
+
+    # Initial reader captures Tranche B rates ONLY -> leaves Step 1/2/3 waterfall gaps!
+    def _handler(sys_prompt: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        if "target_sentence" not in payload:
+            # First pass: ONLY return coupon_rate
+            ev_id = payload["fragments"][0]["evidence_id"]
+            frag = payload["fragments"][0]["text"]
+            rate = "5.80%" if "5.80%" in frag else "5.55%"
+            val = 5.80 if "5.80%" in frag else 5.55
+            return [{
+                "entity": "Tranche B",
+                "predicate": "coupon_rate",
+                "value": val,
+                "unit": "percent",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+                "basis": "explicit",
+                "evidence": [ev_id],
+                "quote": f"Tranche B carries {rate} per annum.",
+                "field_evidence": {"entity": "Tranche B", "value": f"{rate} per annum"},
+            }]
+        # Second targeted read: MUST NOT contain any response/graph keys
+        assert "candidate_response" not in payload
+        assert "response" not in payload
+        assert "graph" not in payload
+        assert payload["target_sentence"]
+        assert payload["target_tokens"]
+        ev_id = payload["fragments"][0]["evidence_id"]
+        did = payload["document_id"]
+        if did == "indenture.docx":
+            items = [
+                {"step": "1", "beneficiary": "Trustee Fee"},
+                {"step": "2", "beneficiary": "Reserve Deposit"},
+                {"step": "3", "beneficiary": "Class B Principal"},
+            ]
+            quotes = ["Step 1 Trustee Fee", "Step 2 Reserve Deposit", "Step 3 Class B Principal"]
+        else:
+            items = [
+                {"step": "1", "beneficiary": "Trustee Fee"},
+                {"step": "2", "beneficiary": "Class B Principal"},
+                {"step": "3", "beneficiary": "Reserve Deposit"},
+            ]
+            quotes = ["Step 1 Trustee Fee", "Step 2 Class B Principal", "Step 3 Reserve Deposit"]
+        return [{
+            "entity": "Distribution Sequence",
+            "predicate": "waterfall_schedule",
+            "value": items,
+            "assertion_kind": "requirement",
+            "condition_status": "unconditional",
+            "basis": "explicit",
+            "evidence": [ev_id],
+            "quote": payload["target_sentence"],
+            "field_evidence": {"entity": "Distribution Sequence", "items": quotes},
+        }]
+
+    model = _StubTargetedModel(_handler)
+    reader = LLMProposalReader(
+        model=model,
+        prompt=STRICT_READER_PROMPT,
+        prompt_version="v4-proposals-4",
+        reread_prompt=REREAD_PROMPT,
+        reread_prompt_version=REREAD_PROMPT_VERSION,
+        structural_reliability=0.95,
+    )
+    layer = EvidenceLayer(vocabulary=SECURITIZATION_VOCABULARY, policy=SECURITIZATION_ACCEPTANCE_POLICY, reader=reader)
+    layer.ingest([master, draft])
+    divs = collect_reference_divergences(docs_loaded, SECURITIZATION_DOMAIN_PROFILE)
+
+    # First verify gaps exist when reread is disabled
+    reg_no_rr = build_corpus_reference_register(
+        layer,
+        SECURITIZATION_VOCABULARY,
+        divergence_collection=divs,
+        expected_documents={"indenture.docx": master, "memorandum.docx": draft},
+        reread_config=TargetedRereadConfig(enabled=False),
+    )
+    assert len(reg_no_rr.gap_divergences) >= 2
+    assert reg_no_rr.reread_provenance["performed"] is False
+
+    # Now enable targeted re-reading
+    reg_rr = build_corpus_reference_register(
+        layer,
+        SECURITIZATION_VOCABULARY,
+        divergence_collection=divs,
+        expected_documents={"indenture.docx": master, "memorandum.docx": draft},
+        reread_config=TargetedRereadConfig(enabled=True, max_attempts_per_document=3),
+    )
+    assert reg_rr.reread_provenance["performed"] is True
+    assert reg_rr.reread_provenance["closed_gap_count"] >= 2
+    assert reg_rr.reread_provenance["open_gap_count"] == 0
+    assert reg_rr.reread_provenance["reader"]["prompt_version"] == REREAD_PROMPT_VERSION
+    assert reg_rr.gap_divergences == ()
+
+
+def test_targeted_reread_unclosed_or_unfaithful_or_budget_exceeded_still_escalates():
+    master_text = "Clause 1: Minimum reserve $10,000,000.\nClause 2: Delinquency cap 4.50%."
+    draft_text = "Clause 1: Minimum reserve $12,000,000.\nClause 2: Delinquency cap 5.25%."
+    master = _make_doc("indenture.docx", master_text, rank=100)
+    draft = _make_doc("memorandum.docx", draft_text, rank=60)
+    docs_loaded = {
+        "indenture.docx": LoadedDocument("D1", "indenture.docx", "governing_operative_agreement", "authoritative", 100, True, master_text, 1, ()),
+        "memorandum.docx": LoadedDocument("D2", "memorandum.docx", "disclosure_document", "standard", 60, False, draft_text, 1, ()),
+    }
+
+    # Re-reader returns a hallucinated wrong figure (fails fidelity -> rejected!) on Clause 2
+    def _bad_reread_handler(sys_prompt: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        ev_id = payload["fragments"][0]["evidence_id"]
+        if "target_sentence" not in payload:
+            # First pass covers Clause 1 reserve only
+            amt = 10000000 if "$10,000,000" in payload["fragments"][0]["text"] else 12000000
+            raw_amt = "$10,000,000" if amt == 10000000 else "$12,000,000"
+            return [{
+                "entity": "Minimum reserve",
+                "predicate": "note_principal",
+                "value": amt,
+                "unit": "USD",
+                "assertion_kind": "requirement",
+                "condition_status": "unconditional",
+                "basis": "explicit",
+                "evidence": [ev_id],
+                "quote": f"Minimum reserve {raw_amt}.",
+                "field_evidence": {"entity": "Minimum reserve", "value": raw_amt},
+            }]
+        # Bad value 9.99% NOT present in doc -> fidelity must reject!
+        return [{
+            "entity": "Delinquency cap",
+            "predicate": "delinquency_trigger",
+            "value": 9.99,
+            "unit": "percent",
+            "assertion_kind": "requirement",
+            "condition_status": "unconditional",
+            "basis": "explicit",
+            "evidence": [ev_id],
+            "quote": payload["target_sentence"],
+            "field_evidence": {"entity": "Delinquency cap", "value": "9.99%"},
+        }]
+
+    model = _StubTargetedModel(_bad_reread_handler)
+    reader = LLMProposalReader(model=model, prompt=STRICT_READER_PROMPT, structural_reliability=0.95)
+    layer = EvidenceLayer(vocabulary=SECURITIZATION_VOCABULARY, policy=SECURITIZATION_ACCEPTANCE_POLICY, reader=reader)
+    layer.ingest([master, draft])
+    divs = collect_reference_divergences(docs_loaded, SECURITIZATION_DOMAIN_PROFILE)
+
+    # Budget max_attempts_per_document=1 restricts attempts per doc, AND hallucinated proposal is rejected!
+    reg = build_corpus_reference_register(
+        layer,
+        SECURITIZATION_VOCABULARY,
+        divergence_collection=divs,
+        expected_documents={"indenture.docx": master, "memorandum.docx": draft},
+        reread_config=TargetedRereadConfig(enabled=True, max_attempts_per_document=1),
+    )
+    assert reg.reread_provenance["performed"] is True
+    assert reg.reread_provenance["closed_gap_count"] == 0
+    assert reg.reread_provenance["open_gap_count"] >= 2
+    assert any(a["proposals_rejected"] >= 1 for a in reg.reread_provenance["attempts"])
+
+    # Unclosed gaps MUST still emit REFERENCE_REGISTER_GAP -> ESCALATE
+    dummy_graph = JustificationGraph(claims={}, steps=[], conclusion_id="")
+    cov = verify_corpus_obligations_coverage(reg, dummy_graph, candidate_response="Minimum reserve is $10,000,000 per indenture.docx.")
+    assert any(i["code"] == "REFERENCE_REGISTER_GAP" and not i["repairable"] for i in cov.issues)

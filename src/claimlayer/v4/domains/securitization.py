@@ -665,6 +665,7 @@ SECURITIZATION_VOCABULARY = Vocabulary(
                 "flow of funds",
                 "available funds distribute",
                 "order of priority",
+                "distribution sequence",
             ),
             description="Ordered waterfall distribution schedule across payment steps.",
         ),

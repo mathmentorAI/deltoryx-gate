@@ -775,6 +775,99 @@ class EvidenceLayer:
                 summary['unit_ids'].append(unit_id)
         return summary
 
+    def admit_reread_items(
+        self,
+        items: Iterable[Mapping[str, Any]],
+        *,
+        producer: Mapping[str, Any],
+        structural_reliability: float | None = None,
+    ) -> dict[str, Any]:
+        """Validate and admit targeted re-read items under full schema, evidence, and fidelity checks."""
+        summary: dict[str, Any] = {
+            'units_admitted': 0,
+            'proposals_rejected': 0,
+            'rejection_reasons': {},
+            'unit_ids': [],
+        }
+        docs_map = {d.document_id: d for d in self.documents}
+        with self.store.transaction(mode='IMMEDIATE'):
+            for item in items:
+                proposal = item.get('proposal')
+                basis = item.get('basis', EXPLICIT)
+                evidence = [asdict(r) if isinstance(r, EvidenceRef) else r for r in item.get('evidence', ())]
+                try:
+                    if type(proposal) is not dict:
+                        raise UnmappedProposal('proposal_object_required', '', proposal)
+                    proposition = self.vocabulary.proposition(proposal)
+                    if not self.profile.admissible(basis):
+                        raise UnmappedProposal(
+                            'basis_blocked' if basis in self.profile.blocked else 'unknown_basis',
+                            'basis',
+                            basis,
+                        )
+                    refs = tuple(EvidenceRef(**r) for r in (evidence or ()))
+                    self._refs_valid(refs)
+                    unit = EvidenceUnit(
+                        proposition,
+                        refs,
+                        basis,
+                        'reader',
+                        dict(producer),
+                        structural_reliability,
+                        proposal=json.loads(canonical(proposal)),
+                    )
+                    fe_list: list[FieldEvidence] = []
+                    raw_fe = item.get('field_evidence')
+                    if isinstance(raw_fe, Mapping):
+                        for fname, ref in raw_fe.items():
+                            r_obj = ref if isinstance(ref, EvidenceRef) else EvidenceRef(**ref)
+                            fe_list.append(FieldEvidence(str(fname), r_obj))
+                except UnmappedProposal as exc:
+                    self._reject(proposal, basis, dict(producer), exc.as_dict(), summary)
+                    continue
+                except (ValueError, TypeError, KeyError) as exc:
+                    self._reject(
+                        proposal,
+                        basis,
+                        dict(producer),
+                        {'reason': 'evidence_binding', 'path': 'evidence', 'detail': str(exc)},
+                        summary,
+                    )
+                    continue
+
+                ev_res = evaluate_unit_admissibility(
+                    unit,
+                    vocabulary=self.vocabulary,
+                    policy=self.policy,
+                    profile=self.profile,
+                    documents=docs_map,
+                    field_evidences={unit.unit_id: fe_list} if fe_list else None,
+                    condition_mode='report',
+                    skip_fidelity=False,
+                )
+                if not ev_res.admissible:
+                    self._reject(
+                        proposal,
+                        basis,
+                        dict(producer),
+                        {
+                            'reason': ev_res.reason or 'reread_inadmissible',
+                            'issue_code': ev_res.issue_code,
+                            'message': ev_res.issue_message,
+                        },
+                        summary,
+                    )
+                    continue
+
+                _, existing = self.store.head('unit', unit.unit_id)
+                if existing is None or canonical(existing) != canonical(unit.record()):
+                    self.store.put('unit', unit.unit_id, unit.record(), head=unit.unit_id)
+                    summary['units_admitted'] += 1
+                if fe_list:
+                    self._store_field_evidence(unit.unit_id, {fe.field: fe.evidence for fe in fe_list})
+                summary['unit_ids'].append(unit.unit_id)
+        return summary
+
     def _reject(self, proposal, basis, producer, error, summary):
         hint = {}
         if isinstance(proposal, dict):

@@ -33,6 +33,7 @@ from .correspondence import (
 from .corpus_obligations import (
     CorpusReferenceRegister,
     ReferenceDivergenceCollection,
+    TargetedRereadConfig,
     build_corpus_reference_register,
     collect_reference_divergences,
 )
@@ -91,7 +92,16 @@ from .justification import (
 )
 from .models import AcceptancePolicy, EvidenceUnit
 from .paths import TransitiveRule
-from .reader import LLMProposalReader, ProposalReader, READER_PROMPT, RecordedProposalReader, STRICT_READER_PROMPT
+from .reader import (
+    LLMProposalReader,
+    ProposalReader,
+    READER_PROMPT,
+    REREAD_PROMPT,
+    REREAD_PROMPT_VERSION,
+    RecordedProposalReader,
+    STRICT_PROMPT_VERSION,
+    STRICT_READER_PROMPT,
+)
 from .repair import (
     LLMGraphProposalAdapter,
     LLMRepairAgent,
@@ -134,7 +144,7 @@ __all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'UnitEvaluation', 'evaluate_unit_a
            'Vocabulary', 'PredicateSpec', 'FieldSpec', 'Unit', 'UnitRegistry',
            'STANDARD_UNITS', 'CONDITION_STATUSES', 'UnmappedProposal', 'EpistemicProfile', 'DEFAULT_PROFILE', 'EXPLICIT',
            'AcceptancePolicy', 'EvidenceUnit', 'TransitiveRule', 'LLMProposalReader', 'ProposalReader', 'RecordedProposalReader',
-           'READER_PROMPT', 'STRICT_READER_PROMPT', 'SourceDocument', 'EvidenceRef', 'StructuredQuery', 'OpenAICompatibleModel',
+           'READER_PROMPT', 'STRICT_READER_PROMPT', 'STRICT_PROMPT_VERSION', 'REREAD_PROMPT', 'REREAD_PROMPT_VERSION', 'SourceDocument', 'EvidenceRef', 'StructuredQuery', 'OpenAICompatibleModel',
            'TIER_PRIMARY', 'TIER_ANNEX', 'TIER_EXTERNAL', 'propose_vocabulary', 'build_vocabulary', 'with_entities',
            'verify_draft', 'triage', 'segment_text', 'LANES', 'draft_vocabulary',
            'AuthorizationIssue', 'AuthorizationVerdict', 'ClauseRelation', 'authorize', 'authorize_operation',
@@ -161,5 +171,5 @@ __all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'UnitEvaluation', 'evaluate_unit_a
            'RepairCycleResult', 'RepairOrchestrator', 'RequiredRepair', 'ReviewIssue',
            'ReviewResult', 'RuleGuidedRepairAdapter', 'ScriptedRepairAgent',
            'review_response', 'verify_review_freshness',
-           'CorpusReferenceRegister', 'ReferenceDivergenceCollection',
+           'CorpusReferenceRegister', 'ReferenceDivergenceCollection', 'TargetedRereadConfig',
            'build_corpus_reference_register', 'collect_reference_divergences']

@@ -1496,10 +1496,13 @@ class RepairOrchestrator:
                 new_disp = "RETRY" if iteration < self.budget.max_iterations else "ESCALATE"
                 review = ReviewResult(
                     disposition=new_disp,
+                    question=review.question,
+                    candidate_response=review.candidate_response,
                     summary=f"Corpus obligation(s) dropped in repair attempt {iteration}: {dropped_corpus}.",
                     assessment=review.assessment,
                     issues=tuple(review.issues) + (dropped_issue,),
                     required_repairs=tuple(review.required_repairs) + (dropped_repair,),
+                    unresolved_obligations=review.unresolved_obligations,
                     verified_elements=review.verified_elements,
                     operational_authorization=review.operational_authorization,
                     response_digest=review.response_digest,

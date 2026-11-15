@@ -1,0 +1,130 @@
+{
+  "case_id": "banking_finance_ridgeline",
+  "dataset_role": "known_historical_benchmark_case",
+  "evaluator_only": true,
+  "governing_baseline_documents": [
+    "original-term-sheet.docx (D3, Rank 90)",
+    "negotiation-playbook.docx (D2, Rank 95)",
+    "ridgeline-financial-summary.xlsx (D5, Rank 100)"
+  ],
+  "counterparty_markup_document": "lender-markup-term-sheet.docx (D1, Rank 60)",
+  "client_instructions_document": "partner-instructions-email.eml (D4, Rank 70)",
+  "discrepancies": [
+    {
+      "id": "BF-1-EXTENSION-OPTIONS",
+      "category": "tenor_and_extension",
+      "title": "Deletion of Two 1-Year Extension Options",
+      "original_term": "Initial Maturity Jan 15, 2030 plus two (2) 1-year Extension Options (to Jan 15, 2032) with 0.10% fee and 60-120 days notice (D3)",
+      "markup_term": "Fixed Jan 15, 2030 maturity; Extension Options deleted (D1 L71-L73)",
+      "playbook_rating": "Yellow / Negotiate",
+      "client_priority": "Medium-High",
+      "error_types": ["omission", "condition_or_assumption"]
+    },
+    {
+      "id": "BF-2-SOFR-FLOOR",
+      "category": "rate_and_spread",
+      "title": "SOFR Floor Increase (0.00% to 0.75% / 75 bps)",
+      "original_term": "0.00% SOFR Floor (D3 L929)",
+      "markup_term": "0.75% per annum (75 bps) SOFR Floor (D1 L81-L83)",
+      "playbook_rating": "Hard No (>0.50% floor; D2 L746) / Red",
+      "quantitative_impact": "Not binding in Trask base projections (lowest projected SOFR 3.25% in FY2026-27), but adds $375,000/yr per $150M stress balance (+25 bps binding spread) if SOFR drops to 0.50% (D5 L1827-L1835)",
+      "error_types": ["value", "unit", "condition_or_assumption"]
+    },
+    {
+      "id": "BF-3-MARGIN-GRID-AND-RATCHET",
+      "category": "rate_and_spread",
+      "title": "Applicable Margin Grid (+25 bps Across All Tiers) and Asymmetric Downward Reset",
+      "original_term": "200-300 bps Term SOFR grid; upward OR downward reset within 3 business days after Compliance Certificate (D3 L936-L947)",
+      "markup_term": "225-325 bps (+25 bps / 0.25 pp every tier); upward within 5 Business Days, downward ONLY once per year on first Business Day of next fiscal year (D1 L92-L107)",
+      "playbook_rating": "Hard No (annual-only downward reset; margin > +25 bps without concession; D2 L748-L750) / Red",
+      "quantitative_impact": "Annual interest cost differential from +25 bps grid shift in Trask projections: $401K (FY2025E), $374K (FY2026E), $338K (FY2027E), $281K (FY2028E) = $1,394K cumulative over 4 years (D5 L1776-L1778)",
+      "error_types": ["value", "unit", "condition_or_assumption"]
+    },
+    {
+      "id": "BF-4-COMMITMENT-FEE",
+      "category": "fee_structure",
+      "title": "Commitment Fee Moved from Flat 0.30% to Leverage Grid (0.30%-0.50%)",
+      "original_term": "Flat 0.30% (30 bps) per annum on unused Revolver Commitments (D3 L957)",
+      "markup_term": "Grid: 0.30% (<=2.50x), 0.40% (>2.50x to <=3.25x), 0.50% (>3.25x) (D1 L113-L124)",
+      "playbook_rating": "Yellow / Acceptable Fallback with tier adjustment",
+      "quantitative_impact": "$14K differential in FY2025E ($58K vs $44K at 2.804x leverage); $95K annual sensitivity diff at $95M unused / 2.8x leverage (0.40%=$380K vs 0.30%=$285K); $190K at >3.25x (0.50%=$475K) (D5 L1779-L1781, L1868-L1878)",
+      "error_types": ["value", "unit"]
+    },
+    {
+      "id": "BF-5-LEVERAGE-COVENANT",
+      "category": "financial_covenants",
+      "title": "Accelerated Maximum Total Leverage Ratio Step-Downs",
+      "original_term": "3.75x through FY2026; 3.50x through FY2027; 3.25x FY2028+ (D3 L1012-L1016)",
+      "markup_term": "3.75x through FY2025; 3.50x in FY2026; 3.25x in FY2027; 3.00x FY2028+ (1-year acceleration + extra 3.00x step; D1 L271-L277)",
+      "playbook_rating": "Hard No (new terminal 3.00x step + accelerated step-down; D2 L752) / Red",
+      "error_types": ["value", "condition_or_assumption"]
+    },
+    {
+      "id": "BF-6-FCCR-COVENANT",
+      "category": "financial_covenants",
+      "title": "Minimum Fixed Charge Coverage Ratio Tightened to 1.35x (Causes FY2025E Breach)",
+      "original_term": "1.25x Minimum FCCR (D3 L1023)",
+      "markup_term": "1.35x Minimum FCCR (D1 L283)",
+      "playbook_rating": "Hard No (>1.35x; D2 L754) / Red (at 1.35x boundary; D5 L1787-L1789 records FY2025E FCCR Headroom to 1.35x Markup Covenant as ($1,664K) deficit, with projected FCCR of 1.377x excluding distributions)",
+      "error_types": ["value", "condition_or_assumption"]
+    },
+    {
+      "id": "BF-7-EBITDA-ADD-BACKS",
+      "category": "ebitda_definition",
+      "title": "EBITDA Add-Back Tightening (Non-Recurring $5M/$15M-> $3M/$9M & Synergies 15%/18mo -> 10%/12mo)",
+      "original_term": "Non-recurring cap $5M/yr ($15M term); Synergy cap 15% of Pro Forma EBITDA, 18-month realization (D3 L989-L993)",
+      "markup_term": "Non-recurring cap $3M/yr ($9M term); Synergy cap 10% of Pro Forma EBITDA, 12-month realization (D1 L307-L315)",
+      "playbook_rating": "Hard No (<$3.5M/yr or <$10M term non-recurring; 10%/12mo synergy at boundary; D2 L756-L758) / Red",
+      "quantitative_impact": "FY2026 $20M acquisition synergy cap drops from $11,265K (15% of $75.1M PF EBITDA) to $7,510K (10% of $75.1M PF EBITDA) (D5 L1845-L1846)",
+      "error_types": ["value", "unit", "condition_or_assumption"]
+    },
+    {
+      "id": "BF-8-PERMITTED-ACQUISITIONS",
+      "category": "acquisition_flexibility",
+      "title": "Permitted Acquisitions Basket Cuts ($25M/$60M -> $15M/$40M) & 0.25x Pro Forma Covenant Cushion",
+      "original_term": "$25M per deal / $60M annual aggregate; 0.00x pro forma covenant cushion (D3 L1039-L1044)",
+      "markup_term": "$15M per deal / $40M annual aggregate + 0.25x pro forma covenant cushion (e.g., 3.25x vs 3.50x Leverage; 1.60x vs 1.35x FCCR) + 15 Business Days prior notice (D1 L327-L337)",
+      "playbook_rating": "Hard No (0.25x pro forma cushion >=0.25x; annual $40M/indiv $15M at/below Hard No; D2 L760-L764) / Red (#1 Client Priority per D4)",
+      "quantitative_impact": "Original FY2026 $20M acquisition fails $15M individual cap in Markup; PF leverage 2.503x passes 3.00x cushion check but $18M-$20M Timberline tuck-in strategy is blocked by the $15M cap (D5 L1726, L1838-L1844)",
+      "error_types": ["value", "condition_or_assumption"]
+    },
+    {
+      "id": "BF-9-RESTRICTED-PAYMENTS",
+      "category": "distribution_capacity",
+      "title": "Restricted Payments Tightened (PF Leverage 3.00x -> 2.50x + $8M Hard Cap Blocks FY2025 Distribution)",
+      "original_term": "PF Leverage <= 3.00x, 50% of ECF, NO hard dollar cap (D3 L1063-L1067)",
+      "markup_term": "PF Leverage <= 2.50x AND lesser of 50% ECF or $8,000,000 hard dollar cap (D1 L347-L349)",
+      "playbook_rating": "Hard No (<2.50x or <$10M cap; both triggered; D2 L766-L768) / Red (#2 Client Priority per D4)",
+      "quantitative_impact": "In FY2025E, leverage is 2.804x (>2.50x), completely blocking the $6,000K projected distribution under Markup ($6,000K shortfall vs Permitted under Original 3.00x test) (D5 L1851-L1856)",
+      "error_types": ["value", "condition_or_assumption"]
+    },
+    {
+      "id": "BF-10-MFN-CLAUSE",
+      "category": "unusual_revolver_terms",
+      "title": "Broad 50 bps MFN Clause Added to Senior Revolving Facility",
+      "original_term": "No MFN clause (D3)",
+      "markup_term": "Broad 50 bps MFN covering any other credit facility/term loan/revolver (D1 L371-L373)",
+      "playbook_rating": "Hard No (broad MFN covering non-pari/sub debt or <75 bps cushion; off-market TLB import per D4; D2 L776) / Red",
+      "error_types": ["omission", "value"]
+    },
+    {
+      "id": "BF-11-ECF-SWEEP",
+      "category": "mandatory_prepayments",
+      "title": "Excess Cash Flow Sweep Made Flat 50% Without Step-Downs (Revolver Off-Market)",
+      "original_term": "Step-down schedule: 50% (>3.00x), 25% (>2.50x-3.00x), 0% (<=2.50x) (D3 L1133-L1137)",
+      "markup_term": "Flat 50% ECF sweep every year with all step-downs removed (D1 L397-L401)",
+      "playbook_rating": "Hard No (flat sweep without step-downs; D2 L778) / Red",
+      "quantitative_impact": "Applies 50% flat sweep ($11,600K shown in Base/FY24 sensitivity column vs $0 Original) and raises FY2026E sweep from $5,050K (25%) to $10,100K (50%), creating +$5,050K cumulative incremental sweep across FY2025E-FY2028E (D5 L1861-L1866)",
+      "error_types": ["value", "condition_or_assumption"]
+    },
+    {
+      "id": "BF-12-QUIET-DEFINITIONS-AND-DEFAULTS",
+      "category": "quiet_changes_and_defaults",
+      "title": "Quiet Tightening: CoC (35%->51% + Key Person), Cross-Default ($5M->$1M), Asset Sale Reinvestment (365->180 days), MAE Qualifiers Removed",
+      "original_term": "CoC 35% (no CEO/CFO trigger, D3 L1265); Cross-Default $5M (D3 L1257); Judgment $5M (D3 L1261); Reinvestment 365 days (D3 L1127); MAE includes 'taken as a whole' & 'material' (D3 L1195)",
+      "markup_term": "CoC 51% + Marcus Ellison/Sandra Kovac key-person trigger (D1 L419); Cross-Default $1M (D1 L393); Reinvestment 180 days (D1 L387); MAE deletes 'material' and 'taken as a whole' (D1 L235)",
+      "playbook_rating": "Hard No (CoC >45% threshold, Cross-Default <$2.5M, MAE removal of 'taken as a whole'/'material'; D2 L770-L782) / Red",
+      "error_types": ["value", "unit", "omission"]
+    }
+  ]
+}

@@ -65,10 +65,13 @@ DEFAULT_OPERATION_FAMILIES: dict[str, tuple[str, ...]] = {
     "add": ("arithmetic", "quantities"),
     "sum": ("arithmetic", "quantities"),
     "sub": ("arithmetic", "quantities"),
+    "subtract": ("arithmetic", "quantities"),
     "diff": ("arithmetic", "quantities"),
     "mul": ("arithmetic", "quantities"),
+    "multiply": ("arithmetic", "quantities"),
     "prod": ("arithmetic", "quantities"),
     "div": ("arithmetic", "quantities"),
+    "divide": ("arithmetic", "quantities"),
     "ratio": ("arithmetic",),
     "pct": ("arithmetic",),
     "percentage_of": ("arithmetic",),
@@ -76,6 +79,10 @@ DEFAULT_OPERATION_FAMILIES: dict[str, tuple[str, ...]] = {
     "arithmetic": ("arithmetic", "quantities"),
     "compound": ("arithmetic",),
     "linear_combination": ("arithmetic", "quantities"),
+    "rate_spread_impact": ("arithmetic", "quantities"),
+    "annual_interest_diff": ("arithmetic", "quantities"),
+    "interest_impact": ("arithmetic", "quantities"),
+    "coupon_impact": ("arithmetic", "quantities"),
     "unit_conversion": ("quantities",),
     "quantities": ("quantities",),
     "temporal_age": ("temporal",),
@@ -785,6 +792,21 @@ _AGGREGATION_TEXT_RE = re.compile(
 _ISO_DATE_IN_TEXT_RE = re.compile(r"\b\d{4}-\d{2}(?:-\d{2})?\b")
 _YEAR_IN_TEXT_RE = re.compile(r"\b(?:1[5-9]\d{2}|20\d{2}|21\d{2})\b")
 _DURATION_COMPUTABLE_UNITS = frozenset({"year", "years", "año", "años", "month", "months", "mes", "meses"})
+_CURRENCY_UNITS_FOR_RATE = frozenset({
+    "usd", "eur", "gbp", "us dollars", "dollars", "euros", "pounds sterling", "$", "€", "£",
+    "usd_per_year", "eur_per_year", "usd/year", "eur/year",
+})
+_RATE_UNITS_FOR_DERIV = frozenset({
+    "percent", "%", "pct", "fraction", "percentage_point", "pp", "percentage points",
+    "basis_point", "bp", "bps", "basis points", "percent_per_annum", "% per annum", "% p.a.",
+    "percentage_points_per_annum", "basis_points_per_annum",
+})
+_FINANCIAL_RATE_OPS = frozenset({
+    "rate_spread_impact", "annual_interest_diff", "interest_impact", "coupon_impact",
+})
+_WATERFALL_OPS = frozenset({
+    "waterfall_order", "compare_waterfall", "waterfall_priority", "priority_of_payments",
+})
 
 
 def _is_date_string(value: Any) -> bool:
@@ -962,6 +984,54 @@ def infer_conclusion_semantic_domain(
                 if q_date:
                     inferred_temporal_params["reference_date"] = q_date
 
+    # Financial rate-product / interest-impact derivation discovery
+    is_financial_rate_derivation = False
+    _annual_or_spread_units = frozenset({
+        "percentage_point", "pp", "percentage points",
+        "basis_point", "bp", "bps", "basis points",
+        "percent_per_annum", "% per annum", "% p.a.", "percent per annum", "percent per year",
+        "percentage_points_per_annum", "basis_points_per_annum",
+        "usd_per_year", "eur_per_year", "usd/year", "eur/year",
+    })
+    for st in inc_steps:
+        op_norm = label_key(st.operation).replace(" ", "_")
+        if op_norm in _FINANCIAL_RATE_OPS or st.parameters.get("requires_financial_assumptions"):
+            is_financial_rate_derivation = True
+            break
+        if op_norm in {"mul", "prod", "pct", "percentage_of"}:
+            p_nodes = [graph.claims[pid] for pid in st.premises if pid in graph.claims]
+            has_curr = any(
+                (pn.unit and label_key(pn.unit) in _CURRENCY_UNITS_FOR_RATE)
+                for pn in p_nodes
+            )
+            has_principal_or_annual_rate = any(
+                label_key(pn.predicate).replace(" ", "_") in {
+                    "principal", "principal_amount", "notional", "note_principal",
+                    "coupon", "coupon_rate", "coupon_spread", "rate_spread", "interest_rate", "annual_interest_impact",
+                }
+                or (pn.unit and label_key(pn.unit) in _annual_or_spread_units)
+                for pn in p_nodes
+            )
+            has_annual_conc = bool(
+                (conc.unit and label_key(conc.unit) in _annual_or_spread_units)
+                or conc_pred_key in {"annual_interest_impact", "interest_impact", "annual_interest_diff"}
+            )
+            if has_curr and (has_principal_or_annual_rate or has_annual_conc):
+                is_financial_rate_derivation = True
+                break
+
+    # Waterfall payment-priority verification discovery
+    is_waterfall_priority = bool(
+        conc_pred_key in {"waterfall_priority", "payment_priority", "priority_of_payments"}
+        or any(
+            label_key(st.operation).replace(" ", "_") in _WATERFALL_OPS
+            or "waterfall_steps" in st.parameters
+            or "waterfall_steps_governing" in st.parameters
+            or "waterfall_steps_a" in st.parameters
+            for st in inc_steps
+        )
+    )
+
     discovered_domains: list[str] = []
     if is_age_or_duration:
         discovered_domains.append("age_and_duration")
@@ -971,6 +1041,10 @@ def infer_conclusion_semantic_domain(
         discovered_domains.append("aggregations")
     if has_conditions:
         discovered_domains.append("conditions_and_exceptions")
+    if is_financial_rate_derivation:
+        discovered_domains.append("financial_derivation_assumptions")
+    if is_waterfall_priority:
+        discovered_domains.append("waterfall_priority")
 
     # Register uncertainty if predicate is explicitly generic ("number", "value", etc.)
     # and domain could not be cleanly verified via Vocabulary FieldSpec
@@ -986,6 +1060,8 @@ def infer_conclusion_semantic_domain(
         "is_quantity": is_quantity,
         "is_aggregation": is_aggregation,
         "has_conditions": has_conditions,
+        "is_financial_rate_derivation": is_financial_rate_derivation,
+        "is_waterfall_priority": is_waterfall_priority,
         "temporal_params": inferred_temporal_params,
     }
 
@@ -1138,6 +1214,45 @@ def generate_mandatory_obligations(
                     "mandatory_check": "semantic_type_uncertainty",
                     "discovered_domains": list(sem["discovered_domains"]),
                 },
+                origin="engine_mandatory",
+            )
+        )
+
+    # 8. Financial rate-product / interest-impact derivations require explicit assumptions
+    if sem["is_financial_rate_derivation"]:
+        req_assumptions = (
+            "constant_principal",
+            "simple_annual_calculation",
+            "no_amortization_or_day_count_adjustments",
+            "illustrative_annual_impact_not_realized_cashflow_or_damages",
+        )
+        obligations.append(
+            VerificationObligation(
+                obligation_id="mandatory::financial_derivation_assumptions",
+                family="quantities",
+                description=(
+                    "Verify financial rate derivation preserves explicit assumptions "
+                    "(constant principal, simple annual calculation, illustrative cashflow) "
+                    "and does not claim automatic legal damages."
+                ),
+                critical=True,
+                parameters={
+                    "mandatory_check": "financial_derivation_assumptions",
+                    "required_assumptions": list(req_assumptions),
+                },
+                origin="engine_mandatory",
+            )
+        )
+
+    # 9. Structured waterfall payment priority & beneficiary order verification
+    if sem["is_waterfall_priority"]:
+        obligations.append(
+            VerificationObligation(
+                obligation_id="mandatory::waterfall_priority",
+                family="explicit_logic",
+                description="Verify payment waterfall priority order, beneficiary bindings, payment types, cycles, and regimes.",
+                critical=True,
+                parameters={"mandatory_check": "waterfall_priority"},
                 origin="engine_mandatory",
             )
         )

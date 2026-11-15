@@ -254,6 +254,10 @@ class ArithmeticVerifier:
         "ratio",
         "pct",
         "percentage_of",
+        "rate_spread_impact",
+        "annual_interest_diff",
+        "interest_impact",
+        "coupon_impact",
         "round",
         "linear_combination",
         "arithmetic",
@@ -387,24 +391,23 @@ class ArithmeticVerifier:
                 expected_base = sum(
                     (_to_decimal(c) or Decimal(0)) * v for c, v in zip(coeffs, converted_vals)
                 )
-        elif op in {"mul", "prod"}:
+        elif op in {"mul", "prod", "rate_spread_impact", "annual_interest_diff", "interest_impact", "coupon_impact"}:
             expected_base = Decimal(1)
             for v, _ in pairs:
                 assert v is not None
                 expected_base *= v
-            raw_dim_set = {d for d in dims if d is not None and d != "ratio"}
-            if len(raw_dim_set) == 1 and any(d == "ratio" for d in dims):
+            raw_dim_set = {d for d in dims if d is not None and not registry.is_rate_or_ratio_dimension(d)}
+            has_rate_dim = any(registry.is_rate_or_ratio_dimension(d) for d in dims)
+            if len(raw_dim_set) == 1 and has_rate_dim:
                 expected_dim = next(iter(raw_dim_set))
-                # If multiplying quantity by percent/fraction, apply unit factors properly.
+                # Multiply base quantity by unitless rate/spread factor (percent, pp, bps, fraction, p.a.).
                 expected_base = Decimal(1)
                 for (raw_v, raw_u), dim in zip(pairs, dims):
                     assert raw_v is not None
-                    if dim == "ratio" and raw_u:
-                        u_obj = registry.lookup(raw_u)
-                        if u_obj.name == "percent":
-                            expected_base *= raw_v / Decimal(100)
-                        else:
-                            expected_base *= raw_v * Decimal(u_obj.factor) / Decimal(100)
+                    if registry.is_rate_or_ratio_dimension(dim) and raw_u:
+                        factor_u = registry.rate_factor_to_unitless(raw_u)
+                        assert factor_u is not None
+                        expected_base *= raw_v * factor_u
                     else:
                         conv_v, _, _ = _convert_to_base_decimal(raw_v, raw_u, registry)
                         expected_base *= conv_v
@@ -464,12 +467,9 @@ class ArithmeticVerifier:
             expected_dim = base_dim
             if rate_u:
                 r_unit = registry.lookup(rate_u)
-                if r_unit.name == "fraction":
-                    rate_factor = rate_v
-                elif r_unit.dimension == "ratio":
-                    rate_factor = rate_v / Decimal(100)
-                elif r_unit.dimension == "ratio_difference":
-                    rate_factor = (rate_v * Decimal(r_unit.factor)) / Decimal(100)
+                factor_u = registry.rate_factor_to_unitless(rate_u)
+                if factor_u is not None:
+                    rate_factor = rate_v * factor_u
                 else:
                     return VerifierResult(
                         obligation_id=obligation.obligation_id,
@@ -503,7 +503,52 @@ class ArithmeticVerifier:
                 verifier_version=self.version,
             )
 
-        if expected_dim is not None and conc_dim is not None and expected_dim != conc_dim:
+        # Check percent vs percentage_point / basis_point confusion on rate differences
+        if op in {"sub", "diff"} and expected_dim in {"ratio", "annual_rate"}:
+            if (
+                params.get("require_spread_unit")
+                or label_key(context.conclusion.predicate).replace(" ", "_") in {"coupon_spread", "rate_spread"}
+            ) and conc_dim in {"ratio", "annual_rate"}:
+                return VerifierResult(
+                    obligation_id=obligation.obligation_id,
+                    step_id=context.step.step_id,
+                    family=self.family,
+                    status="refuted",
+                    guarantee_kind=self.guarantee_kind,
+                    evidence={"expected_dimension": f"{expected_dim}_difference", "conclusion_dimension": conc_dim},
+                    reasons=("PERCENT_VS_PERCENTAGE_POINT_CONFUSION",),
+                    verifier_id=self.verifier_id,
+                    verifier_version=self.version,
+                )
+            if len(converted_vals) == 2 and converted_vals[1] != 0:
+                rel_pct = abs((converted_vals[0] - converted_vals[1]) / converted_vals[1]) * Decimal(100)
+                abs_diff = abs(converted_vals[0] - converted_vals[1])
+                if abs(conc_base - rel_pct) <= Decimal("0.05") and abs(conc_base - abs_diff) > Decimal("0.05"):
+                    return VerifierResult(
+                        obligation_id=obligation.obligation_id,
+                        step_id=context.step.step_id,
+                        family=self.family,
+                        status="refuted",
+                        guarantee_kind=self.guarantee_kind,
+                        evidence={"proposed": str(conc_base), "relative_pct": str(rel_pct), "absolute_pp": str(abs_diff)},
+                        reasons=("PERCENT_VS_PERCENTAGE_POINT_CONFUSION",),
+                        verifier_id=self.verifier_id,
+                        verifier_version=self.version,
+                    )
+
+        allowed_conc_dims: set[str] = {expected_dim} if expected_dim is not None else set()
+        if op in {"sub", "diff"} and expected_dim in {"ratio", "annual_rate"}:
+            allowed_conc_dims.add(f"{expected_dim}_difference")
+        if (
+            op in {"mul", "prod", "pct", "percentage_of", "rate_spread_impact", "annual_interest_diff", "interest_impact", "coupon_impact"}
+            and expected_dim is not None
+            and expected_dim.startswith("currency:")
+            and (any(d in {"annual_rate", "annual_rate_difference"} for d in dims) or op in {"rate_spread_impact", "annual_interest_diff", "interest_impact", "coupon_impact"})
+        ):
+            curr_code = expected_dim.split(":", 1)[1]
+            allowed_conc_dims.add(f"currency_rate:{curr_code}/year")
+
+        if expected_dim is not None and conc_dim is not None and conc_dim not in allowed_conc_dims:
             return VerifierResult(
                 obligation_id=obligation.obligation_id,
                 step_id=context.step.step_id,
@@ -635,6 +680,8 @@ class QuantityVerifier:
 
         # For explicit conversion or same-dimension comparison/addition/aggregation checks
         op = context.step.operation.lower()
+        if params.get("mandatory_check") == "financial_derivation_assumptions":
+            return self._verify_financial_derivation_assumptions(obligation, context, params)
         is_mandatory_qty = params.get("mandatory_check") == "quantity_precision_and_units"
         temporal_age_mode = bool(params.get("temporal_age_mode", False))
         additive_or_conversion = {
@@ -694,7 +741,14 @@ class QuantityVerifier:
             )
 
         prem_dim = next(iter(p_dims), None)
-        if prem_dim is not None and conc_dim is not None and prem_dim != conc_dim:
+        valid_cross_dim_diff = (
+            op in {"sub", "diff"}
+            and (
+                (prem_dim == "ratio" and conc_dim == "ratio_difference")
+                or (prem_dim == "annual_rate" and conc_dim == "annual_rate_difference")
+            )
+        )
+        if prem_dim is not None and conc_dim is not None and prem_dim != conc_dim and not valid_cross_dim_diff:
             return VerifierResult(
                 obligation_id=obligation.obligation_id,
                 step_id=context.step.step_id,
@@ -753,6 +807,112 @@ class QuantityVerifier:
             guarantee_kind=self.guarantee_kind,
             evidence={"dimension": prem_dim or conc_dim},
             reasons=("UNIT_COMPATIBILITY_VERIFIED",),
+            verifier_id=self.verifier_id,
+            verifier_version=self.version,
+        )
+
+    def _verify_financial_derivation_assumptions(
+        self,
+        obligation: VerificationObligation,
+        context: VerifierContext,
+        params: Mapping[str, Any],
+    ) -> VerifierResult:
+        """Verify financial rate-product derivations preserve explicit assumptions & avoid unqualified damages claims."""
+        conc = context.conclusion
+        declared: list[str] = []
+        declared.extend(str(a).lower() for a in (context.step.assumptions or ()))
+        declared.extend(str(a).lower() for a in (conc.assumptions or ()))
+        if conc.text:
+            declared.append(conc.text.lower())
+        if isinstance(conc.metadata, Mapping) and conc.metadata.get("assumptions"):
+            meta_a = conc.metadata["assumptions"]
+            if isinstance(meta_a, (list, tuple, set)):
+                declared.extend(str(a).lower() for a in meta_a)
+            else:
+                declared.append(str(meta_a).lower())
+        raw_param_assumps = params.get("assumptions")
+        if isinstance(raw_param_assumps, (list, tuple, set)):
+            declared.extend(str(a).lower() for a in raw_param_assumps)
+        for cond in conc.conditions:
+            if isinstance(cond, Mapping):
+                declared.extend(str(v).lower() for v in cond.values())
+                declared.extend(str(k).lower() for k in cond.keys())
+        joined = " ".join(declared)
+
+        has_principal_assump = any(
+            k in joined for k in ("constant_principal", "constant_notional", "fixed_principal", "principal")
+        )
+        has_annual_or_simple_assump = any(
+            k in joined
+            for k in (
+                "simple_annual",
+                "annualized",
+                "illustrative",
+                "no_amortization",
+                "day_count",
+                "act/360",
+                "30/360",
+            )
+        )
+        if not (has_principal_assump and has_annual_or_simple_assump):
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="refuted",
+                guarantee_kind=self.guarantee_kind,
+                evidence={
+                    "declared_assumptions": declared,
+                    "missing_assumptions": [
+                        m
+                        for m, ok in (
+                            ("constant_principal", has_principal_assump),
+                            ("simple_annual_calculation_and_no_amortization_or_day_count_adjustments", has_annual_or_simple_assump),
+                        )
+                        if not ok
+                    ],
+                },
+                reasons=("OMITTED_DERIVATION_ASSUMPTIONS",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        corr = context.correspondence_facts or {}
+        if corr.get("unqualified_damages_claim"):
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="refuted",
+                guarantee_kind=self.guarantee_kind,
+                evidence={"declared_assumptions": declared, "unqualified_damages_claim": True},
+                reasons=("UNQUALIFIED_DAMAGES_OR_CASHFLOW_CLAIM",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        if corr.get("response_checked") and not corr.get("financial_assumptions_disclosed"):
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="refuted",
+                guarantee_kind=self.guarantee_kind,
+                evidence={"declared_assumptions": declared, "response_disclosed_assumptions": False},
+                reasons=("OMITTED_DERIVATION_ASSUMPTIONS",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        return VerifierResult(
+            obligation_id=obligation.obligation_id,
+            step_id=context.step.step_id,
+            family=self.family,
+            status="verified",
+            guarantee_kind=self.guarantee_kind,
+            evidence={"declared_assumptions": declared},
+            assumptions=tuple(dict.fromkeys(declared)),
+            reasons=("FINANCIAL_DERIVATION_ASSUMPTIONS_VERIFIED",),
             verifier_id=self.verifier_id,
             verifier_version=self.version,
         )
@@ -1762,6 +1922,11 @@ class ExplicitLogicVerifier:
         params = {**context.step.parameters, **obligation.parameters}
         if params.get("mandatory_check") == "condition_preservation":
             return self._verify_condition_preservation(obligation, context, params)
+        if (
+            params.get("mandatory_check") == "waterfall_priority"
+            or context.step.operation.lower() in {"waterfall_order", "compare_waterfall", "waterfall_priority", "priority_of_payments"}
+        ):
+            return self._verify_waterfall_priority(obligation, context, params)
         rule_id = context.step.rule_id or params.get("rule_id")
         rule_version = context.step.rule_version or params.get("rule_version")
         if not rule_id:
@@ -1964,6 +2129,111 @@ class ExplicitLogicVerifier:
             evidence={"preserved_conditions": len(req_conds)},
             assumptions=("conclusion_subject_to_preserved_conditions",),
             reasons=("CONDITIONS_PRESERVED_VERIFIED",),
+            verifier_id=self.verifier_id,
+            verifier_version=self.version,
+        )
+
+    def _verify_waterfall_priority(
+        self,
+        obligation: VerificationObligation,
+        context: VerifierContext,
+        params: Mapping[str, Any],
+    ) -> VerifierResult:
+        from .domains.securitization import verify_waterfall_steps
+
+        gov_steps = params.get("waterfall_steps_governing") or params.get("waterfall_steps_a") or params.get("waterfall_steps")
+        sub_steps = params.get("waterfall_steps_subordinate") or params.get("waterfall_steps_b")
+        claimed_relations = params.get("claimed_relations")
+        allow_cross_regime = bool(params.get("allow_cross_regime_if_qualified", False))
+        discloses_inversions = bool(params.get("discloses_inversions", False))
+
+        if gov_steps is None:
+            collected_gov: list[Mapping[str, Any]] = []
+            collected_sub: list[Mapping[str, Any]] = []
+            for p in context.premises:
+                p_steps = p.scope.get("waterfall_steps") if isinstance(p.scope, Mapping) else None
+                if isinstance(p_steps, Sequence) and not isinstance(p_steps, (str, bytes)):
+                    is_sub = bool(p.scope.get("is_subordinate")) if isinstance(p.scope, Mapping) else False
+                    if is_sub:
+                        collected_sub.extend(p_steps)
+                    else:
+                        collected_gov.extend(p_steps)
+            gov_steps = collected_gov or None
+            if collected_sub and sub_steps is None:
+                sub_steps = collected_sub
+
+        if claimed_relations is None and isinstance(context.conclusion.scope, Mapping):
+            claimed_relations = context.conclusion.scope.get("claimed_relations")
+
+        if not gov_steps:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="unknown",
+                guarantee_kind=self.guarantee_kind,
+                reasons=("MISSING_GOVERNING_WATERFALL_STEPS",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        wf_res = verify_waterfall_steps(
+            gov_steps,
+            sub_steps,
+            claimed_relations=claimed_relations,
+            allow_cross_regime_if_qualified=allow_cross_regime,
+        )
+        ev = wf_res.to_dict()
+        # Note: when comparing governing vs subordinate documents, a conflict report that
+        # explicitly discloses true cross-document inversions without cycles/swaps/type errors
+        # satisfies verification of the discrepancy claim; otherwise inversions refute.
+        if wf_res.cycles or wf_res.beneficiary_swaps or wf_res.payment_type_confusions:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="refuted",
+                guarantee_kind=self.guarantee_kind,
+                evidence=ev,
+                reasons=wf_res.reasons,
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+        if wf_res.inversions and not discloses_inversions:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="refuted",
+                guarantee_kind=self.guarantee_kind,
+                evidence=ev,
+                reasons=wf_res.reasons,
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+        if wf_res.regime_mismatches:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="unknown",
+                guarantee_kind=self.guarantee_kind,
+                evidence=ev,
+                reasons=wf_res.reasons,
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        assumps = ("cross_document_waterfall_inversion_disclosed",) if wf_res.inversions else ()
+        return VerifierResult(
+            obligation_id=obligation.obligation_id,
+            step_id=context.step.step_id,
+            family=self.family,
+            status="verified",
+            guarantee_kind=self.guarantee_kind,
+            evidence=ev,
+            assumptions=assumps,
+            reasons=("WATERFALL_PRIORITY_VERIFIED",),
             verifier_id=self.verifier_id,
             verifier_version=self.version,
         )

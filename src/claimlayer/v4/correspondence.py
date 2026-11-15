@@ -321,21 +321,54 @@ _EVASION_NO_ANSWER_RE = re.compile(
     re.IGNORECASE,
 )
 
-_NUMBER_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9_.-])(-?\d+(?:[.,]\d+)?)(?![A-Za-z0-9_.-])")
+_NUMBER_TOKEN_RE = re.compile(
+    r"(?<![A-Za-z0-9_.-])(-?(?:[1-9]\d{0,2}(?:,\d{3})+(?:\.\d+)?|[1-9]\d{0,2}(?:\.\d{3})+,\d+|\d+(?:[.,]\d+)?))(?![A-Za-z0-9_.-])"
+)
 _YEAR_OR_DATE_TOKEN_RE = re.compile(r"\b(\d{4}-\d{2}(?:-\d{2})?|(?:1[5-9]\d{2}|20\d{2}|21\d{2}))\b")
 
 _UNIT_SYNONYMS: dict[str, tuple[str, ...]] = {
     "years": ("año", "años", "year", "years", "yr", "yrs"),
     "months": ("mes", "meses", "month", "months"),
-    "calendar_days": ("día", "días", "day", "days", "calendar days", "días naturales"),
-    "business_days": ("días hábiles", "días laborables", "business day", "business days", "working days"),
+    "calendar_days": ("día", "días", "day", "days", "calendar days", "calendar day", "días naturales"),
+    "business_days": ("días hábiles", "días laborables", "business day", "business days", "working days", "working day"),
     "USD": ("usd", "dólar", "dólares", "dollar", "dollars", "$"),
+    "USD_per_year": ("usd/year", "usd per year", "usd/yr", "usd annually", "usd per annum", "dollars per year", "dólares anuales", "usd anuales", "usd", "$"),
     "EUR": ("eur", "euro", "euros", "€"),
     "GBP": ("gbp", "libra", "libras", "pound", "pounds", "£"),
-    "percent": ("%", "por ciento", "percent", "pct"),
+    "percent": ("%", "por ciento", "percent", "pct", "per cent"),
+    "percent_per_annum": ("%", "% per annum", "% p.a.", "percent per annum", "percent per year", "per annum", "anual"),
+    "percentage_point": ("percentage point", "percentage points", "pp", "punto porcentual", "puntos porcentuales"),
+    "percentage_points_per_annum": ("percentage points per annum", "pp per annum", "percentage points", "pp", "bps"),
+    "basis_point": ("basis point", "basis points", "bp", "bps", "punto básico", "puntos básicos", "punto basico", "puntos basicos"),
+    "basis_points_per_annum": ("basis points per annum", "bps per annum", "bps/yr", "bp/yr", "bps", "basis points"),
     "hours": ("hora", "horas", "hour", "hours", "hr", "hrs"),
     "minutes": ("minuto", "minutos", "minute", "minutes", "min"),
 }
+
+_FINANCIAL_ASSUMPTION_DISCLOSURE_RE = re.compile(
+    r"\b(?:constant\s+principal|fixed\s+principal|unchanged\s+principal|constant\s+notional|"
+    r"simple\s+annual(?:ized)?|illustrative\s+(?:annual|interest)|annualized\s+impact|"
+    r"no\s+amortization|without\s+amortization|day[- ]count|act/360|30/360|"
+    r"assuming\s+(?:constant|fixed|no\s+amortization)|"
+    r"capital\s+(?:constante|fijo)|principal\s+constante|c[aá]lculo\s+anual\s+simple|"
+    r"impacto\s+anual\s+ilustrativo|ilustrativ[oa]|sin\s+amortizaci[oó]n|"
+    r"bajo\s+el\s+supuesto)\b",
+    re.IGNORECASE,
+)
+
+_UNQUALIFIED_DAMAGES_CLAIM_RE = re.compile(
+    r"\b(?:exact\s+legal\s+damages|guaranteed\s+(?:realized\s+)?(?:cashflow\s+)?loss|"
+    r"automatic\s+(?:legal\s+)?damages|actual\s+realized\s+damages\s+of|"
+    r"da[ñn]o(?:s)?\s+legal(?:es)?\s+exacto(?:s)?|p[eé]rdida\s+realizada\s+garantizada|"
+    r"indemnizaci[oó]n\s+autom[aá]tica)\b",
+    re.IGNORECASE,
+)
+
+_RELATIVE_PCT_CONFUSION_RE = re.compile(
+    r"\b(?:relative\s+(?:percentage|percent)\s+(?:change|difference|increase|decrease)|"
+    r"porcentaje\s+relativo|variaci[oó]n\s+porcentual\s+relativa)\b",
+    re.IGNORECASE,
+)
 
 _FUNCTION_WORDS = frozenset({
     "el", "la", "los", "las", "un", "una", "unos", "unas", "de", "del", "en", "con", "por", "para",
@@ -421,6 +454,10 @@ _EPISTEMIC_META_TOKENS = frozenset({
     "total", "sum", "items", "listed", "included", "population", "condition", "exception",
     "subject", "conditional", "contingent", "conflict", "contradiction", "discrepancy",
     "divergent", "unresolved", "inconclusive", "combined", "answer", "question", "today", "now", "currently",
+    "assumption", "assumptions", "constant", "unchanged", "simple", "annual", "annualized", "illustrative",
+    "amortization", "amortisation", "spread", "basis", "point", "points", "percentage", "percent",
+    "assuming", "supuesto", "supuestos", "constante", "anual", "anualizado", "ilustrativo", "ilustrativa",
+    "amortizacion", "diferencial", "puntos", "porcentuales", "basicos",
 })
 
 _FINITE_CLAIM_VERB_ALTS = (
@@ -496,13 +533,26 @@ def compute_response_digest(
     return digest({"question": q_norm, "candidate_response": candidate_response})
 
 
+_US_THOUSANDS_RE = re.compile(r"^-?[1-9]\d{0,2}(?:,\d{3})+(?:\.\d+)?$")
+_EU_THOUSANDS_COMMA_RE = re.compile(r"^-?[1-9]\d{0,2}(?:\.\d{3})+(?:,\d+)?$")
+
+
+def _normalize_numeric_str(raw_s: str) -> str:
+    s = _UNICODE_MINUS_RE.sub("-", raw_s.strip()).replace(" ", "")
+    if _US_THOUSANDS_RE.match(s):
+        return s.replace(",", "")
+    if _EU_THOUSANDS_COMMA_RE.match(s):
+        return s.replace(".", "").replace(",", ".")
+    return s.replace(",", ".")
+
+
 def _to_dec(raw: Any) -> Decimal | None:
     if isinstance(raw, bool) or raw is None:
         return None
     if isinstance(raw, Decimal):
         return raw if raw.is_finite() else None
     try:
-        s = _UNICODE_MINUS_RE.sub("-", str(raw).strip()).replace(",", ".")
+        s = _normalize_numeric_str(str(raw))
         d = Decimal(s)
         return d if d.is_finite() else None
     except (InvalidOperation, ValueError):
@@ -627,14 +677,13 @@ def _clause_is_explanatory_formula_or_disclaimer(clause: str) -> bool:
 # ---------------------------------------------------------------------------
 
 _UNIT_WORDS_FOR_EQUATION = sorted(
-    {s for syns in _UNIT_SYNONYMS.values() for s in syns if s not in {"$"}},
+    {s for syns in _UNIT_SYNONYMS.values() for s in syns if s not in {"$"} and any(ch.isalpha() for ch in s)},
     key=len,
     reverse=True,
 )
+_EQUATION_UNIT_PAT = "|".join(re.escape(u).replace(r"\ ", r"\s+") for u in _UNIT_WORDS_FOR_EQUATION)
 _EQUATION_UNIT_RE = re.compile(
-    r"(?:(?<!\w)(?:"
-    + "|".join(re.escape(u) for u in _UNIT_WORDS_FOR_EQUATION if u.isalpha())
-    + r")(?!\w)|[$€£%])",
+    rf"(?:(?<!\w)(?:{_EQUATION_UNIT_PAT})(?!\w)|[$€£%])",
     re.IGNORECASE,
 )
 _EQUATION_PROSE_LEAD_SPLIT_RE = re.compile(
@@ -642,9 +691,17 @@ _EQUATION_PROSE_LEAD_SPLIT_RE = re.compile(
     re.IGNORECASE,
 )
 _EQUATION_RHS_EXPR_RE = re.compile(
-    r"^\s*((?:[-+*/×÷()\d.,\s$€£%]|\b(?:"
-    + "|".join(re.escape(u) for u in _UNIT_WORDS_FOR_EQUATION if u.isalpha())
-    + r")\b)+)"
+    rf"^\s*((?:[-+*/×÷()\d.,\s$€£%]|\b(?:{_EQUATION_UNIT_PAT})\b)+)"
+)
+_RATE_PCT_SCALE_RE = re.compile(
+    r"(-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:[.,]\d+)?)\s*"
+    r"(?:%|(?<!\w)(?:pct|per\s+cent|por\s+ciento|pp|percentage\s+points?(?:\s+per\s+annum)?|puntos?\s+porcentuales?)(?!\w))",
+    re.IGNORECASE,
+)
+_RATE_BPS_SCALE_RE = re.compile(
+    r"(-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:[.,]\d+)?)\s*"
+    r"(?<!\w)(?:bps?|basis\s+points?(?:\s+per\s+annum)?|puntos?\s+b[aá]sicos?)(?!\w)",
+    re.IGNORECASE,
 )
 
 
@@ -682,8 +739,22 @@ def _eval_ast_node(node: ast.AST, leaves: list[Decimal]) -> Decimal:
 def _eval_arithmetic_side(expr_str: str) -> tuple[Decimal | None, tuple[Decimal, ...]]:
     cleaned = _UNICODE_MINUS_RE.sub("-", expr_str).strip()
     cleaned = cleaned.replace("×", "*").replace("÷", "/")
+    # Pre-scale explicit percentage / pp / bps quantities so mixed-unit equations evaluate accurately
+    cleaned = _RATE_BPS_SCALE_RE.sub(
+        lambda m: f" ({_normalize_numeric_str(m.group(1))} * 0.0001) "
+        if _to_dec(m.group(1)) is None
+        else f" {str(_to_dec(m.group(1)) * Decimal('0.0001')).rstrip('0').rstrip('.') if '.' in str(_to_dec(m.group(1)) * Decimal('0.0001')) else str(_to_dec(m.group(1)) * Decimal('0.0001'))} ",
+        cleaned,
+    )
+    cleaned = _RATE_PCT_SCALE_RE.sub(
+        lambda m: f" ({_normalize_numeric_str(m.group(1))} * 0.01) "
+        if _to_dec(m.group(1)) is None
+        else f" {str(_to_dec(m.group(1)) * Decimal('0.01')).rstrip('0').rstrip('.') if '.' in str(_to_dec(m.group(1)) * Decimal('0.01')) else str(_to_dec(m.group(1)) * Decimal('0.01'))} ",
+        cleaned,
+    )
     cleaned = _EQUATION_UNIT_RE.sub(" ", cleaned)
-    cleaned = re.sub(r"(?<=\d),(?=\d)", ".", cleaned)
+    # Normalize remaining US/EU formatted numbers inside arithmetic string
+    cleaned = _NUMBER_TOKEN_RE.sub(lambda m: _normalize_numeric_str(m.group(1)), cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     if not cleaned:
         return None, ()
@@ -824,7 +895,9 @@ def verify_response_equations(
         vals = [v for v, _ in side_evals if v is not None]
         all_leaves = [lf for _, lfs in side_evals for lf in lfs]
         first_val = vals[0]
-        math_ok = all(abs(v - first_val) <= Decimal("0.01") for v in vals[1:])
+        max_mag = max(abs(v) for v in vals)
+        eq_tol = Decimal("0.01") if max_mag >= Decimal("1") else Decimal("1e-5")
+        math_ok = all(abs(v - first_val) <= eq_tol for v in vals[1:])
         if not math_ok:
             checks.append(EquationCheckResult(
                 raw_equation=raw_eq,
@@ -853,14 +926,24 @@ def verify_response_equations(
             continue
 
         # Mathematically true: check operands and result correspond to graph steps / evidence
+        expanded_known = set(known_doc_nums)
+        for kn in list(known_doc_nums):
+            if abs(kn) <= Decimal(10000) and kn != 0:
+                expanded_known.add(kn / Decimal(100))
+                expanded_known.add(kn / Decimal(10000))
         ungrounded_operands = [
             str(lf) for lf in all_leaves
-            if not any(abs(lf - kn) <= Decimal("0.0001") for kn in known_doc_nums)
+            if not any(abs(lf - kn) <= Decimal("0.00001") for kn in expanded_known)
         ]
+        target_pool = list(target_vals_to_match)
+        for tv in list(target_vals_to_match):
+            if abs(tv) <= Decimal(10000) and tv != 0:
+                target_pool.append(tv / Decimal(100))
+                target_pool.append(tv / Decimal(10000))
         result_matches_target_or_substep = (
-            not target_vals_to_match
-            or any(abs(vals[-1] - tv) <= Decimal("0.01") for tv in target_vals_to_match)
-            or any(abs(vals[-1] - yd) <= Decimal("0.01") for yd in year_diffs)
+            not target_pool
+            or any(abs(vals[-1] - tv) <= eq_tol for tv in target_pool)
+            or any(abs(vals[-1] - yd) <= eq_tol for yd in year_diffs)
         )
         if ungrounded_operands or not result_matches_target_or_substep:
             checks.append(EquationCheckResult(
@@ -1231,8 +1314,11 @@ _MONETARY_PREDICATE_NAMES = frozenset({
     "price", "cost", "fee", "payout",
 })
 _TEMPORAL_UNITS = frozenset({"years", "months", "days", "calendar_days", "business_days", "hours", "minutes"})
-_MONETARY_UNITS = frozenset({"USD", "EUR", "GBP"})
-_RATE_UNITS = frozenset({"percent", "%", "bps"})
+_MONETARY_UNITS = frozenset({"USD", "USD_per_year", "EUR", "GBP"})
+_RATE_UNITS = frozenset({
+    "percent", "percent_per_annum", "%", "percentage_point", "percentage_points_per_annum",
+    "basis_point", "basis_points_per_annum", "bps",
+})
 
 _NON_COUNTED_POST_NUM_WORDS = frozenset({
     "indica", "indican", "senala", "senalan", "muestra", "muestran", "aplica", "aplicable",
@@ -1533,12 +1619,18 @@ def _units_compatible(obs_unit: str | None, graph_unit: str | None, unit_registr
     g_canon = _UNIT_WORD_MAP.get(_norm_token(graph_unit), (graph_unit, ""))[0]
     if _norm_token(o_canon) == _norm_token(g_canon):
         return True
+    # Allow annualized currency presentation vs currency (e.g. USD_per_year vs USD)
+    if {o_canon, g_canon} == {"USD", "USD_per_year"}:
+        return True
+    # Explicitly forbid equating calendar days and business days
+    if {o_canon, g_canon} == {"calendar_days", "business_days"}:
+        return False
     if unit_registry is not None:
         try:
             return unit_registry.lookup(o_canon).dimension == unit_registry.lookup(g_canon).dimension
         except Exception:
             pass
-    # Compatible within time duration dimension vs unrelated counted nouns / currencies
+    # Compatible within general temporal units excluding calendar vs business day confusion
     if o_canon in _TEMPORAL_UNITS and g_canon in _TEMPORAL_UNITS:
         return True
     return False
@@ -1621,10 +1713,13 @@ def _classify_number_slot(
         canon, slot = _UNIT_WORD_MAP[sym]
         return slot, canon
 
-    # 2. Explicit measurement unit immediately after ("13 años", "500 USD", "10 %")
+    # 2. Explicit measurement unit immediately after ("13 años", "500 USD", "10 %", "25 bps", "0.25 pp")
     m_unit = re.match(
         r"^\s*(?:de\s+)?(d[ií]as\s+h[aá]biles|d[ií]as\s+laborables|d[ií]as\s+naturales|"
         r"business\s+days?|working\s+days?|calendar\s+days?|por\s+ciento|"
+        r"percentage\s+points?\s+per\s+annum|basis\s+points?\s+per\s+annum|"
+        r"percentage\s+points?|basis\s+points?|puntos?\s+porcentuales?|puntos?\s+b[aá]sicos?|"
+        r"usd\s+per\s+year|dollars?\s+per\s+year|per\s+annum|"
         r"[A-Za-zÀ-ÿ]+|[$€£%])",
         after,
         re.IGNORECASE,
@@ -1992,10 +2087,24 @@ def _verify_subclause_relations(
                 continue
 
             # 2) Typed or counted_noun numeric assertion: match against scoped_pool
-            val_candidates = [
-                gr for gr in scoped_pool
-                if gr.value is not None and abs(gr.value - val) <= Decimal("0.01")
-            ]
+            def _val_matches_gr(v_obs: Decimal, u_obs: str | None, gr: GraphRelationTuple) -> bool:
+                if gr.value is None:
+                    return False
+                if abs(gr.value - v_obs) <= Decimal("0.01"):
+                    return True
+                if unit_registry is not None and u_obs and gr.unit:
+                    try:
+                        uo = unit_registry.lookup(_UNIT_WORD_MAP.get(_norm_token(u_obs), (u_obs, ""))[0])
+                        ug = unit_registry.lookup(_UNIT_WORD_MAP.get(_norm_token(gr.unit), (gr.unit, ""))[0])
+                        if uo.dimension == ug.dimension:
+                            bo = v_obs * Decimal(uo.factor)
+                            bg = gr.value * Decimal(ug.factor)
+                            return abs(bo - bg) <= Decimal("0.0001")
+                    except Exception:
+                        pass
+                return False
+
+            val_candidates = [gr for gr in scoped_pool if _val_matches_gr(val, obs_unit, gr)]
 
             if not val_candidates:
                 if entity_specific_mode:
@@ -2422,6 +2531,18 @@ def verify_response_graph_correspondence(
     for n in list(known_doc_nums):
         if abs(n) <= Decimal(1000) and n != 0:
             known_doc_nums.add(n / Decimal(100))
+    # Add unit-equivalent numeric magnitudes for rate/spread nodes in graph (e.g. 0.25 pp <-> 25 bps <-> 0.0025)
+    for node in anc_nodes + [conc]:
+        nv = _to_dec(node.value)
+        if nv is None or not node.unit:
+            continue
+        u_low = _norm_token(node.unit)
+        if u_low in {"percentage_point", "percentage point", "pp", "percentage_points_per_annum", "percent", "percent_per_annum", "%"}:
+            known_doc_nums.add(nv * Decimal(100))
+            known_doc_nums.add(nv / Decimal(100))
+        elif u_low in {"basis_point", "basis point", "bp", "bps", "basis points", "basis_points_per_annum"}:
+            known_doc_nums.add(nv / Decimal(100))
+            known_doc_nums.add(nv / Decimal(10000))
 
     target_vals_to_match: list[Decimal] = []
     if conc_val is not None:
@@ -2599,6 +2720,14 @@ def verify_response_graph_correspondence(
     if conc.unit:
         low_text = text.lower()
         target_unit_syns = _UNIT_SYNONYMS.get(conc.unit, (conc.unit.lower(),))
+        graph_units = {
+            _UNIT_WORD_MAP.get(_norm_token(n.unit), (n.unit, ""))[0]
+            for n in (anc_nodes + [conc])
+            if n.unit
+        }
+        has_rate_spread_context = bool(
+            graph_units & {"percent", "percent_per_annum", "percentage_point", "percentage_points_per_annum", "basis_point", "basis_points_per_annum"}
+        )
 
         def _unit_tok_re(tok: str) -> str:
             return rf"(?<!\w){re.escape(tok)}(?!\w)" if tok.isalpha() else re.escape(tok)
@@ -2607,6 +2736,14 @@ def verify_response_graph_correspondence(
         wrong_units_detected: list[str] = []
         for uname, syns in _UNIT_SYNONYMS.items():
             if uname == conc.unit:
+                continue
+            if {conc.unit, uname} <= {"USD", "USD_per_year"}:
+                continue
+            if {conc.unit, uname} <= {"percent", "percent_per_annum"}:
+                continue
+            if has_rate_spread_context and uname in {"percentage_point", "percentage_points_per_annum", "basis_point", "basis_points_per_annum", "percent", "percent_per_annum"}:
+                continue
+            if uname in graph_units:
                 continue
             if unit_registry is not None:
                 try:
@@ -2737,6 +2874,49 @@ def verify_response_graph_correspondence(
             "severity": "error",
         })
 
+    # 10. Financial assumption disclosure, unqualified damages & percent-vs-pp confusion
+    financial_assumptions_disclosed = bool(_FINANCIAL_ASSUMPTION_DISCLOSURE_RE.search(text))
+    unqualified_damages_claim = False
+    for cl in clauses:
+        for m_dm in _UNQUALIFIED_DAMAGES_CLAIM_RE.finditer(cl):
+            prefix_dm = cl[: m_dm.start()]
+            if not (
+                _NEGATED_LIMIT_CONTEXT_RE.search(prefix_dm)
+                or re.search(r"\b(?:not|no|neither|nor|never|without|sin)\b[^.;,]{0,40}$", prefix_dm, re.IGNORECASE)
+            ):
+                unqualified_damages_claim = True
+                break
+        if unqualified_damages_claim:
+            break
+    if unqualified_damages_claim:
+        issues.append({
+            "code": "UNQUALIFIED_DAMAGES_OR_CASHFLOW_CLAIM",
+            "status": "refuted",
+            "reason": "Response presents an illustrative rate calculation as exact legal damages or guaranteed realized cashflow.",
+            "severity": "error",
+        })
+
+    percent_vs_pp_confusion = bool(_RELATIVE_PCT_CONFUSION_RE.search(text))
+    if conc.unit in {"percentage_point", "percentage_points_per_annum", "basis_point", "basis_points_per_annum"} and not percent_vs_pp_confusion:
+        has_pp_or_bps_word = bool(
+            re.search(
+                r"\b(?:pp|bps?|percentage\s+points?|basis\s+points?|puntos?\s+porcentuales?|puntos?\s+b[aá]sicos?)\b",
+                text,
+                re.IGNORECASE,
+            )
+        )
+        if conc_val is not None and not has_pp_or_bps_word:
+            val_str = str(conc_val).rstrip("0").rstrip(".") if "." in str(conc_val) else str(conc_val)
+            if re.search(rf"\b{re.escape(val_str)}\s*(?:%|percent\b|por\s+ciento)", text, re.IGNORECASE):
+                percent_vs_pp_confusion = True
+    if percent_vs_pp_confusion:
+        issues.append({
+            "code": "PERCENT_VS_PERCENTAGE_POINT_CONFUSION",
+            "status": "refuted",
+            "reason": "Response confuses percentage points / basis points with relative percent difference.",
+            "severity": "error",
+        })
+
     relational_mismatch_in_response = any(
         iss.get("code") == "RELATIONAL_VALUE_MISMATCH" for iss in issues
     )
@@ -2756,6 +2936,9 @@ def verify_response_graph_correspondence(
         "qualified_as_subtotal": qualified_as_subtotal,
         "presents_subtotal_as_total": presents_subtotal_as_total,
         "conflict_disclosed": conflict_disclosed,
+        "financial_assumptions_disclosed": financial_assumptions_disclosed,
+        "unqualified_damages_claim": unqualified_damages_claim,
+        "percent_vs_pp_confusion": percent_vs_pp_confusion,
         "has_missing_precision_disclosure": bool(_MISSING_PRECISION_DISCLOSURE_RE.search(text)),
         "equation_checks": [ec.to_dict() for ec in equation_checks],
         "structured_conditions": [sc.to_dict() for sc in observed_conds],

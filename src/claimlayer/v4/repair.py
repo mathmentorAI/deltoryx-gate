@@ -481,6 +481,81 @@ _REPAIR_SPEC_TABLE: dict[str, dict[str, Any]] = {
         "allowed": (),
         "forbidden": ("accept_unverified_checks",),
     },
+    "OMITTED_DERIVATION_ASSUMPTIONS": {
+        "repairable": True,
+        "problem": "Quantitative rate/spread impact derivation omits required structural assumptions (e.g. constant principal, simple annual calculation).",
+        "instruction": (
+            "State explicit derivation assumptions (constant principal, simple annual calculation, "
+            "no amortization or day-count adjustments) and qualify the figure as an illustrative annual calculation."
+        ),
+        "allowed": ("state_explicit_derivation_assumptions", "qualify_as_illustrative_annual_calculation"),
+        "forbidden": ("omit_principal_or_day_count_assumptions", "assert_guaranteed_realized_cashflow"),
+    },
+    "UNQUALIFIED_DAMAGES_OR_CASHFLOW_CLAIM": {
+        "repairable": True,
+        "problem": "Response presents an illustrative rate calculation as exact legal damages or guaranteed realized cashflow.",
+        "instruction": (
+            "Remove unqualified legal damages or realized cashflow loss language and frame the figure as an "
+            "illustrative annual estimate conditioned on constant principal and simple annual accrual."
+        ),
+        "allowed": ("reframe_as_illustrative_annual_difference", "remove_unqualified_damages_claim"),
+        "forbidden": ("claim_exact_legal_damages", "claim_guaranteed_realized_loss"),
+    },
+    "PERCENT_VS_PERCENTAGE_POINT_CONFUSION": {
+        "repairable": True,
+        "problem": "Response confuses absolute percentage points / basis points with relative percent difference.",
+        "instruction": (
+            "Express the coupon/rate spread explicitly in percentage points (pp) and/or basis points (bps), "
+            "not as a relative percentage change or unqualified '%' difference."
+        ),
+        "allowed": ("state_spread_in_percentage_points_and_basis_points",),
+        "forbidden": ("conflate_relative_percent_with_percentage_points",),
+    },
+    "WATERFALL_ORDER_CYCLE": {
+        "repairable": False,
+        "problem": "Payment waterfall ordering contains an inconsistent cyclic precedence relation.",
+        "instruction": "Resolve the cyclic payment ordering conflict against the governing Indenture waterfall.",
+        "allowed": (),
+        "forbidden": ("retain_cyclic_waterfall_order",),
+    },
+    "WATERFALL_PRIORITY_INVERSION": {
+        "repairable": True,
+        "problem": "Report fails to report a cross-document payment priority inversion accurately or inverts governing vs subordinate waterfall precedence.",
+        "instruction": (
+            "Correct the payment priority comparison so each step's beneficiary and relative precedence match "
+            "the governing vs subordinate documents accurately (explicitly disclosing priority inversions)."
+        ),
+        "allowed": ("restore_verified_waterfall_priority_comparison", "disclose_cross_document_inversion"),
+        "forbidden": ("swap_waterfall_priority_direction", "hide_material_waterfall_inversion"),
+    },
+    "WATERFALL_BENEFICIARY_SWAP": {
+        "repairable": True,
+        "problem": "Response assigns a waterfall step or seniority slot to the wrong beneficiary/tranche.",
+        "instruction": "Restore the documented beneficiary/tranche for each waterfall step without swapping classes.",
+        "allowed": ("restore_verified_waterfall_beneficiary",),
+        "forbidden": ("swap_beneficiaries_across_waterfall_steps",),
+    },
+    "WATERFALL_PAYMENT_TYPE_CONFUSION": {
+        "repairable": True,
+        "problem": "Response confuses payment type (e.g. interest vs principal vs reserve vs fees) at a waterfall step.",
+        "instruction": "Correct the payment type (interest vs principal vs reserve vs fees) to match the documented waterfall step.",
+        "allowed": ("restore_verified_waterfall_payment_type",),
+        "forbidden": ("conflate_interest_and_principal_steps",),
+    },
+    "WATERFALL_INCOMPARABLE_REGIME": {
+        "repairable": True,
+        "problem": "Response compares waterfall steps across different regimes/conditions (e.g. pre-acceleration vs post-acceleration) without regime qualification.",
+        "instruction": "Explicitly distinguish the governing waterfall regime and triggering conditions before comparing payment order.",
+        "allowed": ("qualify_waterfall_regime_and_conditions",),
+        "forbidden": ("equate_steps_across_incompatible_regimes",),
+    },
+    "AUTHORITY_INVERSION": {
+        "repairable": True,
+        "problem": "Response treats a lower-authority document (e.g. Offering Memorandum or associate email) as governing over the executed Indenture.",
+        "instruction": "Enforce governing-document precedence explicitly so the executed Indenture governs over the Offering Memorandum and internal correspondence.",
+        "allowed": ("restore_governing_document_precedence",),
+        "forbidden": ("treat_subordinate_document_or_email_as_governing",),
+    },
 }
 
 

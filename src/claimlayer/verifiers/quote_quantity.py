@@ -184,6 +184,10 @@ _UNIT_ALIASES: dict[str, str] = {
     "per cent": "PERCENT",
     "per cent.": "PERCENT",
     "por ciento": "PERCENT",
+    "percent_per_annum": "PERCENT",
+    "percent per annum": "PERCENT",
+    "% per annum": "PERCENT",
+    "% p.a.": "PERCENT",
     "bps": "BPS",
     "basis point": "BPS",
     "basis points": "BPS",
@@ -312,7 +316,8 @@ _STRUCTURAL_ID_RE = re.compile(
     r"Schedule|Exhibit|Annex|Anexo|Appendix|Apéndice|Apendice|Part|Rule|Paragraph|Page|p\.|pp\.|Footnote)\s+"
     r"\d+(?:[.\-]\d+)*[A-Za-z]?\b"
     r"|\b(?:Class|Tranche|Series|Tier)\s+(?:[A-Za-z](?:-\d+)?|\d+(?:\s+[A-Za-z]\b)?)(?![.,\d%])(?:\s+Notes?\b)?"
-    r"|\b\d+\s*[MWYD]\s+(?:Term\s+)?(?:EURIBOR|LIBOR|SOFR|SONIA|TIIE|ESTR)\b",
+    r"|\b\d+\s*[MWYD]\s+(?:Term\s+)?(?:EURIBOR|LIBOR|SOFR|SONIA|TIIE|ESTR)\b"
+    r"|\b(?:30E?|Actual|Act)\s*/\s*(?:360|365|Actual|Act)\b",
     re.IGNORECASE,
 )
 
@@ -496,7 +501,7 @@ def normalize_span(text: str) -> str:
     dehyphenated = _LINEBREAK_HYPHEN_RE.sub(r"\1\2", text)
     cleaned = _ZERO_WIDTH_RE.sub("", dehyphenated)
     nfkc = unicodedata.normalize("NFKC", cleaned)
-    translated = nfkc.translate(_QUOTE_MAP)
+    translated = nfkc.translate(_QUOTE_MAP).replace("\\$", "$")
     return re.sub(r"\s+", " ", translated).strip()
 
 
@@ -532,7 +537,10 @@ def unit_dimension(unit: str) -> str:
 
 def infer_predicate_dimension(predicate: str) -> str | None:
     """Infer whether a predicate name explicitly requires a specific unit dimension."""
-    tokens = set(re.findall(r"[a-z0-9]+", (predicate or "").lower()))
+    low = (predicate or "").lower()
+    tokens = set(re.findall(r"[a-z0-9]+", low))
+    if "day_count" in low or "daycount" in low or ({"day", "count"} <= tokens):
+        return None
     if tokens & {"usd", "dollar", "dollars", "eur", "euro", "euros", "gbp", "currency", "price", "fee", "cost", "salary", "refund", "reimbursement", "settlement"}:
         return "CURRENCY"
     if tokens & {"days", "day", "weeks", "months", "years", "hours", "duration", "deadline", "period"}:
@@ -1548,7 +1556,12 @@ def verify_quote_and_quantities(
             val_tokens = _content_tokens(assertion.value)
             quote_tokens = _content_tokens(reference_text)
             if not val_dates and not val_quantities:
-                if not _tokens_grounded_in_quote(val_tokens, quote_tokens):
+                norm_val = normalize_span(assertion.value).lower()
+                norm_ref = normalize_span(reference_text).lower()
+                literal_grounded = bool(norm_val) and not val_tokens and bool(
+                    re.search(r"(?<![a-z0-9])" + re.escape(norm_val) + r"(?![a-z0-9])", norm_ref)
+                )
+                if not literal_grounded and not _tokens_grounded_in_quote(val_tokens, quote_tokens):
                     issues.append(
                         Issue(
                             code="QUANTITY_MISMATCH",

@@ -234,6 +234,24 @@ class UnitRegistry:
     def dimension_of(self, unit_name: str) -> str:
         return self._units[unit_name].dimension
 
+    @staticmethod
+    def is_rate_or_ratio_dimension(dimension: str | None) -> bool:
+        return dimension in {
+            'ratio',
+            'ratio_difference',
+            'annual_rate',
+            'annual_rate_difference',
+        }
+
+    def rate_factor_to_unitless(self, label: str | None, path: str = 'unit') -> Decimal | None:
+        """Convert a rate/ratio/spread unit into a unitless multiplicative factor (e.g. 25 bps -> 0.0025)."""
+        if not label:
+            return None
+        unit = self.lookup(label, path)
+        if not self.is_rate_or_ratio_dimension(unit.dimension):
+            return None
+        return Decimal(unit.factor) / Decimal(100)
+
     def describe(self):
         return [asdict(u) for u in sorted(self._units.values(), key=lambda u: u.name)]
 
@@ -247,6 +265,7 @@ STANDARD_UNITS = UnitRegistry([
     Unit('basis_point', 'ratio_difference', '0.01', ('bp', 'bps', 'basis points')),
     Unit('percent_per_annum', 'annual_rate', '1', ('% per annum', '% p.a.', 'percent per annum', 'percent per year', 'percent annually')),
     Unit('percentage_points_per_annum', 'annual_rate_difference', '1', ('percentage points per annum', 'pp per annum')),
+    Unit('basis_points_per_annum', 'annual_rate_difference', '0.01', ('bps per annum', 'bp/yr', 'bps/yr', 'basis points per annum')),
     Unit('multiple', 'multiplier', '1', ('times', 'x', 'multiplier')),
     Unit('calendar_days', 'duration_calendar_days', '1', ('days', 'day', 'calendar day')),
     Unit('weeks', 'duration_calendar_days', '7', ('week',)),

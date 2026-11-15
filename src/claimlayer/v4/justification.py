@@ -196,7 +196,7 @@ class VerificationObligation:
     description: str = ""
     critical: bool = True
     parameters: dict[str, Any] = field(default_factory=dict)
-    origin: str = "proposed"  # 'proposed' | 'engine_mandatory'
+    origin: str = "proposed"  # 'proposed' | 'engine_mandatory' | 'corpus'
 
     def __post_init__(self) -> None:
         if not isinstance(self.obligation_id, str) or not self.obligation_id.strip():
@@ -205,7 +205,7 @@ class VerificationObligation:
             raise ValueError(
                 f"Unknown verifier family {self.family!r}; expected one of {VERIFIER_FAMILIES}."
             )
-        if self.origin not in ("proposed", "engine_mandatory"):
+        if self.origin not in ("proposed", "engine_mandatory", "corpus"):
             raise ValueError(f"Unsupported obligation origin {self.origin!r}.")
         clean_params = dict(self.parameters or {})
         canonical(clean_params)
@@ -506,14 +506,20 @@ class JustificationGraph:
     claims: dict[str, ClaimNode]
     steps: tuple[InferenceStep, ...]
     conclusion_id: str
+    rejected_obligations: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         coerced_claims = {
             str(cid): ClaimNode.from_dict(node) for cid, node in self.claims.items()
         }
         coerced_steps = tuple(InferenceStep.from_dict(s) for s in self.steps)
+        coerced_rej = {
+            str(k): str(v) for k, v in (self.rejected_obligations or {}).items()
+            if str(k).strip()
+        }
         object.__setattr__(self, "claims", coerced_claims)
         object.__setattr__(self, "steps", coerced_steps)
+        object.__setattr__(self, "rejected_obligations", coerced_rej)
 
     def has_cycle(self) -> tuple[bool, list[str]]:
         """Detect cycles in premise -> conclusion dependencies."""
@@ -639,11 +645,14 @@ class JustificationGraph:
         return ancestors
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out = {
             "conclusion_id": self.conclusion_id,
             "claims": {cid: self.claims[cid].to_dict() for cid in sorted(self.claims)},
             "steps": [s.to_dict() for s in self.steps],
         }
+        if self.rejected_obligations:
+            out["rejected_obligations"] = dict(sorted(self.rejected_obligations.items()))
+        return out
 
     @classmethod
     def from_response(
@@ -711,7 +720,18 @@ class JustificationGraph:
         if raw_steps is None:
             raw_steps = response.get("inference_steps", ())
         steps = tuple(InferenceStep.from_dict(s) for s in (raw_steps or ()))
-        return cls(claims=claims_map, steps=steps, conclusion_id=str(conclusion_id))
+        raw_rejected = response.get("rejected_obligations") or {}
+        rejected_obligations = (
+            {str(k): str(v) for k, v in raw_rejected.items()}
+            if isinstance(raw_rejected, Mapping)
+            else {}
+        )
+        return cls(
+            claims=claims_map,
+            steps=steps,
+            conclusion_id=str(conclusion_id),
+            rejected_obligations=rejected_obligations,
+        )
 
 
 _GENERIC_LABELS = frozenset({

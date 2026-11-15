@@ -348,6 +348,7 @@ class PredicateSpec:
     assertion_kinds: tuple[str, ...] = tuple(sorted(KINDS))
     description: str = ''
     aliases: tuple[str, ...] = ()
+    required: bool = False
 
     def __post_init__(self):
         require_string(self.name, 'predicate name')
@@ -366,6 +367,8 @@ class PredicateSpec:
                'assertion_kinds': list(self.assertion_kinds), 'description': self.description}
         if self.aliases:
             out['aliases'] = list(self.aliases)
+        if self.required:
+            out['required'] = True
         return out
 
 

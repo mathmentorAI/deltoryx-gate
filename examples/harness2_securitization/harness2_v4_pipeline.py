@@ -61,6 +61,7 @@ from claimlayer.v4 import (
     build_corpus_reference_register,
     review_response,
 )
+from claimlayer.v4.corpus_obligations import _value_in_text
 from claimlayer.v4.correspondence import compute_response_digest
 from claimlayer.v4.domain_profile import PolicyConfiguration
 from claimlayer.v4.domains.banking_finance import (
@@ -1237,6 +1238,138 @@ def _scope_report_text_for_graph(report_text: str, graph: JustificationGraph) ->
     return "\n".join(selected) if selected else report_text
 
 
+def _check_required_section_deliverable_coverage(
+    *,
+    required_keys: Sequence[str],
+    assertions: Sequence[Assertion],
+    v4_sources: Mapping[str, SourceDocument],
+    graph: JustificationGraph | None,
+    v4_review: Any | None,
+    gov_filename: str,
+) -> list[dict[str, Any]]:
+    """Enforce unified v3+v4 coverage for required comparison sections.
+
+    In combined mode, a bare v3 ``Assertion`` or surface keyword never satisfies
+    ``MISSING_REQUIRED_SECTION`` on its own: each required section must be backed
+    by a verified (non-refuted, non-opinion) graph leaf overlapping the cited
+    source span and linked in a grounded deliverable correspondence clause.
+    """
+    issues: list[dict[str, Any]] = []
+    unverified_ids: set[str] = set()
+    clause_claims: Sequence[Mapping[str, Any]] = ()
+    if v4_review is not None:
+        for chk in getattr(v4_review.assessment, "checks", ()) or ():
+            if chk.step_id.startswith("leaf::") and chk.status != "verified":
+                unverified_ids.add(chk.step_id[len("leaf::") :])
+        corr_rep = getattr(v4_review.assessment, "correspondence_report", None) or {}
+        clause_claims = corr_rep.get("clause_claims") or ()
+
+    verified_leaves = [
+        node
+        for cid, node in sorted((getattr(graph, "claims", {}) or {}).items())
+        if cid not in unverified_ids
+        and getattr(node, "kind", "") != "opinion"
+        and getattr(node, "assertion_kind", "") != "opinion"
+        and (getattr(node, "evidence", ()) or getattr(node, "evidence_unit_ids", ()))
+    ]
+
+    def _leaf_linked_to_clause(node: Any, sec_tokens: Sequence[str]) -> bool:
+        for cc in clause_claims:
+            if not isinstance(cc, Mapping):
+                continue
+            if cc.get("role") == "opinion" or not cc.get("is_grounded", False):
+                continue
+            rels = cc.get("relations") or ()
+            if any(
+                isinstance(r, Mapping)
+                and r.get("matched_claim_id") == node.claim_id
+                and r.get("status") == "verified"
+                for r in rels
+            ):
+                return True
+            ct = str(cc.get("clause_text", "") or "")
+            if ct and _value_in_text(getattr(node, "value", None), ct):
+                val_s = str(getattr(node, "value", "") or "").strip()
+                is_alpha_enum = any(ch.isalpha() for ch in val_s) and len(val_s) >= 4
+                anchor_tokens = [
+                    tok
+                    for tok in re.split(
+                        r"[^a-z0-9]+",
+                        f"{getattr(node, 'subject', '')} {getattr(node, 'predicate', '')} {' '.join(sec_tokens)}".lower(),
+                    )
+                    if len(tok) >= 3
+                ]
+                ct_low = ct.lower()
+                if is_alpha_enum or any(tok in ct_low for tok in anchor_tokens):
+                    return True
+        return False
+
+    for req_sec in required_keys:
+        tokens = [t for t in re.split(r"[^a-z0-9]+", req_sec.lower()) if len(t) >= 3]
+        matching_asserts = [a for a in assertions if a.predicate.lower() == req_sec.lower()]
+        covered = False
+        if graph is not None and v4_review is not None:
+            if matching_asserts:
+                for a in matching_asserts:
+                    sdoc = v4_sources.get(a.source_id)
+                    a_span: tuple[int, int] | None = None
+                    if sdoc is not None and a.quote:
+                        pos = sdoc.text.find(a.quote)
+                        if pos >= 0:
+                            a_span = (pos, pos + len(a.quote))
+                    for node in verified_leaves:
+                        span_match = False
+                        for ref in getattr(node, "evidence", ()) or ():
+                            if str(getattr(ref, "document_id", "")) != a.source_id:
+                                continue
+                            if a_span is None:
+                                span_match = True
+                                break
+                            if int(ref.start) < a_span[1] and a_span[0] < int(ref.end):
+                                span_match = True
+                                break
+                        if span_match and _leaf_linked_to_clause(node, tokens):
+                            covered = True
+                            break
+                    if covered:
+                        break
+            else:
+                for node in verified_leaves:
+                    hay = (
+                        f"{getattr(node, 'predicate', '')} {getattr(node, 'subject', '')} "
+                        + " ".join(str(getattr(e, "quote", "")) for e in (getattr(node, "evidence", ()) or ()))
+                    ).lower()
+                    if (not tokens or any(tok in hay for tok in tokens[:2])) and _leaf_linked_to_clause(node, tokens):
+                        covered = True
+                        break
+
+        if not covered:
+            reason_code = (
+                "ASSERTION_NOT_IN_DELIVERABLE"
+                if matching_asserts
+                else "SECTION_MISSING_FROM_DELIVERABLE"
+            )
+            issues.append({
+                "code": "MISSING_REQUIRED_SECTION",
+                "source_layer": "v3",
+                "reason": reason_code,
+                "section_key": req_sec,
+                "repairable": True,
+                "message": (
+                    f"Mandatory section '{req_sec}' ({reason_code}) lacks a verified graph leaf and "
+                    f"linked deliverable clause citing {gov_filename}."
+                ),
+                "remediation": (
+                    f"Include '{req_sec}' as both a verified graph leaf overlapping the cited source span "
+                    f"and a corresponding clause in the final deliverable text citing {gov_filename}."
+                ),
+                "forbidden_shortcuts": [
+                    f"Do not leave '{req_sec}' only in structured assertions while omitting it from deliverable or graph."
+                ],
+            })
+    return issues
+
+
 def evaluate_securitization_candidate(
     candidate: str | Mapping[str, Any],
     corpus: LoadedCaseCorpus,
@@ -1407,22 +1540,24 @@ def evaluate_securitization_candidate(
     # Always run domain-specific authority rank & fidelity checks over assertions/text
     issues.extend(adapter.authority_check_fn(parsed, corpus))
 
-    # Required section text completeness check (anti-evasion coverage)
-    low_text = parsed.report_text.lower()
-    for req_sec in parsed.required_section_keys:
-        tokens = [t for t in re.split(r"[^a-z0-9]+", req_sec.lower()) if len(t) >= 3]
-        # Require at least one assertion predicate match OR core section keyword coverage in report text
-        has_assert = any(a.predicate.lower() == req_sec.lower() for a in parsed.assertions)
-        has_prose = all(tok in low_text for tok in tokens[:2]) if tokens else False
-        if not (has_assert or has_prose):
-            issues.append({
-                "code": "MISSING_REQUIRED_SECTION",
-                "source_layer": "v3",
-                "repairable": True,
-                "message": f"Mandatory section '{req_sec}' is missing from candidate report.",
-                "remediation": f"Add complete discrepancy comparison for '{req_sec}' citing governing {gov_doc.filename}.",
-                "forbidden_shortcuts": [f"Do not drop previously verified section '{req_sec}'."],
-            })
+    # Required section text completeness check (v3_only mode uses assertion/prose match;
+    # v3_v4 mode enforces unified graph-leaf + correspondence deliverable coverage after v4_review)
+    if gate_mode != "v3_v4":
+        low_text = parsed.report_text.lower()
+        for req_sec in parsed.required_section_keys:
+            tokens = [t for t in re.split(r"[^a-z0-9]+", req_sec.lower()) if len(t) >= 3]
+            # Require at least one assertion predicate match OR core section keyword coverage in report text
+            has_assert = any(a.predicate.lower() == req_sec.lower() for a in parsed.assertions)
+            has_prose = all(tok in low_text for tok in tokens[:2]) if tokens else False
+            if not (has_assert or has_prose):
+                issues.append({
+                    "code": "MISSING_REQUIRED_SECTION",
+                    "source_layer": "v3",
+                    "repairable": True,
+                    "message": f"Mandatory section '{req_sec}' is missing from candidate report.",
+                    "remediation": f"Add complete discrepancy comparison for '{req_sec}' citing governing {gov_doc.filename}.",
+                    "forbidden_shortcuts": [f"Do not drop previously verified section '{req_sec}'."],
+                })
 
     v4_review = None
     assessment_digest = None
@@ -1585,6 +1720,19 @@ def evaluate_securitization_candidate(
                             "remediation": "Align candidate report prose strictly with verified subjects, values, units, and conditions.",
                             "forbidden_shortcuts": ["Do not leave contradictory figures or false equations in final text."],
                         })
+
+        req_keys = list(dict.fromkeys([*parsed.required_section_keys, *(eff_policy.required_predicates or ())]))
+        if req_keys:
+            issues.extend(
+                _check_required_section_deliverable_coverage(
+                    required_keys=req_keys,
+                    assertions=parsed.assertions,
+                    v4_sources=corpus.v4_sources,
+                    graph=parsed.graph,
+                    v4_review=v4_review,
+                    gov_filename=gov_doc.filename,
+                )
+            )
 
     # Deduplicate issues preserving order
     dedup_issues: list[dict[str, Any]] = []

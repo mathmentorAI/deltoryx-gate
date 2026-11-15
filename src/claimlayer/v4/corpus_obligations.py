@@ -6,6 +6,8 @@ agent-supplied graph, assertions, or metadata flags.
 """
 from __future__ import annotations
 
+from bisect import bisect_left
+from collections import deque
 from decimal import Decimal, InvalidOperation
 import difflib
 import re
@@ -448,17 +450,21 @@ def _align_sentences(
     used_pri: set[int] = set()
     used_sec: set[int] = set()
 
-    sec_norms = [_norm_sentence_eq(s[2]) for s in sec_sents]
+    sec_norms_map: dict[str, deque[int]] = {}
+    for si, s in enumerate(sec_sents):
+        sn = _norm_sentence_eq(s[2])
+        if sn:
+            sec_norms_map.setdefault(sn, deque()).append(si)
     for pi, p in enumerate(pri_sents):
         pn = _norm_sentence_eq(p[2])
         if not pn:
             used_pri.add(pi)
             continue
-        for si, sn in enumerate(sec_norms):
-            if si not in used_sec and sn == pn:
-                used_pri.add(pi)
-                used_sec.add(si)
-                break
+        q = sec_norms_map.get(pn)
+        if q:
+            si = q.popleft()
+            used_pri.add(pi)
+            used_sec.add(si)
 
     rem_pri_idx = [
         i
@@ -540,10 +546,8 @@ def _differing_spans_from_obligations(
                 diff_spans.setdefault(did, []).append((int(s_pos), int(e_pos)))
 
     if isinstance(stored_fe_map, Mapping) and conflicting_uids:
-        for u in admitted_units:
-            if str(getattr(u, "unit_id", "")) not in conflicting_uids:
-                continue
-            fe_for_unit = stored_fe_map.get(str(u.unit_id), {})
+        for uid in conflicting_uids:
+            fe_for_unit = stored_fe_map.get(uid)
             if not isinstance(fe_for_unit, Mapping):
                 continue
             for fname, fref in fe_for_unit.items():
@@ -650,6 +654,44 @@ def _bridges_two_differing_spans(
     return not re.search(r"[A-Za-z0-9]", gap_l) and not re.search(r"[A-Za-z0-9]", gap_r)
 
 
+def _build_merged_span_index(
+    spans_by_doc: Mapping[str, Sequence[tuple[int, int]]],
+) -> dict[str, tuple[list[int], list[tuple[int, int]]]]:
+    """Build per-document sorted disjoint half-open interval index for O(log N) lookups."""
+    index: dict[str, tuple[list[int], list[tuple[int, int]]]] = {}
+    for doc_id, raw_spans in spans_by_doc.items():
+        clean = sorted((int(s), int(e)) for s, e in raw_spans if int(s) < int(e))
+        if not clean:
+            continue
+        merged: list[tuple[int, int]] = [clean[0]]
+        for s, e in clean[1:]:
+            ps, pe = merged[-1]
+            if s <= pe:
+                if e > pe:
+                    merged[-1] = (ps, e)
+            else:
+                merged.append((s, e))
+        index[doc_id] = ([m[0] for m in merged], merged)
+    return index
+
+
+def _span_index_intersects(
+    index: Mapping[str, tuple[list[int], list[tuple[int, int]]]],
+    doc_id: str,
+    target_span: tuple[int, int],
+) -> bool:
+    """Return True iff *target_span* intersects any indexed span in *doc_id*."""
+    ts, te = int(target_span[0]), int(target_span[1])
+    if ts >= te:
+        return False
+    entry = index.get(doc_id)
+    if not entry:
+        return False
+    starts, merged = entry
+    pos = bisect_left(starts, te) - 1
+    return pos >= 0 and merged[pos][1] > ts
+
+
 def _unit_covers_doc_span(
     unit_spans_by_doc: Mapping[str, Sequence[tuple[int, int]]],
     doc_id: str,
@@ -670,6 +712,10 @@ def _divergence_gaps_for_item(
     *,
     differing_spans_by_doc: Mapping[str, Sequence[tuple[int, int]]] | None = None,
     doc_metadata: Mapping[str, Mapping[str, Any]] | None = None,
+    unit_span_index: Mapping[str, tuple[list[int], list[tuple[int, int]]]] | None = None,
+    diff_span_index: Mapping[str, tuple[list[int], list[tuple[int, int]]]] | None = None,
+    doc_pred_spans: Mapping[str, Sequence[tuple[str, int, int]]] | None = None,
+    doc_pred_sets: Mapping[str, set[str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Compute fine-grained quantity & textual reference-register gaps for a divergence."""
     pri_id = str(getattr(div, "primary_source_id", "") or "")
@@ -749,11 +795,33 @@ def _divergence_gaps_for_item(
         if differing_spans_by_doc is not None
         else _differing_spans_from_obligations(reader_obligations, admitted_units)
     )
+    eff_unit_idx = unit_span_index if unit_span_index is not None else _build_merged_span_index(unit_spans_by_doc)
+    eff_diff_idx = diff_span_index if diff_span_index is not None else _build_merged_span_index(eff_diff_spans)
     pri_aliases, sec_aliases = _pair_doc_aliases(pri_id, sec_id, doc_metadata)
     pri_meta = (doc_metadata or {}).get(pri_id, {})
     sec_meta = (doc_metadata or {}).get(sec_id, {})
-    pri_preds = _unit_predicates_on_doc(admitted_units, pri_id)
-    sec_preds = _unit_predicates_on_doc(admitted_units, sec_id)
+    pri_preds = (doc_pred_sets[pri_id] if doc_pred_sets and pri_id in doc_pred_sets else _unit_predicates_on_doc(admitted_units, pri_id))
+    sec_preds = (doc_pred_sets[sec_id] if doc_pred_sets and sec_id in doc_pred_sets else _unit_predicates_on_doc(admitted_units, sec_id))
+    disjoint_pri_idx: dict[str, tuple[list[int], list[tuple[int, int]]]] | None = None
+    disjoint_sec_idx: dict[str, tuple[list[int], list[tuple[int, int]]]] | None = None
+
+    def _get_disjoint_idx(target_doc: str, other_preds: set[str]) -> dict[str, tuple[list[int], list[tuple[int, int]]]]:
+        if doc_pred_spans is not None:
+            spans = [(s, e) for p, s, e in doc_pred_spans.get(target_doc, ()) if p and p not in other_preds]
+            return _build_merged_span_index({target_doc: spans})
+        spans = []
+        for u in admitted_units:
+            pred = str((getattr(u, "proposition", {}) or {}).get("predicate", "") or "")
+            if not pred or pred in other_preds:
+                continue
+            for ref in getattr(u, "evidence", ()) or ():
+                if str(getattr(ref, "document_id", "") or "") != target_doc:
+                    continue
+                r_s = getattr(ref, "start", None)
+                r_e = getattr(ref, "end", None)
+                if r_s is not None and r_e is not None:
+                    spans.append((int(r_s), int(r_e)))
+        return _build_merged_span_index({target_doc: spans})
 
     # 1. Aligned differing sentence pairs
     for p_sent, s_sent in pairs:
@@ -773,11 +841,11 @@ def _divergence_gaps_for_item(
 
         for q in p_diff:
             q_span = (int(q["span"][0]), int(q["span"][1]))
-            if not _unit_covers_doc_span(unit_spans_by_doc, pri_id, q_span):
+            if not _span_index_intersects(eff_unit_idx, pri_id, q_span):
                 _emit_quantity_gap(pri_id, q, p_sent, sec_id, s_sent)
         for q in s_diff:
             q_span = (int(q["span"][0]), int(q["span"][1]))
-            if not _unit_covers_doc_span(unit_spans_by_doc, sec_id, q_span):
+            if not _span_index_intersects(eff_unit_idx, sec_id, q_span):
                 _emit_quantity_gap(sec_id, q, s_sent, pri_id, p_sent)
 
         # Token-level diff check on ALL differing aligned sentence pairs (even when quantities differ).
@@ -808,12 +876,12 @@ def _divergence_gaps_for_item(
             p_uncov = [
                 tok
                 for tok in p_non_qty
-                if not _unit_covers_doc_span(eff_diff_spans, pri_id, (tok[1], tok[2]))
+                if not _span_index_intersects(eff_diff_idx, pri_id, (tok[1], tok[2]))
             ]
             s_uncov = [
                 tok
                 for tok in s_non_qty
-                if not _unit_covers_doc_span(eff_diff_spans, sec_id, (tok[1], tok[2]))
+                if not _span_index_intersects(eff_diff_idx, sec_id, (tok[1], tok[2]))
             ]
 
             # Strip leading/trailing or full structural doc-identifier tokens from uncovered slices.
@@ -856,16 +924,20 @@ def _divergence_gaps_for_item(
 
             # One-sided extra clause already admitted cleanly on a predicate absent from counterpart doc
             if p_uncov and not s_uncov and (tag == "delete" or s_had_doc_ref or not s_non_qty):
+                if disjoint_pri_idx is None:
+                    disjoint_pri_idx = _get_disjoint_idx(pri_id, sec_preds)
                 p_uncov = [
                     tok
                     for tok in p_uncov
-                    if not _covered_by_disjoint_single_doc_unit(admitted_units, pri_id, sec_preds, (tok[1], tok[2]))
+                    if not _span_index_intersects(disjoint_pri_idx, pri_id, (tok[1], tok[2]))
                 ]
             if s_uncov and not p_uncov and (tag == "insert" or p_had_doc_ref or not p_non_qty):
+                if disjoint_sec_idx is None:
+                    disjoint_sec_idx = _get_disjoint_idx(sec_id, pri_preds)
                 s_uncov = [
                     tok
                     for tok in s_uncov
-                    if not _covered_by_disjoint_single_doc_unit(admitted_units, sec_id, pri_preds, (tok[1], tok[2]))
+                    if not _span_index_intersects(disjoint_sec_idx, sec_id, (tok[1], tok[2]))
                 ]
 
             # 1-token structural clause join (e.g. "; " vs " and ") strictly bridging two differing spans
@@ -947,13 +1019,13 @@ def _divergence_gaps_for_item(
         for p_sent in unmatched_pri:
             for q in _extract_sentence_quantity_tokens(p_sent[2], p_sent[0]):
                 q_span = (int(q["span"][0]), int(q["span"][1]))
-                if not _unit_covers_doc_span(unit_spans_by_doc, pri_id, q_span):
+                if not _span_index_intersects(eff_unit_idx, pri_id, q_span):
                     _emit_quantity_gap(pri_id, q, p_sent, sec_id, None)
     if sec_span is not None:
         for s_sent in unmatched_sec:
             for q in _extract_sentence_quantity_tokens(s_sent[2], s_sent[0]):
                 q_span = (int(q["span"][0]), int(q["span"][1]))
-                if not _unit_covers_doc_span(unit_spans_by_doc, sec_id, q_span):
+                if not _span_index_intersects(eff_unit_idx, sec_id, q_span):
                     _emit_quantity_gap(sec_id, q, s_sent, pri_id, None)
 
     return gaps
@@ -1058,6 +1130,52 @@ def _compute_register_state(
     obligations: list[VerificationObligation] = []
     seen_ids: set[str] = set()
 
+    # Pre-cache document authority ranks once per (document_id, revision) so SQLite is never queried per-unit/per-pair.
+    _MISSING_RANK = object()
+    doc_rank_by_rev: dict[tuple[str, str], Any] = {}
+    for sdoc in getattr(evidence, "documents", ()) or ():
+        did = str(getattr(sdoc, "document_id", "") or "")
+        rev = str(getattr(sdoc, "revision", "") or "")
+        if did:
+            doc_rank_by_rev[(did, rev)] = int(getattr(sdoc, "authority_rank", 0) or 0)
+
+    unit_rank_cache: dict[str, int] = {}
+    unit_spans_cache: dict[str, list[dict[str, Any]]] = {}
+
+    def _unit_rank(u: Any) -> int:
+        uid = str(u.unit_id)
+        cached = unit_rank_cache.get(uid)
+        if cached is not None:
+            return cached
+        ranks: list[int] = []
+        for ref in getattr(u, "evidence", ()) or ():
+            key = (ref.document_id, ref.revision)
+            rk = doc_rank_by_rev.get(key, _MISSING_RANK)
+            if rk is _MISSING_RANK:
+                try:
+                    doc = evidence._document(ref.document_id, ref.revision, current=False)
+                    rk = int(doc.authority_rank)
+                except Exception:
+                    rk = None
+                doc_rank_by_rev[key] = rk
+            if rk is not None:
+                ranks.append(rk)
+        res = max(ranks) if ranks else 0
+        unit_rank_cache[uid] = res
+        return res
+
+    def _get_unit_spans(u: Any) -> list[dict[str, Any]]:
+        uid = str(u.unit_id)
+        cached = unit_spans_cache.get(uid)
+        if cached is not None:
+            return cached
+        sp = _unit_spans(u)
+        unit_spans_cache[uid] = sp
+        return sp
+
+    # Pre-cache context_key once per admitted unit (avoid repeated canonical() JSON encoding in loops)
+    unit_ctx_cache: dict[str, str] = {str(u.unit_id): str(u.context_key) for u in admitted}
+
     # (i) Mandatory predicates that have at least one admissible unit
     by_predicate: dict[str, list[Any]] = {}
     for u in relevant_units:
@@ -1072,10 +1190,10 @@ def _compute_register_state(
         # Pick highest-authority unit(s) as primary source span anchor
         ranked = sorted(
             pred_units,
-            key=lambda u: (-_unit_authority_rank(evidence, u), str(u.unit_id)),
+            key=lambda u: (-_unit_rank(u), str(u.unit_id)),
         )
         top_unit = ranked[0]
-        ctx_key = str(top_unit.context_key)
+        ctx_key = unit_ctx_cache[str(top_unit.unit_id)]
         ob_id = f"corpus::predicate::{pred}::{digest(ctx_key)[:12]}"
         if ob_id in seen_ids:
             continue
@@ -1098,7 +1216,7 @@ def _compute_register_state(
                     "expected_value": top_unit.proposition.get("value"),
                     "expected_unit": top_unit.proposition.get("unit"),
                     "unit_ids": [str(u.unit_id) for u in ranked],
-                    "evidence_spans": _unit_spans(top_unit),
+                    "evidence_spans": _get_unit_spans(top_unit),
                 },
             )
         )
@@ -1144,136 +1262,185 @@ def _compute_register_state(
         except Exception:
             continue
 
-        # Track whether each document has a single normalized entity for this predicate
-        doc_entities: dict[str, set[str]] = {}
-        for u in pred_units:
-            doc_entities.setdefault(_unit_doc_id(u), set()).add(_norm(str(u.proposition.get("entity", ""))))
+        unit_docs = [_unit_doc_id(u) for u in pred_units]
+        unit_ents_norm = [_norm(str(u.proposition.get("entity", ""))) for u in pred_units]
+        unit_ctxs = [unit_ctx_cache[str(u.unit_id)] for u in pred_units]
+        unit_valsigs = [
+            (canonical(u.proposition.get("value")), u.proposition.get("unit"), u.proposition.get("polarity"))
+            for u in pred_units
+        ]
 
-        n = len(pred_units)
-        for i in range(n):
-            for j in range(i + 1, n):
-                u1, u2 = pred_units[i], pred_units[j]
-                d1, d2 = _unit_doc_id(u1), _unit_doc_id(u2)
-                if d1 and d2 and d1 == d2:
-                    # Skip two alternative unit-readings from overlapping character spans in the
-                    # same document (e.g. parenthetical alternatives in the same clause).
-                    evs1 = getattr(u1, "evidence", ()) or ()
-                    evs2 = getattr(u2, "evidence", ()) or ()
-                    if evs1 and evs2:
-                        s1 = getattr(evs1[0], "start", None)
-                        e1_pos = getattr(evs1[0], "end", None)
-                        s2 = getattr(evs2[0], "start", None)
-                        e2_pos = getattr(evs2[0], "end", None)
-                        if (
-                            s1 is not None
-                            and e1_pos is not None
-                            and s2 is not None
-                            and e2_pos is not None
-                            and max(int(s1), int(s2)) < min(int(e1_pos), int(e2_pos))
-                        ):
-                            continue
-                same_ctx = str(u1.context_key) == str(u2.context_key)
-                if not same_ctx:
-                    if not d1 or not d2 or d1 == d2:
+        # Track per-document normalized entities and group indices by context/entity/val_sig to avoid O(N^2) scans.
+        doc_entities: dict[str, set[str]] = {}
+        ctx_val_buckets: dict[str, dict[tuple[str, Any, Any], list[int]]] = {}
+        ent_val_buckets: dict[str, dict[tuple[str, Any, Any], list[int]]] = {}
+        for idx in range(len(pred_units)):
+            d_i = unit_docs[idx]
+            e_i = unit_ents_norm[idx]
+            vs_i = unit_valsigs[idx]
+            doc_entities.setdefault(d_i, set()).add(e_i)
+            ctx_val_buckets.setdefault(unit_ctxs[idx], {}).setdefault(vs_i, []).append(idx)
+            if d_i:
+                ent_val_buckets.setdefault(e_i, {}).setdefault(vs_i, []).append(idx)
+
+        candidate_pairs: set[tuple[int, int]] = set()
+
+        def _collect_cross_val_pairs(
+            val_map: Mapping[tuple[str, Any, Any], list[int]],
+            *,
+            require_diff_doc: bool,
+        ) -> None:
+            if len(val_map) < 2:
+                return
+            groups = list(val_map.values())
+            m = len(groups)
+            for gi in range(m):
+                g1 = groups[gi]
+                for gj in range(gi + 1, m):
+                    g2 = groups[gj]
+                    for a in g1:
+                        da = unit_docs[a]
+                        for b in g2:
+                            if require_diff_doc and (not da or not unit_docs[b] or da == unit_docs[b]):
+                                continue
+                            candidate_pairs.add((a, b) if a < b else (b, a))
+
+        for val_map in ctx_val_buckets.values():
+            _collect_cross_val_pairs(val_map, require_diff_doc=False)
+        for val_map in ent_val_buckets.values():
+            _collect_cross_val_pairs(val_map, require_diff_doc=True)
+
+        singleton_docs = {d for d, ents in doc_entities.items() if d and len(ents) == 1}
+        if len(singleton_docs) >= 2:
+            singleton_val_buckets: dict[tuple[str, Any, Any], list[int]] = {}
+            for idx in range(len(pred_units)):
+                if unit_docs[idx] in singleton_docs:
+                    singleton_val_buckets.setdefault(unit_valsigs[idx], []).append(idx)
+            _collect_cross_val_pairs(singleton_val_buckets, require_diff_doc=True)
+
+        for i, j in sorted(candidate_pairs):
+            u1, u2 = pred_units[i], pred_units[j]
+            d1, d2 = unit_docs[i], unit_docs[j]
+            if d1 and d2 and d1 == d2:
+                # Skip two alternative unit-readings from overlapping character spans in the
+                # same document (e.g. parenthetical alternatives in the same clause).
+                evs1 = getattr(u1, "evidence", ()) or ()
+                evs2 = getattr(u2, "evidence", ()) or ()
+                if evs1 and evs2:
+                    s1 = getattr(evs1[0], "start", None)
+                    e1_pos = getattr(evs1[0], "end", None)
+                    s2 = getattr(evs2[0], "start", None)
+                    e2_pos = getattr(evs2[0], "end", None)
+                    if (
+                        s1 is not None
+                        and e1_pos is not None
+                        and s2 is not None
+                        and e2_pos is not None
+                        and max(int(s1), int(s2)) < min(int(e1_pos), int(e2_pos))
+                    ):
                         continue
-                    s1, s2 = _unit_scope(u1), _unit_scope(u2)
-                    if not _scopes_compatible(s1, s2):
-                        continue
-                    e1, e2 = str(u1.proposition.get("entity", "")), str(u2.proposition.get("entity", ""))
-                    q1, q2 = _entity_qualifier(e1), _entity_qualifier(e2)
-                    if q1 and q2 and q1[0] == q2[0] and q1[1] != q2[1]:
-                        continue
-                    same_ent = _norm(e1) == _norm(e2)
-                    singleton_per_doc = len(doc_entities.get(d1, set())) == 1 and len(doc_entities.get(d2, set())) == 1
-                    if not (same_ent or singleton_per_doc):
-                        continue
-                ctx_key = str(u1.context_key) if same_ctx else f"{pred}::{_norm(str(u1.proposition.get('entity', '')))}"
-                if not _units_incompatible(vocabulary, spec, u1, u2):
+            same_ctx = unit_ctxs[i] == unit_ctxs[j]
+            if not same_ctx:
+                if not d1 or not d2 or d1 == d2:
                     continue
-                r1 = _unit_authority_rank(evidence, u1)
-                r2 = _unit_authority_rank(evidence, u2)
-                # (ii) Material conflict for every incompatible pair on the same context_key
-                has_conflicts = True
-                pair_sorted = sorted([u1, u2], key=lambda u: str(u.unit_id))
-                a_u, b_u = pair_sorted[0], pair_sorted[1]
-                ob_id = f"corpus::conflict::{pred}::{digest([a_u.unit_id, b_u.unit_id])[:12]}"
-                if ob_id not in seen_ids:
-                    seen_ids.add(ob_id)
-                    obligations.append(
-                        VerificationObligation(
-                            obligation_id=ob_id,
-                            family="document_authority",
-                            description=(
-                                f"Disclose material conflict for '{pred}' between incompatible "
-                                "admitted corpus values (present both values and governance/unresolved status)."
-                            ),
-                            critical=True,
-                            origin="corpus",
-                            parameters={
-                                "corpus_obligation_kind": "material_conflict",
-                                "entity": str(a_u.proposition.get("entity", "")),
-                                "predicate": pred,
-                                "context_key": ctx_key,
-                                "unit_ids": [str(a_u.unit_id), str(b_u.unit_id)],
-                                "conflicting_values": [
-                                    {
-                                        "unit_id": str(a_u.unit_id),
-                                        "document_id": str(a_u.evidence[0].document_id) if getattr(a_u, "evidence", ()) else "",
-                                        "value": a_u.proposition.get("value"),
-                                        "unit": a_u.proposition.get("unit"),
-                                        "authority_rank": _unit_authority_rank(evidence, a_u),
-                                    },
-                                    {
-                                        "unit_id": str(b_u.unit_id),
-                                        "document_id": str(b_u.evidence[0].document_id) if getattr(b_u, "evidence", ()) else "",
-                                        "value": b_u.proposition.get("value"),
-                                        "unit": b_u.proposition.get("unit"),
-                                        "authority_rank": _unit_authority_rank(evidence, b_u),
-                                    },
-                                ],
-                                "evidence_spans": _unit_spans(a_u) + _unit_spans(b_u),
-                            },
-                        )
+                s1, s2 = _unit_scope(u1), _unit_scope(u2)
+                if not _scopes_compatible(s1, s2):
+                    continue
+                e1, e2 = str(u1.proposition.get("entity", "")), str(u2.proposition.get("entity", ""))
+                q1, q2 = _entity_qualifier(e1), _entity_qualifier(e2)
+                if q1 and q2 and q1[0] == q2[0] and q1[1] != q2[1]:
+                    continue
+                same_ent = unit_ents_norm[i] == unit_ents_norm[j]
+                singleton_per_doc = d1 in singleton_docs and d2 in singleton_docs
+                if not (same_ent or singleton_per_doc):
+                    continue
+            ctx_key = unit_ctxs[i] if same_ctx else f"{pred}::{unit_ents_norm[i]}"
+            if not _units_incompatible(vocabulary, spec, u1, u2):
+                continue
+            r1 = _unit_rank(u1)
+            r2 = _unit_rank(u2)
+            # (ii) Material conflict for every incompatible pair on the same context_key
+            has_conflicts = True
+            pair_sorted = sorted([u1, u2], key=lambda u: str(u.unit_id))
+            a_u, b_u = pair_sorted[0], pair_sorted[1]
+            ob_id = f"corpus::conflict::{pred}::{digest([a_u.unit_id, b_u.unit_id])[:12]}"
+            if ob_id not in seen_ids:
+                seen_ids.add(ob_id)
+                obligations.append(
+                    VerificationObligation(
+                        obligation_id=ob_id,
+                        family="document_authority",
+                        description=(
+                            f"Disclose material conflict for '{pred}' between incompatible "
+                            "admitted corpus values (present both values and governance/unresolved status)."
+                        ),
+                        critical=True,
+                        origin="corpus",
+                        parameters={
+                            "corpus_obligation_kind": "material_conflict",
+                            "entity": str(a_u.proposition.get("entity", "")),
+                            "predicate": pred,
+                            "context_key": ctx_key,
+                            "unit_ids": [str(a_u.unit_id), str(b_u.unit_id)],
+                            "conflicting_values": [
+                                {
+                                    "unit_id": str(a_u.unit_id),
+                                    "document_id": str(a_u.evidence[0].document_id) if getattr(a_u, "evidence", ()) else "",
+                                    "value": a_u.proposition.get("value"),
+                                    "unit": a_u.proposition.get("unit"),
+                                    "authority_rank": _unit_rank(a_u),
+                                },
+                                {
+                                    "unit_id": str(b_u.unit_id),
+                                    "document_id": str(b_u.evidence[0].document_id) if getattr(b_u, "evidence", ()) else "",
+                                    "value": b_u.proposition.get("value"),
+                                    "unit": b_u.proposition.get("unit"),
+                                    "authority_rank": _unit_rank(b_u),
+                                },
+                            ],
+                            "evidence_spans": _get_unit_spans(a_u) + _get_unit_spans(b_u),
+                        },
                     )
-                if r1 != r2:
-                    # (iii) Higher authority_rank overrides lower authority_rank
-                    has_overrides = True
-                    winner, loser = (u1, u2) if r1 > r2 else (u2, u1)
-                    w_rank, l_rank = max(r1, r2), min(r1, r2)
-                    ob_id = f"corpus::override::{pred}::{digest([winner.unit_id, loser.unit_id])[:12]}"
-                    if ob_id in seen_ids:
-                        continue
-                    seen_ids.add(ob_id)
-                    obligations.append(
-                        VerificationObligation(
-                            obligation_id=ob_id,
-                            family="document_authority",
-                            description=(
-                                f"Cover authority override for '{pred}': higher authority_rank ({w_rank}) "
-                                f"supersedes lower authority_rank ({l_rank}) while disclosing the discrepancy."
-                            ),
-                            critical=True,
-                            origin="corpus",
-                            parameters={
-                                "corpus_obligation_kind": "authority_override",
-                                "entity": str(winner.proposition.get("entity", "")),
-                                "predicate": pred,
-                                "context_key": ctx_key,
-                                "unit_ids": [str(winner.unit_id), str(loser.unit_id)],
-                                "winner_unit_id": str(winner.unit_id),
-                                "loser_unit_id": str(loser.unit_id),
-                                "winner_document_id": str(winner.evidence[0].document_id) if getattr(winner, "evidence", ()) else "",
-                                "loser_document_id": str(loser.evidence[0].document_id) if getattr(loser, "evidence", ()) else "",
-                                "winner_value": winner.proposition.get("value"),
-                                "winner_unit": winner.proposition.get("unit"),
-                                "winner_authority_rank": w_rank,
-                                "loser_value": loser.proposition.get("value"),
-                                "loser_unit": loser.proposition.get("unit"),
-                                "loser_authority_rank": l_rank,
-                                "evidence_spans": _unit_spans(winner) + _unit_spans(loser),
-                            },
-                        )
+                )
+            if r1 != r2:
+                # (iii) Higher authority_rank overrides lower authority_rank
+                has_overrides = True
+                winner, loser = (u1, u2) if r1 > r2 else (u2, u1)
+                w_rank, l_rank = max(r1, r2), min(r1, r2)
+                ob_id = f"corpus::override::{pred}::{digest([winner.unit_id, loser.unit_id])[:12]}"
+                if ob_id in seen_ids:
+                    continue
+                seen_ids.add(ob_id)
+                obligations.append(
+                    VerificationObligation(
+                        obligation_id=ob_id,
+                        family="document_authority",
+                        description=(
+                            f"Cover authority override for '{pred}': higher authority_rank ({w_rank}) "
+                            f"supersedes lower authority_rank ({l_rank}) while disclosing the discrepancy."
+                        ),
+                        critical=True,
+                        origin="corpus",
+                        parameters={
+                            "corpus_obligation_kind": "authority_override",
+                            "entity": str(winner.proposition.get("entity", "")),
+                            "predicate": pred,
+                            "context_key": ctx_key,
+                            "unit_ids": [str(winner.unit_id), str(loser.unit_id)],
+                            "winner_unit_id": str(winner.unit_id),
+                            "loser_unit_id": str(loser.unit_id),
+                            "winner_document_id": str(winner.evidence[0].document_id) if getattr(winner, "evidence", ()) else "",
+                            "loser_document_id": str(loser.evidence[0].document_id) if getattr(loser, "evidence", ()) else "",
+                            "winner_value": winner.proposition.get("value"),
+                            "winner_unit": winner.proposition.get("unit"),
+                            "winner_authority_rank": w_rank,
+                            "loser_value": loser.proposition.get("value"),
+                            "loser_unit": loser.proposition.get("unit"),
+                            "loser_authority_rank": l_rank,
+                            "evidence_spans": _get_unit_spans(winner) + _get_unit_spans(loser),
+                        },
                     )
+                )
 
     # Collect document full texts from divergence_collection, evidence layer, and expected_documents
     doc_texts: dict[str, str] = {}
@@ -1291,14 +1458,22 @@ def _compute_register_state(
                 doc_texts[str(did)] = txt
 
     unit_spans_by_doc: dict[str, list[tuple[int, int]]] = {}
+    doc_pred_spans: dict[str, list[tuple[str, int, int]]] = {}
+    doc_pred_sets: dict[str, set[str]] = {}
     stored_fe_map = getattr(evidence, "field_evidences", {}) or {}
     for u in admitted:
+        u_pred = str((getattr(u, "proposition", {}) or {}).get("predicate", "") or "")
         for ref in getattr(u, "evidence", ()) or ():
             r_doc = str(getattr(ref, "document_id", "") or "")
             r_s = getattr(ref, "start", None)
             r_e = getattr(ref, "end", None)
+            if r_doc and u_pred:
+                doc_pred_sets.setdefault(r_doc, set()).add(u_pred)
             if r_doc and r_s is not None and r_e is not None:
-                unit_spans_by_doc.setdefault(r_doc, []).append((int(r_s), int(r_e)))
+                is_s, ie_e = int(r_s), int(r_e)
+                unit_spans_by_doc.setdefault(r_doc, []).append((is_s, ie_e))
+                if u_pred:
+                    doc_pred_spans.setdefault(r_doc, []).append((u_pred, is_s, ie_e))
         fe_for_unit = stored_fe_map.get(str(u.unit_id), {}) if isinstance(stored_fe_map, Mapping) else {}
         if isinstance(fe_for_unit, Mapping):
             for fname, fref in fe_for_unit.items():
@@ -1317,6 +1492,52 @@ def _compute_register_state(
         admitted,
         stored_fe_map,
     )
+    unit_span_index = _build_merged_span_index(unit_spans_by_doc)
+    diff_span_index = _build_merged_span_index(differing_spans_by_doc)
+
+    # Pre-index reader obligations by document span for O(log R) divergence UID lookup.
+    rob_unbounded_uids: dict[str, set[str]] = {}
+    _rob_bounded_raw: dict[str, list[tuple[int, int, tuple[str, ...]]]] = {}
+    for rob in reader_obligations:
+        r_params = rob.parameters or {}
+        r_uids = tuple(str(uid) for uid in (r_params.get("unit_ids") or ()))
+        if not r_uids:
+            continue
+        for sp in r_params.get("evidence_spans") or ():
+            sp_doc = str(sp.get("document_id", "") or "")
+            if not sp_doc:
+                continue
+            sp_s, sp_e = sp.get("start"), sp.get("end")
+            if sp_s is None or sp_e is None:
+                rob_unbounded_uids.setdefault(sp_doc, set()).update(r_uids)
+            else:
+                _rob_bounded_raw.setdefault(sp_doc, []).append((int(sp_s), int(sp_e), r_uids))
+
+    _ROB_BLK = 64
+    rob_bounded_blocks: dict[str, list[tuple[int, int, list[tuple[int, int, tuple[str, ...]]]]]] = {}
+    for sp_doc, entries in _rob_bounded_raw.items():
+        entries.sort(key=lambda x: x[0])
+        blocks = []
+        for idx in range(0, len(entries), _ROB_BLK):
+            blk = entries[idx : idx + _ROB_BLK]
+            blocks.append((blk[0][0], max(item[1] for item in blk), blk))
+        rob_bounded_blocks[sp_doc] = blocks
+
+    def _collect_rob_uids_in_span(doc_id: str, span: tuple[int, int] | None, out: set[str]) -> None:
+        if not doc_id or span is None:
+            return
+        qs, qe = int(span[0]), int(span[1])
+        out.update(rob_unbounded_uids.get(doc_id, ()))
+        for b_min_s, b_max_e, blk in rob_bounded_blocks.get(doc_id, ()):
+            if b_min_s >= qe:
+                break
+            if b_max_e <= qs:
+                continue
+            for es, ee, euids in blk:
+                if es >= qe:
+                    break
+                if ee > qs:
+                    out.update(euids)
     div_doc_meta: dict[str, dict[str, Any]] = {}
     if divergence_collection is not None and divergence_collection.document_metadata:
         for did, meta in divergence_collection.document_metadata.items():
@@ -1356,6 +1577,10 @@ def _compute_register_state(
             reader_obligations,
             differing_spans_by_doc=differing_spans_by_doc,
             doc_metadata=div_doc_meta,
+            unit_span_index=unit_span_index,
+            diff_span_index=diff_span_index,
+            doc_pred_spans=doc_pred_spans,
+            doc_pred_sets=doc_pred_sets,
         ):
             gkey = (
                 str(gap_item.get("kind", "")),
@@ -1386,15 +1611,10 @@ def _compute_register_state(
                     "end": int(sec_span[1]),
                     "quote": sec_label,
                 })
-            overlapping_uids = sorted({
-                uid
-                for rob in reader_obligations
-                if (
-                    (pri_id and pri_span is not None and _obligation_overlaps_doc_span(rob, pri_id, pri_span))
-                    or (sec_id and sec_span is not None and _obligation_overlaps_doc_span(rob, sec_id, sec_span))
-                )
-                for uid in ((rob.parameters or {}).get("unit_ids") or ())
-            })
+            ov_uids: set[str] = set()
+            _collect_rob_uids_in_span(pri_id, pri_span, ov_uids)
+            _collect_rob_uids_in_span(sec_id, sec_span, ov_uids)
+            overlapping_uids = sorted(ov_uids)
             obligations.append(
                 VerificationObligation(
                     obligation_id=div_ob_id,
@@ -1434,7 +1654,7 @@ def _compute_register_state(
             "condition_status": str(u.proposition.get("condition_status", "unconditional")),
         }
         for u in admitted
-        for sp in _unit_spans(u)
+        for sp in _get_unit_spans(u)
     )
 
     return {

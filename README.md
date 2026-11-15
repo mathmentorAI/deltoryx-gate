@@ -268,3 +268,9 @@ separate pipeline, with application-controlled vocabulary and evidence admission
 A serialized vocabulary description alone is not an executable vocabulary in v3;
 pass the operator-created `Vocabulary` object when verifying. An unsupported
 representation fails closed.
+
+### Optimization Signal & Coverage Closure
+
+- **Never optimize a harness for raw `PASS` rate alone.** Optimizing `PASS` rate in isolation rewards omission of disputed/conflicting sections, ungrounded prose padding, and graph pruning.
+- **Target metric:** optimize for **`PASS` with full corpus obligation coverage** (`corpus_obligations_covered == corpus_obligations_total` and `corpus_obligations_rejected == 0`, as recorded on the result and signed receipt via `corpus_obligations_total`, `corpus_obligations_covered`, `corpus_obligations_rejected`, and `corpus_obligation_ids`).
+- **Coverage `RETRY`s are not autonomy:** any attempt that receives `RETRY` (including `CORPUS_OBLIGATION_UNCOVERED` or `CORPUS_OBLIGATION_DROPPED`) or `ESCALATE` (`REFERENCE_REGISTER_MISSING`, `CORPUS_OBLIGATION_REJECTED`) requires human or bounded repair intervention and **must not** be counted as autonomous completion.

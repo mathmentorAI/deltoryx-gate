@@ -49,3 +49,12 @@ Using `Harness²` with `Deltoryx Gate` **does not by itself grant legal or regul
 - `PASS` certifies **deterministic conformance with the declared domain contract, source hierarchy, and operator policy** over the supplied documents and policy — not open-world semantic completeness over unextracted prose outside the submitted contract.
 - Regulatory compliance also requires organizational governance, data/privacy controls (e.g., GDPR), cybersecurity, bias/fairness assessments, conformity assessments where applicable, and empirical validation on live domain documents (`--live`).
 - What `Deltoryx Gate` provides is the **deterministic verification and authorization boundary** that allows teams to adopt adaptive agent harnesses without surrendering auditability, policy control, or abstention guarantees.
+
+## Optimization Metrics & Corpus Closure
+
+When training, tuning, or evaluating an adaptive harness (such as Harness²) against `Deltoryx Gate`:
+
+1. **Optimize `PASS` with full corpus coverage, never `PASS` rate alone.**
+   A harness that maximizes raw `PASS` rate learns to omit disputed figures, drop failing assertions during repair, or pad prose outside audited spans. Every verification result and signed receipt now exposes `corpus_obligations_total`, `corpus_obligations_covered`, `corpus_obligations_rejected`, and `corpus_obligation_ids` so evaluators can score full closure (`corpus_obligations_covered == corpus_obligations_total` and `corpus_obligations_rejected == 0`).
+2. **`RETRY`s for coverage do not count as autonomy.**
+   Attempts rejected with `CORPUS_OBLIGATION_UNCOVERED`, `CORPUS_OBLIGATION_DROPPED`, `UNSUPPORTED_FACTUAL_ADDITION`, or escalated via `REFERENCE_REGISTER_MISSING` / `CORPUS_OBLIGATION_REJECTED` are **not** autonomous completions and must not be counted toward autonomous throughput or selective-coverage autonomy metrics.

@@ -1112,6 +1112,7 @@ def authorize(
         else digest({"operation_id": op_id, "conclusion_id": conc.claim_id, "assessment_digest": assessment.assessment_digest})
     )
 
+    cov_snap = getattr(assessment, "corpus_coverage", None) or {}
     decision_snapshot: dict[str, Any] = {
         "operation_id": op_id,
         "payload_digest": eff_payload_digest,
@@ -1127,6 +1128,10 @@ def authorize(
         "status": status,
         "issues": [asdict(i) for i in all_issues],
         "authorization_head": op_id,
+        "corpus_obligations_total": int(cov_snap.get("total_obligations", 0)),
+        "corpus_obligations_covered": int(cov_snap.get("covered_count", 0)),
+        "corpus_obligations_rejected": int(cov_snap.get("rejected_count", 0)),
+        "corpus_obligation_ids": list(cov_snap.get("obligation_ids") or ()),
     }
 
     if state is not None:

@@ -394,9 +394,13 @@ class VerificationReceipt:
     ledger_digest: str = ""
     leaf_count: int = 0
     hmac_authenticated: bool = False
+    corpus_obligations_total: int | None = None
+    corpus_obligations_covered: int | None = None
+    corpus_obligations_rejected: int | None = None
+    corpus_obligation_ids: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "scheme": self.scheme,
             "merkle_root": self.merkle_root,
             "policy_digest": self.policy_digest,
@@ -407,6 +411,12 @@ class VerificationReceipt:
             "leaf_count": self.leaf_count or len(self.leaf_hashes),
             "hmac_authenticated": self.hmac_authenticated,
         }
+        if self.corpus_obligations_total is not None:
+            out["corpus_obligations_total"] = int(self.corpus_obligations_total)
+            out["corpus_obligations_covered"] = int(self.corpus_obligations_covered or 0)
+            out["corpus_obligations_rejected"] = int(self.corpus_obligations_rejected or 0)
+            out["corpus_obligation_ids"] = list(self.corpus_obligation_ids)
+        return out
 
 
 @dataclass(frozen=True)

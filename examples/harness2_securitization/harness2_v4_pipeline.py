@@ -1132,6 +1132,7 @@ class PipelineVerificationResult:
     corpus_covered_ids: tuple[str, ...] = ()
     corpus_uncovered_ids: tuple[str, ...] = ()
     corpus_rejected_ids: tuple[str, ...] = ()
+    signed_receipt: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -1633,47 +1634,6 @@ def evaluate_securitization_candidate(
 
     accepted = report_disp == "ACCEPT"
 
-    # Separate operational authorization: derived from corpus register (ignores agent metadata.has_material_discrepancies)
-    has_material_discrepancies = bool(
-        corpus_register is not None
-        and (corpus_register.has_material_conflicts or corpus_register.has_authority_overrides)
-    )
-    if not accepted:
-        op_auth = {
-            "status": "RETRY" if report_disp == "RETRY" else "ESCALATE",
-            "authorized": False,
-            "reason": "REPORT_NOT_ACCEPTED",
-            "response_digest": resp_digest,
-            "assessment_digest": assessment_digest,
-            "ledger_state_digest": ledger_state_digest,
-        }
-    elif has_material_discrepancies:
-        op_auth = {
-            "status": "ESCALATE",
-            "authorized": False,
-            "reason": "MATERIAL_DISCREPANCIES_REQUIRE_HUMAN_SIGNOFF",
-            "response_digest": resp_digest,
-            "assessment_digest": assessment_digest,
-            "ledger_state_digest": ledger_state_digest,
-        }
-    else:
-        op_auth = {
-            "status": "PASS",
-            "authorized": True,
-            "reason": "VERIFIED_AND_CONSISTENT",
-            "response_digest": resp_digest,
-            "assessment_digest": assessment_digest,
-            "ledger_state_digest": ledger_state_digest,
-        }
-
-    consolidated_feedback = {
-        "disposition": report_disp,
-        "issue_count": len(dedup_issues),
-        "governing_source": gov_doc.filename,
-        "issues": dedup_issues,
-        "anti_evasion_rule": "Do NOT delete existing valid sections or quantitative figures to silence an error; fix every cited defect in place.",
-    }
-    verifier_ms = (time.perf_counter() - t0) * 1000.0
     cov_info = (
         dict(v4_review.assessment.corpus_coverage)
         if v4_review is not None and getattr(v4_review.assessment, "corpus_coverage", None)
@@ -1689,6 +1649,99 @@ def evaluate_securitization_candidate(
     total_obs = int(cov_info.get("total_obligations", len(ob_ids)))
     covered_obs = int(cov_info.get("covered_count", len(cov_ids)))
     rejected_obs = int(cov_info.get("rejected_count", len(rej_ids)))
+
+    # Separate operational authorization: derived from corpus register (ignores agent metadata.has_material_discrepancies)
+    has_material_discrepancies = bool(
+        corpus_register is not None
+        and (corpus_register.has_material_conflicts or corpus_register.has_authority_overrides)
+    )
+    receipt_payload: dict[str, Any] = (
+        v3_verdict.receipt.to_dict()
+        if v3_verdict is not None and getattr(v3_verdict, "receipt", None) is not None
+        else {
+            "scheme": "claimlayer-v4-corpus-receipt-v1",
+            "response_digest": resp_digest,
+            "assessment_digest": assessment_digest,
+            "ledger_digest": ledger_state_digest,
+        }
+    )
+    receipt_payload["corpus_obligations_total"] = total_obs
+    receipt_payload["corpus_obligations_covered"] = covered_obs
+    receipt_payload["corpus_obligations_rejected"] = rejected_obs
+    receipt_payload["corpus_obligation_ids"] = list(ob_ids)
+    receipt_payload["corpus_coverage_digest"] = hashlib.sha256(
+        json.dumps(
+            {
+                "report_disposition": report_disp,
+                "response_digest": resp_digest,
+                "assessment_digest": assessment_digest,
+                "ledger_state_digest": ledger_state_digest,
+                "corpus_obligations_total": total_obs,
+                "corpus_obligations_covered": covered_obs,
+                "corpus_obligations_rejected": rejected_obs,
+                "corpus_obligation_ids": list(ob_ids),
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    if "signature" not in receipt_payload or not receipt_payload["signature"]:
+        receipt_payload["signature"] = receipt_payload["corpus_coverage_digest"]
+
+    if not accepted:
+        op_auth = {
+            "status": "RETRY" if report_disp == "RETRY" else "ESCALATE",
+            "authorized": False,
+            "reason": "REPORT_NOT_ACCEPTED",
+            "response_digest": resp_digest,
+            "assessment_digest": assessment_digest,
+            "ledger_state_digest": ledger_state_digest,
+            "corpus_obligations_total": total_obs,
+            "corpus_obligations_covered": covered_obs,
+            "corpus_obligations_rejected": rejected_obs,
+            "corpus_obligation_ids": list(ob_ids),
+            "receipt": receipt_payload,
+        }
+    elif has_material_discrepancies:
+        op_auth = {
+            "status": "ESCALATE",
+            "authorized": False,
+            "reason": "MATERIAL_DISCREPANCIES_REQUIRE_HUMAN_SIGNOFF",
+            "response_digest": resp_digest,
+            "assessment_digest": assessment_digest,
+            "ledger_state_digest": ledger_state_digest,
+            "corpus_obligations_total": total_obs,
+            "corpus_obligations_covered": covered_obs,
+            "corpus_obligations_rejected": rejected_obs,
+            "corpus_obligation_ids": list(ob_ids),
+            "receipt": receipt_payload,
+        }
+    else:
+        op_auth = {
+            "status": "PASS",
+            "authorized": True,
+            "reason": "VERIFIED_AND_CONSISTENT",
+            "response_digest": resp_digest,
+            "assessment_digest": assessment_digest,
+            "ledger_state_digest": ledger_state_digest,
+            "corpus_obligations_total": total_obs,
+            "corpus_obligations_covered": covered_obs,
+            "corpus_obligations_rejected": rejected_obs,
+            "corpus_obligation_ids": list(ob_ids),
+            "receipt": receipt_payload,
+        }
+
+    consolidated_feedback = {
+        "disposition": report_disp,
+        "issue_count": len(dedup_issues),
+        "governing_source": gov_doc.filename,
+        "issues": dedup_issues,
+        "anti_evasion_rule": "Do NOT delete existing valid sections or quantitative figures to silence an error; fix every cited defect in place.",
+        "corpus_obligations_total": total_obs,
+        "corpus_obligations_covered": covered_obs,
+        "corpus_obligations_rejected": rejected_obs,
+        "corpus_obligation_ids": list(ob_ids),
+    }
+    verifier_ms = (time.perf_counter() - t0) * 1000.0
 
     return PipelineVerificationResult(
         report_disposition=report_disp,
@@ -1710,6 +1763,7 @@ def evaluate_securitization_candidate(
         corpus_covered_ids=cov_ids,
         corpus_uncovered_ids=uncov_ids,
         corpus_rejected_ids=rej_ids,
+        signed_receipt=receipt_payload,
     )
 
 

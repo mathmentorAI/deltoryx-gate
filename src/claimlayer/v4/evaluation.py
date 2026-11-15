@@ -1507,14 +1507,21 @@ def evaluate_response(
         if cov_res.issues:
             conc_extra_steps.add(corpus_step_id)
         for iss in cov_res.issues:
+            iss_code = str(iss["code"])
+            base_ob_id = str(iss.get("obligation_id") or iss_code)
+            chk_ob_id = (
+                f"{base_ob_id}::{iss_code}"
+                if iss_code not in ("CORPUS_OBLIGATION_UNCOVERED", "CORPUS_OBLIGATION_REJECTED")
+                else base_ob_id
+            )
             chk = VerifierResult(
-                obligation_id=str(iss.get("obligation_id") or iss["code"]),
+                obligation_id=chk_ob_id,
                 step_id=corpus_step_id,
                 family="document_authority",
                 status="refuted",
                 guarantee_kind="deterministic_formal",
                 evidence=dict(iss),
-                reasons=(str(iss["code"]),),
+                reasons=(iss_code,),
                 verifier_id="corpus_obligation_closure",
                 verifier_version="1.0.0",
             )

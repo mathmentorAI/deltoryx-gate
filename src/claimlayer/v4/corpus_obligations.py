@@ -615,8 +615,17 @@ def build_corpus_reference_register(
 
 
 _GOVERNANCE_DISCLOSURE_RE = re.compile(
-    r"\b(?:governs?|governed\s+by|controls?|controlling|supersedes?|superseded\s+by|"
-    r"prevails?|prevailing|higher\s+authority|priority\s+over|according\s+to\s+[^.;,]{1,60}\s+over)\b",
+    r"\b(?:governs?|governed\s+by|governing|controls?|controlled\s+by|controlling|"
+    r"supersedes?|superseded\s+by|overridden\s+by|prevails?|prevailing|"
+    r"higher\s+authority|priority\s+over|takes?\s+precedence|according\s+to\s+[^.;,]{1,60}\s+over)\b",
+    re.IGNORECASE,
+)
+_GOVERNANCE_ACTIVE_RE = re.compile(
+    r"\b(?:governs?|governing|controls?|controlling|supersedes?|superseding|prevails?|prevailing|takes?\s+precedence|priority)\b",
+    re.IGNORECASE,
+)
+_GOVERNANCE_PASSIVE_RE = re.compile(
+    r"\b(?:governed|controlled|superseded|overridden|prevailed)\s+by\b",
     re.IGNORECASE,
 )
 _UNRESOLVED_DISCLOSURE_RE = re.compile(
@@ -624,6 +633,280 @@ _UNRESOLVED_DISCLOSURE_RE = re.compile(
     r"inconsistent|cannot\s+be\s+resolved|not\s+resolved|unclear\s+which)\b",
     re.IGNORECASE,
 )
+_STRICT_UNRESOLVED_RE = re.compile(
+    r"\b(?:unresolved|unresolvable|cannot\s+be\s+resolved|not\s+resolved|unclear\s+which|"
+    r"neither\s+(?:source|document)\s+governs|no\s+governing\s+(?:source|document))\b",
+    re.IGNORECASE,
+)
+_DOC_EXT_RE = re.compile(r"\.(?:docx|pdf|xlsx|eml|txt|md|json)$", re.IGNORECASE)
+_GENERIC_DOC_WORDS = frozenset({
+    "the", "and", "for", "with", "from", "that", "this", "document", "source", "text", "notes", "file", "sheet",
+})
+
+
+def _doc_stem_words(doc_id: str, title: str = "") -> list[str]:
+    stem = _DOC_EXT_RE.sub("", str(doc_id or ""))
+    raw = f"{stem} {title}".strip()
+    return [w.lower() for w in re.findall(r"[A-Za-z]+", raw) if w]
+
+
+def _pair_doc_aliases(
+    doc_a: str,
+    doc_b: str,
+    all_doc_statuses: Mapping[str, Mapping[str, Any]] | None = None,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Build pair-disjoint surface aliases for two documents purely from structural metadata."""
+    statuses = all_doc_statuses or {}
+    # Count word frequency across all registered documents so shared deal/prefix words drop automatically
+    word_df: dict[str, int] = {}
+    for did, meta in statuses.items():
+        title = str((meta or {}).get("title", "") or "")
+        for w in set(_doc_stem_words(did, title)):
+            word_df[w] = word_df.get(w, 0) + 1
+
+    def _aliases_for(did: str, other_did: str) -> tuple[str, ...]:
+        meta = statuses.get(did, {}) or {}
+        other_meta = statuses.get(other_did, {}) or {}
+        title = str(meta.get("title", "") or "")
+        other_title = str(other_meta.get("title", "") or "")
+        words = _doc_stem_words(did, title)
+        other_words = set(_doc_stem_words(other_did, other_title))
+        stem_norm = " ".join(words)
+        other_stem_norm = " ".join(_doc_stem_words(other_did, other_title))
+        cands: list[str] = [did.lower()]
+        if stem_norm and stem_norm != other_stem_norm:
+            cands.append(stem_norm)
+        if title.strip():
+            cands.append(title.strip().lower())
+        unique_words = [
+            w for w in words
+            if w not in other_words and w not in _GENERIC_DOC_WORDS and not w.isdigit()
+        ]
+        # Phrases of consecutive unique words (e.g. "offering memorandum", "draft oc", "master agreement")
+        if len(unique_words) >= 2:
+            cands.append(" ".join(unique_words))
+            acronym = "".join(w[0] for w in unique_words if w.isalpha())
+            if len(acronym) == 2 and acronym not in other_words:
+                cands.append(acronym)
+        for idx, w in enumerate(unique_words):
+            if len(w) >= 4 and word_df.get(w, 0) <= 1 and w not in other_words:
+                cands.append(w)
+            if idx + 1 < len(unique_words):
+                bi = f"{w} {unique_words[idx + 1]}"
+                cands.append(bi)
+        # Keep only candidates that do not match inside the other document's stem words
+        filtered: list[str] = []
+        seen_c: set[str] = set()
+        for c in sorted(set(cands), key=len, reverse=True):
+            c = c.strip()
+            if not c or c in seen_c:
+                continue
+            if re.search(rf"\b{re.escape(c)}\b", other_stem_norm):
+                continue
+            seen_c.add(c)
+            filtered.append(c)
+        return tuple(filtered)
+
+    return _aliases_for(doc_a, doc_b), _aliases_for(doc_b, doc_a)
+
+
+def _text_matches_alias(text: str, aliases: Sequence[str]) -> bool:
+    if not text or not aliases:
+        return False
+    low = text.lower()
+    return any(re.search(rf"\b{re.escape(a)}\b", low) for a in aliases)
+
+
+def _value_in_segment_with_unit(val: Any, seg: str) -> bool:
+    """Check whether *val* (with its unit suffix if present) appears in *seg* without cross-unit false hits."""
+    if val is None or not seg:
+        return False
+    unit_str = ""
+    raw_val = val
+    if isinstance(val, Mapping) and "value" in val:
+        raw_val = val.get("value")
+        unit_str = str(val.get("unit") or "").lower()
+    if not _value_in_text(raw_val, seg):
+        return False
+    if not unit_str:
+        return True
+    try:
+        dec = Decimal(str(raw_val).strip().replace(",", ""))
+    except (InvalidOperation, ValueError):
+        return True
+    # Check at least one numeric match in seg has compatible trailing/leading unit context
+    for m in re.finditer(r"([$€£]?\s*[-+]?\d[\d,]*(?:\.\d+)?)\s*(%|percent\b|per\s+annum\b|x\b|bps?\b|business\s+days?|calendar\s+days?|days?|usd\b)?", seg, re.IGNORECASE):
+        num_raw = m.group(1).lstrip("$€£ ").replace(",", "")
+        try:
+            if Decimal(num_raw) != dec:
+                continue
+        except (InvalidOperation, ValueError):
+            continue
+        has_dollar = m.group(1).lstrip().startswith(("$", "€", "£"))
+        sfx = (m.group(2) or "").strip().lower()
+        if "percent" in unit_str:
+            if sfx == "x" or has_dollar or sfx == "usd" or "day" in sfx or sfx.startswith("bp"):
+                continue
+            return True
+        if unit_str == "multiple":
+            if sfx in ("%", "percent", "per annum") or has_dollar or sfx == "usd" or "day" in sfx:
+                continue
+            return True
+        if "day" in unit_str:
+            if sfx in ("%", "percent", "per annum", "x") or has_dollar or sfx == "usd":
+                continue
+            return True
+        if unit_str in ("usd", "usd_per_year"):
+            if sfx in ("%", "percent", "x") or "day" in sfx:
+                continue
+            return True
+        return True
+    return False
+
+
+def _check_conflict_disclosure_content(
+    *,
+    text: str,
+    obligation_id: str,
+    predicate: str,
+    winner_doc: str,
+    winner_val: Any,
+    winner_rank: int,
+    loser_doc: str,
+    loser_val: Any,
+    loser_rank: int,
+    doc_statuses: Mapping[str, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Verify directional governance and value-to-document attribution in conflict prose."""
+    if not text or not winner_doc or not loser_doc or winner_doc == loser_doc:
+        return []
+    win_aliases, lose_aliases = _pair_doc_aliases(winner_doc, loser_doc, doc_statuses)
+    content_issues: list[dict[str, Any]] = []
+    unequal_ranks = winner_rank != loser_rank
+
+    if unequal_ranks:
+        # 1a. Declaring "unresolved" when authority_rank decides a winner is invalid
+        if _STRICT_UNRESOLVED_RE.search(text):
+            content_issues.append({
+                "code": "GOVERNING_SOURCE_MISMATCH",
+                "source_layer": "v4",
+                "repairable": True,
+                "obligation_id": obligation_id,
+                "predicate": predicate,
+                "expected_governing_document": winner_doc,
+                "winner_authority_rank": winner_rank,
+                "loser_authority_rank": loser_rank,
+                "message": (
+                    f"Text declares '{predicate}' conflict unresolved, but '{winner_doc}' "
+                    f"(authority_rank={winner_rank}) supersedes '{loser_doc}' (authority_rank={loser_rank})."
+                ),
+                "remediation": (
+                    f"State that '{winner_doc}' (authority_rank={winner_rank}) governs over "
+                    f"'{loser_doc}' (authority_rank={loser_rank}); do not claim it is unresolved."
+                ),
+            })
+
+        # 1b. Check grammatical governance claims in sentences/clauses
+        clauses = [c.strip() for c in re.split(r"[.;\n]+", text) if c.strip()]
+        gov_mismatch_found = False
+        for cl in clauses:
+            for mp in _GOVERNANCE_PASSIVE_RE.finditer(cl):
+                after = re.split(r"[,;:]|\bover\b", cl[mp.end() :], maxsplit=1)[0]
+                if _text_matches_alias(after, lose_aliases) and not _text_matches_alias(after, win_aliases):
+                    gov_mismatch_found = True
+                    break
+            if gov_mismatch_found:
+                break
+            for ma in _GOVERNANCE_ACTIVE_RE.finditer(cl):
+                prefix = cl[: ma.start()]
+                if prefix.rstrip().endswith(("is", "are", "was", "were", "be", "been")):
+                    continue
+                lhs = re.split(r"[:,;]|(?:\b(?:whereas|while|however|although|but)\b)", prefix)[-1]
+                # If comma separates independent subject before active governance, keep last comma-segment containing a doc alias
+                comma_parts = [p.strip() for p in lhs.split(",") if p.strip()]
+                subj_span = lhs
+                for part in reversed(comma_parts):
+                    if _text_matches_alias(part, win_aliases) or _text_matches_alias(part, lose_aliases):
+                        subj_span = part
+                        break
+                if _text_matches_alias(subj_span, lose_aliases) and not _text_matches_alias(subj_span, win_aliases):
+                    gov_mismatch_found = True
+                    break
+            if gov_mismatch_found:
+                break
+        if gov_mismatch_found:
+            content_issues.append({
+                "code": "GOVERNING_SOURCE_MISMATCH",
+                "source_layer": "v4",
+                "repairable": True,
+                "obligation_id": obligation_id,
+                "predicate": predicate,
+                "expected_governing_document": winner_doc,
+                "claimed_subordinate_document": loser_doc,
+                "message": (
+                    f"Response claims subordinate document '{loser_doc}' (rank={loser_rank}) governs "
+                    f"instead of '{winner_doc}' (rank={winner_rank}) for '{predicate}'."
+                ),
+                "remediation": (
+                    f"Correct governing attribution: state that '{winner_doc}' governs over '{loser_doc}'."
+                ),
+            })
+
+    # 2. Check value-to-document attribution across local segments & parenthetical attachments
+    if not _value_in_text(winner_val, str(loser_val or "")) or not _value_in_text(loser_val, str(winner_val or "")):
+        segments = [
+            s.strip()
+            for s in re.split(
+                r"[;\n()]+|(?<!\d)[.,](?!\d)|\.(?=\s|$)|\b(?:whereas|while|however|although|but|vs\.?|versus)\b|"
+                r"\band\b(?=\s*(?:in|per|under|according|the\s+[a-z0-9_-]+\s+(?:states?|provides?|proposes?|specifies?|carries?|shows?|gives?)))",
+                text,
+                flags=re.IGNORECASE,
+            )
+            if s.strip()
+        ]
+        # Also include tight `<doc> (<val>)` pairs where parenthetical carries one value without naming the other doc
+        for pm in re.finditer(r"([^.;\n()]{3,80})\(([^()]{1,60})\)", text):
+            before, inside = pm.group(1), pm.group(2)
+            tail = re.split(r"[,:;]|\b(?:over|vs\.?|versus|than|and)\b", before, flags=re.IGNORECASE)[-1]
+            if (
+                (_text_matches_alias(tail, win_aliases) or _text_matches_alias(tail, lose_aliases))
+                and not (_text_matches_alias(inside, win_aliases) or _text_matches_alias(inside, lose_aliases))
+            ):
+                segments.append(f"{tail} {inside}")
+
+        val_mismatch_found = False
+        for seg in segments:
+            seg_w = _text_matches_alias(seg, win_aliases)
+            seg_l = _text_matches_alias(seg, lose_aliases)
+            has_w_val = _value_in_segment_with_unit(winner_val, seg)
+            has_l_val = _value_in_segment_with_unit(loser_val, seg)
+            if seg_w and not seg_l and has_l_val and not has_w_val:
+                val_mismatch_found = True
+                break
+            if seg_l and not seg_w and has_w_val and not has_l_val:
+                val_mismatch_found = True
+                break
+        if val_mismatch_found:
+            content_issues.append({
+                "code": "VALUE_ATTRIBUTION_MISMATCH",
+                "source_layer": "v4",
+                "repairable": True,
+                "obligation_id": obligation_id,
+                "predicate": predicate,
+                "winner_document_id": winner_doc,
+                "winner_value": winner_val,
+                "loser_document_id": loser_doc,
+                "loser_value": loser_val,
+                "message": (
+                    f"Response swaps or misattributes conflicting '{predicate}' values across "
+                    f"'{winner_doc}' ({winner_val}) and '{loser_doc}' ({loser_val})."
+                ),
+                "remediation": (
+                    f"Attribute '{winner_val}' strictly to '{winner_doc}' and '{loser_val}' strictly to '{loser_doc}'."
+                ),
+            })
+
+    return content_issues
 
 
 def _value_in_text(val: Any, text: str) -> bool:
@@ -634,16 +917,11 @@ def _value_in_text(val: Any, text: str) -> bool:
     raw = str(val).strip()
     if not raw:
         return False
-    if raw.lower() in text.lower():
-        return True
     try:
         dec = Decimal(raw.replace(",", ""))
     except (InvalidOperation, ValueError):
-        return False
-    norm = format(dec.normalize(), "f")
-    if "." in norm:
-        norm = norm.rstrip("0").rstrip(".")
-    # Match numeric token with optional trailing zeros / commas
+        return raw.lower() in text.lower()
+    # Numeric values must match an exact parsed numeric token (never substring inside "13" or "50")
     for m in re.finditer(r"[-+]?\d[\d,]*(?:\.\d+)?", text):
         tok = m.group(0).replace(",", "")
         try:
@@ -822,22 +1100,44 @@ def verify_corpus_obligations_coverage(
 
         in_graph = False
         in_text = True if candidate_response is None else False
+        extra_content_issues: list[dict[str, Any]] = []
 
         if kind in ("mandatory_predicate", "authority_override"):
             if kind == "authority_override":
                 winner_id = str(params.get("winner_unit_id", ""))
                 winner_val = params.get("winner_value")
                 loser_val = params.get("loser_value")
+                w_doc = str(params.get("winner_document_id", "") or "")
+                l_doc = str(params.get("loser_document_id", "") or "")
+                w_rank = int(params.get("winner_authority_rank", 0) or 0)
+                l_rank = int(params.get("loser_authority_rank", 0) or 0)
                 in_graph = any(
                     (winner_id and winner_id in set(getattr(n, "evidence_unit_ids", ()) or ()))
                     or _value_in_text(winner_val, str(getattr(n, "value", "")))
                     for n in matching_leaves
                 )
+                if candidate_response is not None:
+                    extra_content_issues = _check_conflict_disclosure_content(
+                        text=text,
+                        obligation_id=ob.obligation_id,
+                        predicate=str(params.get("predicate", "")),
+                        winner_doc=w_doc,
+                        winner_val=winner_val,
+                        winner_rank=w_rank,
+                        loser_doc=l_doc,
+                        loser_val=loser_val,
+                        loser_rank=l_rank,
+                        doc_statuses=register.document_statuses,
+                    )
                 if candidate_response is not None and in_graph:
                     has_winner = _value_in_text(winner_val, text)
                     has_loser = _value_in_text(loser_val, text)
-                    has_gov = bool(_GOVERNANCE_DISCLOSURE_RE.search(text) or _UNRESOLVED_DISCLOSURE_RE.search(text))
-                    in_text = has_winner and (not has_loser or has_gov)
+                    has_gov = bool(_GOVERNANCE_DISCLOSURE_RE.search(text))
+                    has_unres = bool(_UNRESOLVED_DISCLOSURE_RE.search(text))
+                    if w_rank != l_rank:
+                        in_text = has_winner and (not has_loser or has_gov) and not extra_content_issues
+                    else:
+                        in_text = has_winner and (not has_loser or has_gov or has_unres) and not extra_content_issues
             else:
                 expected_val = params.get("expected_value")
                 in_graph = bool(matching_leaves)
@@ -863,13 +1163,32 @@ def verify_corpus_obligations_coverage(
                     for n in matching_leaves
                 )
                 in_graph = covered_v1 and covered_v2
+                if candidate_response is not None:
+                    c0, c1 = conf_vals[0], conf_vals[1]
+                    r0, r1 = int(c0.get("authority_rank", 0) or 0), int(c1.get("authority_rank", 0) or 0)
+                    win_c, lose_c = (c0, c1) if r0 >= r1 else (c1, c0)
+                    extra_content_issues = _check_conflict_disclosure_content(
+                        text=text,
+                        obligation_id=ob.obligation_id,
+                        predicate=str(params.get("predicate", "")),
+                        winner_doc=str(win_c.get("document_id", "") or ""),
+                        winner_val=win_c.get("value"),
+                        winner_rank=int(win_c.get("authority_rank", 0) or 0),
+                        loser_doc=str(lose_c.get("document_id", "") or ""),
+                        loser_val=lose_c.get("value"),
+                        loser_rank=int(lose_c.get("authority_rank", 0) or 0),
+                        doc_statuses=register.document_statuses,
+                    )
                 if candidate_response is not None and in_graph:
                     both_in_text = _value_in_text(v1, text) and _value_in_text(v2, text)
-                    disclosed = bool(
-                        _GOVERNANCE_DISCLOSURE_RE.search(text)
-                        or _UNRESOLVED_DISCLOSURE_RE.search(text)
-                    )
-                    in_text = both_in_text and disclosed
+                    if r0 != r1:
+                        disclosed = bool(_GOVERNANCE_DISCLOSURE_RE.search(text))
+                    else:
+                        disclosed = bool(
+                            _GOVERNANCE_DISCLOSURE_RE.search(text)
+                            or _UNRESOLVED_DISCLOSURE_RE.search(text)
+                        )
+                    in_text = both_in_text and disclosed and not extra_content_issues
             else:
                 in_graph = bool(matching_leaves)
                 in_text = candidate_response is None or bool(matching_leaves)
@@ -927,30 +1246,33 @@ def verify_corpus_obligations_coverage(
             covered_ids.append(ob.obligation_id)
         else:
             uncovered_ids.append(ob.obligation_id)
-            span_preview = spans[0] if spans else {}
-            if kind == "material_conflict":
-                remed = (
-                    f"Cover material conflict for '{params.get('predicate')}' on '{params.get('entity')}': "
-                    "include both conflicting values in the graph and text, and state which governs or declare the conflict unresolved."
-                )
+            if extra_content_issues:
+                issues.extend(extra_content_issues)
             else:
-                remed = (
-                    f"Cover corpus obligation '{ob.obligation_id}' ({params.get('predicate')} on '{params.get('entity')}') "
-                    f"as a verified graph leaf and linked text statement citing source span {span_preview}."
-                )
-            issues.append({
-                "code": "CORPUS_OBLIGATION_UNCOVERED",
-                "source_layer": "v4",
-                "repairable": True,
-                "obligation_id": ob.obligation_id,
-                "corpus_obligation_kind": kind,
-                "evidence_spans": spans,
-                "message": (
-                    f"Corpus obligation '{ob.obligation_id}' is not covered in "
-                    f"{'graph' if not in_graph else 'response text'}."
-                ),
-                "remediation": remed,
-            })
+                span_preview = spans[0] if spans else {}
+                if kind == "material_conflict":
+                    remed = (
+                        f"Cover material conflict for '{params.get('predicate')}' on '{params.get('entity')}': "
+                        "include both conflicting values in the graph and text, and state which governs or declare the conflict unresolved."
+                    )
+                else:
+                    remed = (
+                        f"Cover corpus obligation '{ob.obligation_id}' ({params.get('predicate')} on '{params.get('entity')}') "
+                        f"as a verified graph leaf and linked text statement citing source span {span_preview}."
+                    )
+                issues.append({
+                    "code": "CORPUS_OBLIGATION_UNCOVERED",
+                    "source_layer": "v4",
+                    "repairable": True,
+                    "obligation_id": ob.obligation_id,
+                    "corpus_obligation_kind": kind,
+                    "evidence_spans": spans,
+                    "message": (
+                        f"Corpus obligation '{ob.obligation_id}' is not covered in "
+                        f"{'graph' if not in_graph else 'response text'}."
+                    ),
+                    "remediation": remed,
+                })
 
     return CorpusCoverageResult(
         total_obligations=len(register.obligations),

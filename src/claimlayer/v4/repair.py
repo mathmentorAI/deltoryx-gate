@@ -725,7 +725,17 @@ def _extract_issues_and_repairs(
         for idx, code in enumerate(codes):
             if suppress_insufficient_when_overclaimed and code == "TEMPORAL_PRECISION_INSUFFICIENT_FOR_EXACT_VALUE":
                 continue
-            dedup_key = f"{code}::{chk.obligation_id}" if code in ("CORPUS_OBLIGATION_UNCOVERED", "CORPUS_OBLIGATION_REJECTED") else code
+            dedup_key = (
+                f"{code}::{chk.obligation_id}"
+                if code
+                in (
+                    "CORPUS_OBLIGATION_UNCOVERED",
+                    "CORPUS_OBLIGATION_REJECTED",
+                    "GOVERNING_SOURCE_MISMATCH",
+                    "VALUE_ATTRIBUTION_MISMATCH",
+                )
+                else code
+            )
             if dedup_key in seen_codes:
                 continue
             seen_codes.add(dedup_key)
@@ -737,6 +747,12 @@ def _extract_issues_and_repairs(
                 instruction = str(chk.evidence.get("remediation") or "Cover the corpus obligation in graph and text.")
                 allowed = ("add_verified_corpus_leaf_and_text_coverage",)
                 forbidden = ("omit_corpus_obligation", "prune_prior_obligation")
+            elif code in ("GOVERNING_SOURCE_MISMATCH", "VALUE_ATTRIBUTION_MISMATCH"):
+                is_rep = True
+                problem = str(chk.evidence.get("message") or f"Invalid conflict disclosure content ({code}).")
+                instruction = str(chk.evidence.get("remediation") or "Fix governing source and value attribution.")
+                allowed = ("fix_conflict_governance_and_value_attribution",)
+                forbidden = ("invert_governing_source", "swap_conflicting_values", "claim_unequal_rank_unresolved")
             elif code in (
                 "REFERENCE_REGISTER_MISSING",
                 "REFERENCE_REGISTER_INCOMPLETE",

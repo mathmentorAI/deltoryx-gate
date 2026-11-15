@@ -15,6 +15,15 @@ from decimal import Decimal, InvalidOperation
 import re
 from typing import Any, Mapping
 
+from .normalizers import (
+    NORMALIZER_VERSION,
+    NormalizationTrace,
+    normalize_date_token,
+    normalize_percentage,
+    normalize_separator_number,
+    normalize_time_interval,
+    normalize_value_with_provenance,
+)
 from ..semantic.models import KINDS, canonical, digest, instant, require_string
 
 VALUE_TYPES = frozenset({'quantity', 'number', 'bound', 'boolean', 'enum', 'set', 'list', 'string', 'entity', 'date', 'record'})
@@ -45,7 +54,10 @@ def decimal_text(value: Any, path: str) -> str:
     try:
         number = Decimal(str(value))
     except InvalidOperation:
-        raise UnmappedProposal('number_required', path, value) from None
+        norm = normalize_separator_number(value) if isinstance(value, str) else None
+        if norm is None:
+            raise UnmappedProposal('number_required', path, value) from None
+        return norm
     if not number.is_finite():
         raise UnmappedProposal('finite_number_required', path, value)
     normalized = number.normalize()
@@ -136,6 +148,9 @@ def date_relation(a: str, b: str) -> str:
 
 
 def _text_relation(a: str, b: str) -> str:
+    ta, tb = normalize_time_interval(a), normalize_time_interval(b)
+    if ta is not None and tb is not None:
+        return 'equal' if ta == tb else 'incompatible'
     ka, kb = label_key(a), label_key(b)
     if ka == kb:
         return 'equal'

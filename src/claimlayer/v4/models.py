@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import math
-from typing import Any
+from typing import Any, Mapping
 
 from .vocabulary import label_key
 from ..semantic.models import EvidenceRef, KINDS, canonical, digest
@@ -14,14 +14,28 @@ PROPOSITION_FIELDS = ('entity', 'predicate', 'value', 'unit', 'polarity', 'asser
 OPTIONAL_PROPOSITION_FIELDS = frozenset({'condition_status'})
 
 
+def effective_condition_status(p: Mapping[str, Any]) -> str:
+    """Resolve `condition_status` without silently collapsing omitted values to `'unconditional'`.
+
+    Explicit rule:
+    - When `condition_status` is provided (`unconditional`, `conditional`,
+      `unknown_condition`, `unrepresentable_condition`), preserve it verbatim.
+    - When omitted (`None` or absent), treat it as `'unknown_condition'`.
+      An omitted `condition_status` occupies its own context bucket so queries
+      and `check_claim()` remain comparable with `unconditional`/`conditional`
+      ledger entries without automatically collapsing to `'supported'`.
+    """
+    cs = p.get('condition_status')
+    return str(cs) if cs is not None else 'unknown_condition'
+
+
 def context_key(p, *, include_event=True) -> str:
-    """Comparable context: subject, predicate, assertion kind, scope (event), condition set and condition_status."""
+    """Comparable context: subject, predicate, assertion kind, scope (event), condition set and effective condition_status."""
     scope = p['scope'] if include_event else {k: v for k, v in p['scope'].items() if k != 'event_id'}
     # Entity identity ignores case, spacing, '_' and '-' (label_key): 'ACME CORP' and 'Acme Corp' are one subject.
     payload = {'entity': label_key(p['entity']), 'predicate': p['predicate'], 'assertion_kind': p['assertion_kind'],
-               'scope': scope, 'conditions': p['conditions']}
-    if 'condition_status' in p:
-        payload['condition_status'] = p['condition_status']
+               'scope': scope, 'conditions': p['conditions'],
+               'condition_status': effective_condition_status(p)}
     return canonical(payload)
 
 

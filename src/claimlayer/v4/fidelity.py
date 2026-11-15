@@ -9,12 +9,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+import json
 import re
 from typing import Any, Mapping, Sequence
 
 from ..semantic.models import EvidenceRef
 from ..verifiers.quote_quantity import extract_dates, extract_quantities
 from .models import EvidenceUnit
+from .normalizers import (
+    NORMALIZER_VERSION,
+    extract_normalized_dates,
+    extract_time_intervals,
+    normalize_date_token,
+    normalize_separator_number,
+    normalize_time_interval,
+)
 from .vocabulary import STANDARD_UNITS, FieldSpec, UnitRegistry, UnmappedProposal, Vocabulary, label_key, normalize_date
 
 _CONDITIONAL_MARKER_RE = re.compile(
@@ -178,18 +187,25 @@ def _spans_overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
     return a[0] < b[1] and b[0] < a[1]
 
 
+_SEP_NUM_TOKEN_RE = re.compile(
+    r"(?<![0-9.,])[-+]?(?:\d{1,3}(?:[.\s]\d{3})+,\d+|\d+(?:,\d{3})+(?:\.\d+)?|\d+,\d{1,2}|\d+(?:\.\d+)?)(?![0-9.,])"
+)
+
+
 def _extract_standalone_decimal_spans_untyped(
     text: str,
     occupied_spans: Sequence[tuple[int, int]],
 ) -> list[tuple[Decimal, tuple[int, int]]]:
     out: list[tuple[Decimal, tuple[int, int]]] = []
-    for m in re.finditer(r"(?<![0-9.])[-+]?\d+(?:,\d{3})*(?:\.\d+)?(?![0-9.])", text):
+    for m in _SEP_NUM_TOKEN_RE.finditer(text):
         span = (m.start(), m.end())
         if any(_spans_overlap(span, occ) for occ in occupied_spans):
             continue
-        tok = m.group(0).replace(",", "")
+        norm_tok = normalize_separator_number(m.group(0))
+        if norm_tok is None:
+            continue
         try:
-            out.append((Decimal(tok), span))
+            out.append((Decimal(norm_tok), span))
         except InvalidOperation:
             continue
     return out
@@ -307,6 +323,29 @@ def _extract_typed_v4_quantity_spans(
             occupied.append(span)
             typed.append((Decimal(amt), base_u, span))
 
+    # Detect European comma percentages (e.g. '5,80 %' or '5,80 percent') and separated numbers
+    pct_pat = re.compile(
+        r"(?<![0-9.,])(?P<num>[-+]?(?:\d{1,3}(?:\.\d{3})*|\d+),\d{1,2})\s*"
+        r"(?P<unit>%|pct\b|per\s*cent\b|percent\b)(?P<yr>\s*(?:per\s+annum|p\.a\.|per\s+year|annually))?",
+        re.IGNORECASE,
+    )
+    for m in pct_pat.finditer(text):
+        span = (m.start(), m.end())
+        if any(_spans_overlap(span, occ) for occ in occupied):
+            continue
+        norm_num = normalize_separator_number(m.group("num"))
+        if norm_num is None:
+            continue
+        unit_name = "percent_per_annum" if m.group("yr") else "percent"
+        if label_key(unit_name) not in units._labels:
+            continue
+        try:
+            amt, base_u = units.to_base(norm_num, unit_name, "fidelity")
+        except (UnmappedProposal, ValueError, InvalidOperation):
+            continue
+        occupied.append(span)
+        typed.append((Decimal(amt), base_u, span))
+
     return typed, occupied
 
 
@@ -325,11 +364,15 @@ def _numeric_marker_present(
     *,
     unit_hint: str | None = None,
     units: UnitRegistry = STANDARD_UNITS,
+    scale_factor: Decimal | None = None,
 ) -> bool:
     if isinstance(raw_num, bool):
         return False
+    raw_str = normalize_separator_number(raw_num) if isinstance(raw_num, str) else str(raw_num).strip()
+    if raw_str is None:
+        return False
     try:
-        target = Decimal(str(raw_num).strip())
+        target = Decimal(raw_str)
     except (InvalidOperation, ValueError):
         return False
     if not target.is_finite():
@@ -345,9 +388,19 @@ def _numeric_marker_present(
             target_unit = norm_unit
         except (UnmappedProposal, ValueError, InvalidOperation):
             return False
-        return any(base_u == target_unit and mag == target_val for mag, base_u in typed_qs)
+        if any(base_u == target_unit and mag == target_val for mag, base_u in typed_qs):
+            return True
+        if scale_factor is not None and scale_factor > Decimal(1):
+            scaled_cell_val = target_val / scale_factor
+            return any(n == scaled_cell_val for n in _extract_standalone_decimals_untyped(text, ()))
+        return False
 
-    return any(n == target for n in _extract_standalone_decimals_untyped(text, occupied_spans))
+    if any(n == target for n in _extract_standalone_decimals_untyped(text, occupied_spans)):
+        return True
+    if scale_factor is not None and scale_factor > Decimal(1):
+        scaled_cell_val = target / scale_factor
+        return any(n == scaled_cell_val for n in _extract_standalone_decimals_untyped(text, ()))
+    return False
 
 
 def _tokens_present_bounded(tokens: Sequence[str], text: str) -> bool:
@@ -363,7 +416,7 @@ def _tokens_present_bounded(tokens: Sequence[str], text: str) -> bool:
 def _date_marker_present(value: Any, text: str) -> bool:
     if not isinstance(value, str):
         return False
-    stripped = value.strip()
+    stripped = normalize_date_token(value) or value.strip()
     if not stripped:
         return False
     if re.search(r"(?<![0-9\-])" + re.escape(stripped) + r"(?![0-9\-])", text):
@@ -374,7 +427,7 @@ def _date_marker_present(value: Any, text: str) -> bool:
                 return True
         except ValueError:
             continue
-    return stripped in extract_dates(text, allow_slash=True)
+    return stripped in extract_dates(text, allow_slash=True) or stripped in extract_normalized_dates(text)
 
 
 def _value_markers_present(
@@ -383,17 +436,22 @@ def _value_markers_present(
     *,
     units: UnitRegistry = STANDARD_UNITS,
     spec: FieldSpec | None = None,
+    scale_factor: Decimal | None = None,
 ) -> bool:
     if spec is not None:
         t = spec.type
         if t in {"quantity", "bound"}:
             if not isinstance(value, dict) or "value" not in value or not value.get("unit"):
                 return False
-            return _numeric_marker_present(value["value"], text, unit_hint=value["unit"], units=units)
+            return _numeric_marker_present(
+                value["value"], text, unit_hint=value["unit"], units=units, scale_factor=scale_factor
+            )
         if t == "number":
             if isinstance(value, (dict, list, tuple, bool)):
                 return False
-            return _numeric_marker_present(value, text, unit_hint=None, units=units)
+            return _numeric_marker_present(
+                value, text, unit_hint=None, units=units, scale_factor=scale_factor
+            )
         if t == "boolean":
             return isinstance(value, bool)
         if t == "date":
@@ -403,7 +461,7 @@ def _value_markers_present(
                 return False
             declared = dict(spec.fields)
             return all(
-                _value_markers_present(v, text, units=units, spec=declared.get(k))
+                _value_markers_present(v, text, units=units, spec=declared.get(k), scale_factor=scale_factor)
                 for k, v in value.items()
             )
         if t == "set":
@@ -417,6 +475,9 @@ def _value_markers_present(
             return all(_value_markers_present(item, text, units=units, spec=spec.element) for item in value)
         if not isinstance(value, str):
             return False
+        t_norm = normalize_time_interval(value)
+        if t_norm is not None:
+            return any(c == t_norm for c, _, _, _ in extract_time_intervals(text))
         stripped = value.strip()
         tokens = [tok for tok in re.findall(r"[a-z0-9]+", stripped.lower()) if len(tok) >= 2]
         if not tokens:
@@ -424,26 +485,31 @@ def _value_markers_present(
         return _tokens_present_bounded(tokens, text)
 
     if isinstance(value, dict) and "value" in value:
-        return _numeric_marker_present(value["value"], text, unit_hint=value.get("unit"), units=units)
+        return _numeric_marker_present(
+            value["value"], text, unit_hint=value.get("unit"), units=units, scale_factor=scale_factor
+        )
     if isinstance(value, dict):
-        return all(_value_markers_present(v, text, units=units) for v in value.values())
+        return all(_value_markers_present(v, text, units=units, scale_factor=scale_factor) for v in value.values())
     if isinstance(value, (list, tuple)):
         return bool(value) and all(_value_markers_present(item, text, units=units) for item in value)
     if isinstance(value, bool):
         return True
     if isinstance(value, (int, float, Decimal)):
-        return _numeric_marker_present(value, text, units=units)
+        return _numeric_marker_present(value, text, units=units, scale_factor=scale_factor)
     if isinstance(value, str):
+        t_norm = normalize_time_interval(value)
+        if t_norm is not None:
+            return any(c == t_norm for c, _, _, _ in extract_time_intervals(text))
         stripped = value.strip()
         if re.fullmatch(r"[-+]?\d+(?:\.\d+)?", stripped):
-            return _numeric_marker_present(stripped, text, units=units)
+            return _numeric_marker_present(stripped, text, units=units, scale_factor=scale_factor)
         if re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?)?)?", stripped):
             return _date_marker_present(stripped, text)
         tokens = [t for t in re.findall(r"[a-z0-9]+", stripped.lower()) if len(t) >= 2]
         if not tokens:
             tokens = re.findall(r"[a-z0-9]+", stripped.lower())
         return _tokens_present_bounded(tokens, text)
-    return _value_markers_present(str(value), text, units=units)
+    return _value_markers_present(str(value), text, units=units, scale_factor=scale_factor)
 
 
 _GENERIC_PREDICATE_TOKENS = frozenset({
@@ -1002,6 +1068,36 @@ def _find_competing_predicate_spans(
     return found
 
 
+def _protected_quote_bracket_mask(text: str) -> list[bool]:
+    """Mark character indices inside balanced JSON/KV double-quotes or square brackets.
+
+    Only activates double-quote protection when quotes pair up across the text, so
+    stray apostrophes never mask trailing clauses.
+    """
+    n = len(text)
+    mask = [False] * n
+    quote_positions: list[int] = []
+    for i, ch in enumerate(text):
+        if ch == '"' and (i == 0 or text[i - 1] != "\\"):
+            quote_positions.append(i)
+    for k in range(0, len(quote_positions) - 1, 2):
+        s, e = quote_positions[k], quote_positions[k + 1]
+        for idx in range(s, e + 1):
+            mask[idx] = True
+
+    bracket_stack: list[int] = []
+    for i, ch in enumerate(text):
+        if mask[i]:
+            continue
+        if ch == "[":
+            bracket_stack.append(i)
+        elif ch == "]" and bracket_stack:
+            s = bracket_stack.pop()
+            for idx in range(s, i + 1):
+                mask[idx] = True
+    return mask
+
+
 def _split_into_atomic_clauses(
     text: str,
     *,
@@ -1009,16 +1105,20 @@ def _split_into_atomic_clauses(
 ) -> list[tuple[str, int, int, bool]]:
     """Split *text* into atomic clauses `(clause_text, start, end, new_sentence)`.
 
-    Splits unconditionally on sentence/line/semicolon boundaries, and splits on
-    coordinating conjunctions/commas only when both sides form independent
-    clause structures (containing a finite verb/assigner or a numeric/quantity marker).
+    Splits unconditionally on sentence/line/semicolon boundaries outside quoted strings
+    and array brackets, and splits on coordinating conjunctions/commas only when both
+    sides form independent clause structures (containing a finite verb/assigner or a
+    numeric/quantity marker).
     """
     n = len(text)
     if not text.strip():
         return []
 
+    protected = _protected_quote_bracket_mask(text)
     hard_bounds: list[tuple[int, int]] = []
     for m in re.finditer(r"[\n;]+|(?<!\d)\.(?!\d)(?=\s|$)", text):
+        if m.group(0) != "\n" and any(protected[pos] for pos in range(m.start(), m.end())):
+            continue
         hard_bounds.append((m.start(), m.end()))
 
     raw_sentences: list[tuple[int, int]] = []
@@ -1042,6 +1142,9 @@ def _split_into_atomic_clauses(
         sent_text = text[s_start:s_end]
         split_points: list[tuple[int, int]] = []
         for m in _SOFT_CLAUSE_SEP_RE.finditer(sent_text):
+            abs_s, abs_e = s_start + m.start(), s_start + m.end()
+            if any(protected[pos] for pos in range(abs_s, abs_e)):
+                continue
             left = sent_text[: m.start()]
             right = sent_text[m.end() :]
             if not left.strip() or not right.strip():
@@ -1052,6 +1155,9 @@ def _split_into_atomic_clauses(
                 left,
                 re.IGNORECASE,
             ) and re.match(r"\s*\d{4}\b", right):
+                continue
+            # Protect time ranges containing 'to' (e.g. '4:30 PM to 9 PM')
+            if re.search(r"\b(?:to|a)\s*$", m.group(0), re.IGNORECASE) and normalize_time_interval(sent_text):
                 continue
             if _has_clause_core(left) and _has_clause_core(right):
                 split_points.append((m.start(), m.end()))
@@ -1117,6 +1223,9 @@ def _verify_table_relational_association(
     units: UnitRegistry,
     spec: FieldSpec | None,
     prop: Mapping[str, Any],
+    table_scale: Decimal | None = None,
+    table_column: str | None = None,
+    header_ref: EvidenceRef | None = None,
 ) -> list[FidelityFinding]:
     """Verify relational row/column alignment when evidence is formatted as a pipe-delimited table."""
     has_pipes = any(line.count("|") >= 2 for r in unit.evidence for line in r.quote.splitlines())
@@ -1171,6 +1280,30 @@ def _verify_table_relational_association(
         elif not any(_all_quantity_spans(c, units=units) for c in table_rows[0][1]):
             header_row_idx = table_rows[0][0]
             header_cells = table_rows[0][1]
+    elif header_ref is not None:
+        for hline in header_ref.quote.splitlines():
+            if hline.count("|") >= 2:
+                header_cells = _parse_pipe_row_cells(hline)
+                break
+
+    required_col_indices: set[int] | None = None
+    if table_column and header_cells:
+        col_norm = label_key(table_column)
+        matched_idxs = {
+            ci
+            for ci, ch in enumerate(header_cells)
+            if col_norm == label_key(ch) or col_norm in label_key(ch)
+        }
+        if not matched_idxs:
+            return [
+                FidelityFinding(
+                    code="TABULAR_COLUMN_MISMATCH",
+                    message=f"Declared table column {table_column!r} was not found in table column headers {header_cells!r}.",
+                    field="table_context.column",
+                    detail={"declared_column": table_column, "header_cells": header_cells},
+                )
+            ]
+        required_col_indices = matched_idxs
 
     data_rows = [
         (idx, cells, raw)
@@ -1211,7 +1344,17 @@ def _verify_table_relational_association(
             if isinstance(val, bool):
                 if not _cell_matches_prop_pred(cell):
                     continue
-            elif not _value_markers_present(val, cell, units=units, spec=spec):
+            elif not _value_markers_present(val, cell, units=units, spec=spec, scale_factor=table_scale):
+                continue
+
+            if required_col_indices is not None and col_idx not in required_col_indices:
+                mismatch_field = "table_context.column"
+                mismatch_detail = {
+                    "row": raw_row,
+                    "declared_column": table_column,
+                    "matched_column_index": col_idx,
+                    "header_cells": header_cells,
+                }
                 continue
 
             if not row_entity_ok:
@@ -1256,6 +1399,15 @@ def _verify_table_relational_association(
 
     if matched_any_row:
         return []
+    if mismatch_field == "table_context.column":
+        return [
+            FidelityFinding(
+                code="TABULAR_COLUMN_MISMATCH",
+                message=f"Table value {val!r} does not reside in declared column {table_column!r}.",
+                field="table_context.column",
+                detail=mismatch_detail or {"quotes": [r.quote for r in unit.evidence]},
+            )
+        ]
     return [
         FidelityFinding(
             code="RELATIONAL_ASSOCIATION_MISMATCH",
@@ -1517,6 +1669,371 @@ def _verify_text_relational_association(
     ]
 
 
+_HEADER_SCALE_PATTERNS: tuple[tuple[re.Pattern[str], Decimal], ...] = (
+    (re.compile(r"\b(?:in\s+)?thousands\b|\b000['’]?s\b|\$\s*000s?\b|\(\s*\$?\s*000s?\s*\)|[x×]\s*1[,.]?000\b|\ben\s+miles\b", re.IGNORECASE), Decimal("1000")),
+    (re.compile(r"\b(?:in\s+)?millions\b|\$\s*(?:M|MM|mn)\b|\(\s*\$?\s*(?:M|MM|mn)\s*\)|\ben\s+millones\b", re.IGNORECASE), Decimal("1000000")),
+    (re.compile(r"\b(?:in\s+)?billions\b|\$\s*(?:B|bn)\b|\(\s*\$?\s*(?:B|bn)\s*\)|\ben\s+miles\s+de\s+millones\b", re.IGNORECASE), Decimal("1000000000")),
+)
+
+_SCALE_WORD_MAP: dict[str, Decimal] = {
+    "1": Decimal("1"),
+    "unit": Decimal("1"),
+    "units": Decimal("1"),
+    "thousands": Decimal("1000"),
+    "thousand": Decimal("1000"),
+    "in thousands": Decimal("1000"),
+    "x1000": Decimal("1000"),
+    "000s": Decimal("1000"),
+    "1000": Decimal("1000"),
+    "millions": Decimal("1000000"),
+    "million": Decimal("1000000"),
+    "in millions": Decimal("1000000"),
+    "1000000": Decimal("1000000"),
+    "billions": Decimal("1000000000"),
+    "billion": Decimal("1000000000"),
+    "in billions": Decimal("1000000000"),
+    "1000000000": Decimal("1000000000"),
+}
+
+_KV_JSON_ENTITY_KEYS = frozenset({"entity", "company", "issuer", "party", "subject", "borrower", "vendor", "name"})
+_KV_PAIR_RE = re.compile(
+    r"""(?:"(?P<qkey>[^"\n]+)"|'(?P<sqkey>[^'\n]+)'|(?P<bkey>[A-Za-z][A-Za-z0-9_ -]{1,48}))\s*:\s*(?P<val>\[[^\]\n]*\]|"(?:\\.|[^"\n])*"|'(?:\\.|[^'\n])*'|[^,\n;}{]+)""",
+    re.IGNORECASE,
+)
+
+
+def _parse_declared_table_scale(raw_scale: Any) -> Decimal | None:
+    if raw_scale is None:
+        return None
+    if isinstance(raw_scale, (int, Decimal)) and not isinstance(raw_scale, bool):
+        d = Decimal(raw_scale)
+        return d if d > 0 and d.is_finite() else None
+    key = label_key(str(raw_scale))
+    if key in _SCALE_WORD_MAP:
+        return _SCALE_WORD_MAP[key]
+    try:
+        d = Decimal(str(raw_scale).strip().replace(",", ""))
+        return d if d > 0 and d.is_finite() else None
+    except InvalidOperation:
+        return None
+
+
+def _extract_header_scale_markers(header_text: str) -> set[Decimal]:
+    found: set[Decimal] = set()
+    for pat, mult in _HEADER_SCALE_PATTERNS:
+        if pat.search(header_text or ""):
+            found.add(mult)
+    return found
+
+
+def _currency_markers_for_code(code: str, units: UnitRegistry) -> set[str]:
+    clean = code.strip()
+    out = {clean.casefold(), label_key(clean)}
+    if label_key(clean) in units._labels:
+        u = units.lookup(clean, "table_context.currency")
+        out.add(u.name.casefold())
+        for al in u.aliases:
+            out.add(al.casefold())
+    builtin = {
+        "usd": {"$", "usd", "us dollars", "dollars", "us$"},
+        "eur": {"€", "eur", "euro", "euros"},
+        "gbp": {"£", "gbp", "pounds", "pounds sterling"},
+    }
+    out.update(builtin.get(clean.casefold(), ()))
+    return {m for m in out if m}
+
+
+def _header_has_marker(header_text: str, marker: str) -> bool:
+    low = header_text.casefold()
+    m = marker.casefold()
+    if any(ch.isalpha() for ch in m):
+        return re.search(r"(?<![a-z0-9])" + re.escape(m) + r"(?![a-z0-9])", low) is not None
+    return m in low
+
+
+def _audit_table_context_and_header(
+    table_context: Mapping[str, Any] | None,
+    by_field: Mapping[str, FieldEvidence],
+    *,
+    doc_text: str,
+    documents: Mapping[str, Any] | None,
+    prop: Mapping[str, Any],
+    units: UnitRegistry,
+) -> tuple[Decimal | None, str | None, EvidenceRef | None, list[FidelityFinding]]:
+    """Audit explicit ``table_context`` inheritance against a cited ``table_header`` FieldEvidence."""
+    if table_context is None:
+        return None, None, None, []
+    if not isinstance(table_context, Mapping) or not table_context:
+        return None, None, None, [
+            FidelityFinding(
+                code="INVALID_TABLE_CONTEXT",
+                message="Declared table_context must be a non-empty mapping.",
+                field="table_context",
+            )
+        ]
+
+    header_fe = by_field.get("table_header")
+    if header_fe is None:
+        return None, None, None, [
+            FidelityFinding(
+                code="MISSING_HEADER_CITATION",
+                message="Explicit table_context requires a separately cited FieldEvidence(field='table_header', ...).",
+                field="table_header",
+            )
+        ]
+
+    href = header_fe.evidence
+    htext = documents[href.document_id].text if (documents and href.document_id in documents) else doc_text
+    if href.start < 0 or href.end > len(htext) or htext[href.start : href.end] != href.quote:
+        return None, None, href, [
+            FidelityFinding(
+                code="INVALID_FIELD_EVIDENCE",
+                message="FieldEvidence for 'table_header' does not match source text at declared offsets.",
+                field="table_header",
+            )
+        ]
+
+    findings: list[FidelityFinding] = []
+    hquote = href.quote
+
+    # 1. Scale inheritance audit
+    audited_scale: Decimal | None = None
+    if "scale" in table_context and table_context["scale"] is not None:
+        declared_scale = _parse_declared_table_scale(table_context["scale"])
+        if declared_scale is None:
+            findings.append(
+                FidelityFinding(
+                    code="TABULAR_SCALE_MISMATCH",
+                    message=f"Unsupported declared table scale {table_context['scale']!r}.",
+                    field="table_context.scale",
+                )
+            )
+        else:
+            header_scales = _extract_header_scale_markers(hquote)
+            if declared_scale > Decimal("1"):
+                if declared_scale not in header_scales or (header_scales - {declared_scale}):
+                    findings.append(
+                        FidelityFinding(
+                            code="TABULAR_SCALE_MISMATCH",
+                            message=(
+                                f"Declared table scale {declared_scale} is not corroborated cleanly by cited "
+                                f"table_header {hquote!r} (detected markers: {sorted(str(s) for s in header_scales)})."
+                            ),
+                            field="table_context.scale",
+                            detail={"declared_scale": str(declared_scale), "header_scales": [str(s) for s in header_scales]},
+                        )
+                    )
+                else:
+                    audited_scale = declared_scale
+            elif header_scales - {Decimal("1")}:
+                findings.append(
+                    FidelityFinding(
+                        code="TABULAR_SCALE_MISMATCH",
+                        message=f"Cited table_header declares scale multiplier(s) {[str(s) for s in header_scales]}, but table_context declared scale=1.",
+                        field="table_context.scale",
+                    )
+                )
+            else:
+                audited_scale = Decimal("1")
+
+    # 2. Currency inheritance audit
+    cur_raw = table_context.get("currency")
+    if cur_raw is not None:
+        cur_str = str(cur_raw).strip()
+        cur_markers = _currency_markers_for_code(cur_str, units)
+        if not any(_header_has_marker(hquote, m) for m in cur_markers):
+            findings.append(
+                FidelityFinding(
+                    code="TABULAR_CURRENCY_MISMATCH",
+                    message=f"Declared currency {cur_str!r} does not appear in cited table_header {hquote!r}.",
+                    field="table_context.currency",
+                )
+            )
+        prop_unit = prop.get("unit")
+        if isinstance(prop_unit, str) and label_key(prop_unit) != label_key(cur_str):
+            findings.append(
+                FidelityFinding(
+                    code="TABULAR_CURRENCY_MISMATCH",
+                    message=f"Proposition unit {prop_unit!r} conflicts with declared table_context currency {cur_str!r}.",
+                    field="table_context.currency",
+                )
+            )
+
+    # 3. Period inheritance audit
+    period_raw = table_context.get("period")
+    if period_raw is not None:
+        period_str = str(period_raw).strip()
+        period_toks = [t for t in re.findall(r"[a-z0-9]+", period_str.lower()) if t]
+        if not period_toks or not all(_header_has_marker(hquote, t) for t in period_toks):
+            findings.append(
+                FidelityFinding(
+                    code="TABULAR_PERIOD_MISMATCH",
+                    message=f"Declared table period {period_str!r} is not grounded in cited table_header {hquote!r}.",
+                    field="table_context.period",
+                )
+            )
+
+    # 4. Column header audit (piped header alignment is additionally enforced in _verify_table_relational_association)
+    col_raw = table_context.get("column")
+    col_str: str | None = str(col_raw).strip() if col_raw is not None else None
+    if col_str:
+        col_norm = label_key(col_str)
+        if col_norm not in label_key(hquote):
+            findings.append(
+                FidelityFinding(
+                    code="TABULAR_COLUMN_MISMATCH",
+                    message=f"Declared table column {col_str!r} is not present in cited table_header {hquote!r}.",
+                    field="table_context.column",
+                )
+            )
+
+    return audited_scale, col_str, href, findings
+
+
+def _parse_kv_list_items(raw_val: Any) -> list[str]:
+    if isinstance(raw_val, (list, tuple)):
+        return [str(x).strip() for x in raw_val if str(x).strip()]
+    if not isinstance(raw_val, str):
+        return [str(raw_val).strip()] if raw_val is not None else []
+    s = raw_val.strip()
+    if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+        s = s[1:-1].strip()
+    if ";" in s or "," in s:
+        return [part.strip() for part in re.split(r"\s*[;,]\s*", s) if part.strip()]
+    return [s] if s else []
+
+
+def _extract_kv_json_entries(text: str) -> dict[str, Any] | None:
+    stripped = (text or "").strip()
+    if stripped.startswith("{") and stripped.endswith("}"):
+        try:
+            loaded = json.loads(stripped)
+            if isinstance(loaded, dict):
+                return loaded
+        except json.JSONDecodeError:
+            pass
+    entries: dict[str, Any] = {}
+    matches = list(_KV_PAIR_RE.finditer(text or ""))
+    if not matches:
+        return None
+    # Require explicit JSON quotes on key/val or at least two KV pairs so prose colons aren't misread as KV records
+    has_quoted_kv = any(m.group("qkey") is not None or m.group("val").lstrip().startswith(('"', "[", "'")) for m in matches)
+    if not has_quoted_kv and len(matches) < 2:
+        return None
+    for m in matches:
+        k = (m.group("qkey") or m.group("sqkey") or m.group("bkey") or "").strip()
+        v_raw = m.group("val").strip()
+        if not k:
+            continue
+        try:
+            entries[k] = json.loads(v_raw)
+        except json.JSONDecodeError:
+            entries[k] = v_raw
+    return entries or None
+
+
+def _kv_key_matches_predicate(
+    raw_key: str,
+    prop_predicate: str,
+    vocabulary: Vocabulary | None,
+) -> bool:
+    kk = label_key(raw_key)
+    pk = label_key(prop_predicate)
+    if kk == pk:
+        return True
+    if vocabulary is not None:
+        try:
+            pspec = vocabulary.predicate(prop_predicate)
+            for al in (pspec.name, *pspec.aliases):
+                if kk == label_key(al):
+                    return True
+        except UnmappedProposal:
+            pass
+    return False
+
+
+def _verify_kv_json_relational_association(
+    quote_text: str,
+    prop_entity: str,
+    prop_predicate: str,
+    val: Any,
+    *,
+    vocabulary: Vocabulary | None,
+) -> list[FidelityFinding] | None:
+    """Verify relational key->value(list) association when evidence is structured JSON/KV.
+
+    Returns ``None`` when the evidence is not structured JSON/KV, ``[]`` when aligned,
+    or a list of ``FidelityFinding`` when a mismatch is detected.
+    """
+    entries = _extract_kv_json_entries(quote_text)
+    if not entries:
+        return None
+
+    # Entity check if explicit entity key appears in the KV record
+    if prop_entity:
+        ent_vals = [
+            v
+            for k, v in entries.items()
+            if label_key(k) in _KV_JSON_ENTITY_KEYS and isinstance(v, str)
+        ]
+        if ent_vals and not any(label_key(prop_entity) in label_key(ev) or label_key(ev) in label_key(prop_entity) for ev in ent_vals):
+            return [
+                FidelityFinding(
+                    code="RELATIONAL_ASSOCIATION_MISMATCH",
+                    message=f"JSON/KV record entity {ent_vals[0]!r} disagrees with proposed entity {prop_entity!r}.",
+                    field="entity",
+                    detail={"record_entities": ent_vals, "proposed_entity": prop_entity},
+                )
+            ]
+
+    matching_items: list[str] = []
+    other_items: list[tuple[str, str]] = []
+    found_pred_key = False
+    for k, v in entries.items():
+        if label_key(k) in _KV_JSON_ENTITY_KEYS:
+            continue
+        parsed = _parse_kv_list_items(v)
+        if _kv_key_matches_predicate(k, prop_predicate, vocabulary):
+            found_pred_key = True
+            matching_items.extend(parsed)
+        else:
+            for item in parsed:
+                other_items.append((k, item))
+
+    if not found_pred_key:
+        if other_items:
+            return [
+                FidelityFinding(
+                    code="RELATIONAL_ASSOCIATION_MISMATCH",
+                    message=f"JSON/KV record keys {list(entries)!r} do not contain predicate {prop_predicate!r}.",
+                    field="predicate",
+                    detail={"keys": list(entries), "predicate": prop_predicate},
+                )
+            ]
+        return None
+
+    expected_items = (
+        [str(x).strip() for x in val]
+        if isinstance(val, (list, tuple))
+        else ([str(val.get("value", "")).strip()] if isinstance(val, dict) else [str(val).strip()])
+    )
+    allowed_keys = {label_key(item) for item in matching_items}
+    missing_from_pred_key = [exp for exp in expected_items if label_key(exp) not in allowed_keys]
+    if missing_from_pred_key:
+        return [
+            FidelityFinding(
+                code="RELATIONAL_ASSOCIATION_MISMATCH",
+                message=(
+                    f"Proposed value item(s) {missing_from_pred_key!r} are not listed under KV key "
+                    f"{prop_predicate!r} ({matching_items!r})."
+                ),
+                field="value",
+                detail={"missing": missing_from_pred_key, "key_items": matching_items},
+            )
+        ]
+    return []
+
+
 def _verify_relational_association(
     primary_doc_text: str,
     unit: EvidenceUnit,
@@ -1527,6 +2044,9 @@ def _verify_relational_association(
     units: UnitRegistry,
     spec: FieldSpec | None,
     documents: Mapping[str, Any] | None,
+    table_scale: Decimal | None = None,
+    table_column: str | None = None,
+    header_ref: EvidenceRef | None = None,
 ) -> list[FidelityFinding]:
     """Ensure `(entity, predicate, value)` are relationally bound in the same clause or table cell/row."""
     prop = unit.proposition
@@ -1546,9 +2066,23 @@ def _verify_relational_association(
         units=units,
         spec=spec,
         prop=prop,
+        table_scale=table_scale,
+        table_column=table_column,
+        header_ref=header_ref,
     )
     if table_findings:
         return table_findings
+
+    quote_text = "\n".join(r.quote for r in unit.evidence)
+    kv_findings = _verify_kv_json_relational_association(
+        quote_text,
+        prop_entity,
+        prop_predicate,
+        val,
+        vocabulary=vocabulary,
+    )
+    if kv_findings is not None:
+        return kv_findings
 
     # Check FieldEvidence relational alignment when explicit per-field spans are provided on the same document
     if spec is not None and spec.type == "list":
@@ -1661,6 +2195,7 @@ def verify_extraction_fidelity(
     require_field_evidence: Sequence[str] = (),
     vocabulary: Vocabulary | None = None,
     documents: Mapping[str, Any] | None = None,
+    table_context: Mapping[str, Any] | None = None,
 ) -> list[FidelityFinding]:
     """Run independent deterministic fidelity checks on an admitted EvidenceUnit."""
     findings: list[FidelityFinding] = []
@@ -1668,11 +2203,8 @@ def verify_extraction_fidelity(
         return findings
 
     prop = unit.proposition
-    cond_status = prop.get(
-        "condition_status",
-        "conditional" if prop.get("conditions") else "unconditional",
-    )
-    check_cond = cond_status == "unconditional"
+    cond_status = prop.get("condition_status") or "unknown_condition"
+    check_cond = cond_status == "unconditional" or (cond_status == "unknown_condition" and not prop.get("conditions"))
     full_sentences: list[str] = []
     for ref in unit.evidence:
         ref_text = documents[ref.document_id].text if (documents and ref.document_id in documents) else doc_text
@@ -1681,6 +2213,22 @@ def verify_extraction_fidelity(
         full_sentences.append(sent)
 
     combined_sentence = " ".join(full_sentences)
+    by_field = {fe.field: fe for fe in (field_evidence or ())}
+    unit_reg = vocabulary.units if vocabulary is not None else STANDARD_UNITS
+    effective_table_context = (
+        table_context
+        if table_context is not None
+        else (unit.proposal.get("table_context") if isinstance(unit.proposal, Mapping) else None)
+    )
+    audited_scale, table_column, header_ref, table_ctx_findings = _audit_table_context_and_header(
+        effective_table_context,
+        by_field,
+        doc_text=doc_text,
+        documents=documents,
+        prop=prop,
+        units=unit_reg,
+    )
+    findings.extend(table_ctx_findings)
 
     # 1. Uncaptured condition / exception in sentence when proposition claims to be unconditional
     if cond_status == "unconditional" and _CONDITIONAL_MARKER_RE.search(combined_sentence):
@@ -1754,7 +2302,6 @@ def verify_extraction_fidelity(
                 )
 
     # 4. Mandatory value grounding against cited evidence quotes (even without field_evidence)
-    unit_reg = vocabulary.units if vocabulary is not None else STANDARD_UNITS
     val_spec: FieldSpec | None = None
     if vocabulary is not None and isinstance(prop.get("predicate"), str):
         try:
@@ -1762,7 +2309,13 @@ def verify_extraction_fidelity(
         except UnmappedProposal:
             val_spec = None
     cited_quotes = " ".join(r.quote for r in unit.evidence)
-    val_grounded = _value_markers_present(val, cited_quotes, units=unit_reg, spec=val_spec)
+    val_grounded = _value_markers_present(
+        val,
+        cited_quotes,
+        units=unit_reg,
+        spec=val_spec,
+        scale_factor=audited_scale if not table_ctx_findings else None,
+    )
     if not val_grounded:
         findings.append(
             FidelityFinding(
@@ -1834,7 +2387,6 @@ def verify_extraction_fidelity(
             )
 
     # 5. Per-field evidence binding checks
-    by_field = {fe.field: fe for fe in (field_evidence or ())}
     for req_field in require_field_evidence:
         if req_field not in by_field:
             findings.append(
@@ -1849,6 +2401,8 @@ def verify_extraction_fidelity(
     primary_doc_id = unit.evidence[0].document_id if unit.evidence else None
 
     for fe in field_evidence or ():
+        if fe.field == "table_header" and any(f.field == "table_header" and f.code == "INVALID_FIELD_EVIDENCE" for f in table_ctx_findings):
+            continue
         ref = fe.evidence
         fe_text = documents[ref.document_id].text if (documents and ref.document_id in documents) else doc_text
         if ref.start < 0 or ref.end > len(fe_text) or fe_text[ref.start : ref.end] != ref.quote:
@@ -1908,7 +2462,11 @@ def verify_extraction_fidelity(
                     )
                 )
         elif fe.field == "value" and not _value_markers_present(
-            prop.get("value"), ref.quote, units=unit_reg, spec=val_spec
+            prop.get("value"),
+            ref.quote,
+            units=unit_reg,
+            spec=val_spec,
+            scale_factor=audited_scale if not table_ctx_findings else None,
         ):
             findings.append(
                 FidelityFinding(
@@ -1981,6 +2539,12 @@ def verify_extraction_fidelity(
         "MISSING_FIELD_EVIDENCE",
         "INVALID_FIELD_EVIDENCE",
         "LIST_ORDER_MISMATCH",
+        "INVALID_TABLE_CONTEXT",
+        "MISSING_HEADER_CITATION",
+        "TABULAR_SCALE_MISMATCH",
+        "TABULAR_CURRENCY_MISMATCH",
+        "TABULAR_PERIOD_MISMATCH",
+        "TABULAR_COLUMN_MISMATCH",
     }
     if not ({f.code for f in findings} & blocking_individual_codes):
         findings.extend(
@@ -1993,6 +2557,9 @@ def verify_extraction_fidelity(
                 units=unit_reg,
                 spec=val_spec,
                 documents=documents,
+                table_scale=audited_scale if not table_ctx_findings else None,
+                table_column=table_column if not table_ctx_findings else None,
+                header_ref=header_ref,
             )
         )
 

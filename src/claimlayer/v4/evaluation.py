@@ -453,12 +453,12 @@ def _leaf_matches_admitted_corpus_unit(
 
     node_val = _norm_val_pair(node.value, node.unit)
     node_pred = str(node.predicate or "")
-    node_cs = str(node.condition_status or "unconditional")
+    node_cs = str(node.condition_status or "unknown_condition")
 
     for uref in corpus_register.admitted_unit_refs:
         if str(uref.get("predicate", "")) != node_pred:
             continue
-        u_cs = str(uref.get("condition_status", "unconditional"))
+        u_cs = str(uref.get("condition_status") or "unknown_condition")
         if u_cs != node_cs and not (u_cs == "unconditional" and node_cs == "conditional"):
             continue
         u_val = _norm_val_pair(uref.get("value"), uref.get("unit"))

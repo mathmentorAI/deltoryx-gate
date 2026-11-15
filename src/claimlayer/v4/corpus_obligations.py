@@ -11,6 +11,7 @@ from collections import deque
 from decimal import Decimal, InvalidOperation
 import difflib
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
@@ -425,13 +426,163 @@ def _extract_sentence_quantity_tokens(
     return tokens
 
 
+_OCR_LIGATURE_MAP: dict[str, str] = {
+    "\ufb00": "ff",
+    "\ufb01": "fi",
+    "\ufb02": "fl",
+    "\ufb03": "ffi",
+    "\ufb04": "ffl",
+    "\ufb05": "ft",
+    "\ufb06": "st",
+}
+
+_OCR_PUNCT_MAP: dict[str, str] = {
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u201e": '"',
+    "\u201f": '"',
+    "\u00ab": '"',
+    "\u00bb": '"',
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201a": "'",
+    "\u201b": "'",
+    "\u2013": "-",
+    "\u2014": "-",
+    "\u2212": "-",
+    "\u00a0": " ",
+}
+
+_OCR_STRIP_CHARS = frozenset({"\u00ad", "\u200b", "\u200c", "\u200d", "\ufeff"})
+
+
+def normalize_pdf_ocr_noise(text: str) -> str:
+    """Normalize PDF/OCR extraction noise (ligatures, line-break hyphens, wraps, smart punctuation)."""
+    norm_text, _, _ = _normalize_pdf_ocr_with_map(text or "", base_offset=0)
+    return norm_text
+
+
+def _normalize_pdf_ocr_with_map(
+    text: str,
+    *,
+    base_offset: int = 0,
+) -> tuple[str, list[int], list[int]]:
+    """Return `(normalized_text, norm_char_to_orig_start, norm_char_to_orig_end)`."""
+    if not text:
+        return "", [], []
+
+    # Step 1: per-character ligatures, typographic punctuation, soft hyphens, CRLF -> LF
+    stage1: list[tuple[str, int, int]] = []
+    n = len(text)
+    i = 0
+    while i < n:
+        ch = text[i]
+        orig_s = base_offset + i
+        if ch == "\r":
+            orig_e = base_offset + i + (2 if (i + 1 < n and text[i + 1] == "\n") else 1)
+            stage1.append(("\n", orig_s, orig_e))
+            i += 2 if (i + 1 < n and text[i + 1] == "\n") else 1
+            continue
+        i += 1
+        if ch in _OCR_STRIP_CHARS:
+            continue
+        if ch in _OCR_LIGATURE_MAP:
+            for rep_ch in _OCR_LIGATURE_MAP[ch]:
+                stage1.append((rep_ch, orig_s, orig_s + 1))
+            continue
+        if ch in _OCR_PUNCT_MAP:
+            stage1.append((_OCR_PUNCT_MAP[ch], orig_s, orig_s + 1))
+            continue
+        nfkc = unicodedata.normalize("NFKC", ch)
+        for rep_ch in nfkc:
+            stage1.append((rep_ch, orig_s, orig_s + 1))
+
+    # Step 2: join line-break hyphens and intra-paragraph wrapped lines
+    stage2: list[tuple[str, int, int]] = []
+    m = len(stage1)
+    j = 0
+    while j < m:
+        ch, orig_s, orig_e = stage1[j]
+        # Line-break hyphen: letter + '-' + optional spaces + '\n' + optional spaces + continuation letter
+        if (
+            ch == "-"
+            and stage2
+            and stage2[-1][0].isalpha()
+        ):
+            k = j + 1
+            while k < m and stage1[k][0] in (" ", "\t"):
+                k += 1
+            if k < m and stage1[k][0] == "\n":
+                k += 1
+                while k < m and stage1[k][0] in (" ", "\t"):
+                    k += 1
+                if k < m and stage1[k][0].isalpha():
+                    next_ch = stage1[k][0]
+                    # Rejoin when continuation starts lowercase (word split across lines) or ALL-CAPS wrap
+                    all_caps_wrap = next_ch.isupper() and len(stage2) >= 2 and stage2[-1][0].isupper() and stage2[-2][0].isupper()
+                    if next_ch.islower() or all_caps_wrap:
+                        j = k
+                        continue
+
+        # Intra-paragraph newline: single '\n' mid-sentence wrapped across PDF lines
+        if ch == "\n" and stage2:
+            k = j + 1
+            while k < m and stage1[k][0] in (" ", "\t"):
+                k += 1
+            prev_line_chars: list[str] = []
+            idx_p = len(stage2) - 1
+            while idx_p >= 0 and stage2[idx_p][0] != "\n":
+                prev_line_chars.append(stage2[idx_p][0])
+                idx_p -= 1
+            prev_line = "".join(reversed(prev_line_chars)).strip()
+            if (
+                prev_line
+                and prev_line[-1] not in ".:;!?"
+                and "|" not in prev_line
+                and k < m
+                and stage1[k][0] != "\n"
+            ):
+                # Look ahead to check next line is not a bullet, numbered list, or pipe row
+                next_line_chars: list[str] = []
+                idx_n = k
+                while idx_n < m and stage1[idx_n][0] != "\n" and len(next_line_chars) < 24:
+                    next_line_chars.append(stage1[idx_n][0])
+                    idx_n += 1
+                next_prefix = "".join(next_line_chars).lstrip()
+                is_structural_next = bool(
+                    next_prefix.startswith(("|", "- ", "* ", "•"))
+                    or re.match(r"^(?:\(\d+\)|\(\w\)|\d+\.\s)", next_prefix)
+                )
+                # Real headings do not wrap onto a lowercase continuation word
+                header_only_prev = _SECTION_HEADER_ONLY_RE.match(prev_line) is not None and not (
+                    next_prefix and next_prefix[0].islower()
+                )
+                if not header_only_prev and not is_structural_next and next_prefix and (
+                    next_prefix[0].islower()
+                    or re.match(r"^(?:[A-Za-z0-9$\"'(])", next_prefix)
+                ):
+                    if stage2[-1][0] != " ":
+                        stage2.append((" ", orig_s, orig_e))
+                    j = k
+                    continue
+
+        stage2.append((ch, orig_s, orig_e))
+        j += 1
+
+    norm_text = "".join(c for c, _, _ in stage2)
+    orig_starts = [s for _, s, _ in stage2]
+    orig_ends = [e for _, _, e in stage2]
+    return norm_text, orig_starts, orig_ends
+
+
 def _norm_sentence_eq(text: str) -> str:
-    cleaned = re.sub(r"\s+", " ", (text or "").strip().lower())
+    cleaned = re.sub(r"\s+", " ", normalize_pdf_ocr_noise(text).strip().lower())
     return cleaned.rstrip(" .;:")
 
 
 def _sentence_content_words(text: str) -> set[str]:
-    words = {w for w in re.findall(r"[a-z]{2,}", (text or "").lower()) if w not in _SENTENCE_STOPWORDS}
+    norm = normalize_pdf_ocr_noise(text).lower()
+    words = {w for w in re.findall(r"[^\W\d_]{2,}", norm) if w not in _SENTENCE_STOPWORDS}
     return words
 
 
@@ -512,7 +663,7 @@ def _align_sentences(
     return pairs, unmatched_pri, unmatched_sec
 
 
-_DIFF_WORD_RE = re.compile(r"[A-Za-z0-9]+(?:[.,_-][A-Za-z0-9]+)*")
+_DIFF_WORD_RE = re.compile(r"[^\W_]+(?:[.,_-][^\W_]+)*")
 
 
 def _tokenize_with_spans(sentence: str, base_offset: int) -> list[tuple[str, int, int, str]]:
@@ -752,8 +903,48 @@ def _divergence_gaps_for_item(
     pri_chunk = pri_full[int(pri_span[0]) : int(pri_span[1])] if (pri_full and pri_span is not None) else pri_full
     sec_chunk = sec_full[int(sec_span[0]) : int(sec_span[1])] if (sec_full and sec_span is not None) else sec_full
 
-    pri_sents = segment_sentences_with_spans(pri_chunk, base_offset=pri_base) if pri_chunk else []
-    sec_sents = segment_sentences_with_spans(sec_chunk, base_offset=sec_base) if sec_chunk else []
+    pri_norm_chunk, pri_char_s, pri_char_e = _normalize_pdf_ocr_with_map(pri_chunk, base_offset=pri_base)
+    sec_norm_chunk, sec_char_s, sec_char_e = _normalize_pdf_ocr_with_map(sec_chunk, base_offset=sec_base)
+
+    def _map_norm_span(char_s: Sequence[int], char_e: Sequence[int], ns: int, ne: int, default_base: int) -> tuple[int, int]:
+        if not char_s or ns >= ne or ns < 0 or ns >= len(char_s):
+            return default_base, default_base
+        end_idx = min(ne - 1, len(char_e) - 1)
+        return int(char_s[ns]), max(int(char_s[ns]), int(char_e[end_idx]))
+
+    # Track norm_start for each segmented sentence while keeping original doc offsets on tuple[0..1]
+    raw_pri_sents = segment_sentences_with_spans(pri_norm_chunk, base_offset=0) if pri_norm_chunk else []
+    raw_sec_sents = segment_sentences_with_spans(sec_norm_chunk, base_offset=0) if sec_norm_chunk else []
+
+    pri_sents: list[tuple[int, int, str]] = []
+    pri_norm_base_by_sent: dict[tuple[int, int], int] = {}
+    for ns, ne, stxt in raw_pri_sents:
+        os, oe = _map_norm_span(pri_char_s, pri_char_e, ns, ne, pri_base)
+        pri_sents.append((os, oe, stxt))
+        pri_norm_base_by_sent[(os, oe)] = ns
+
+    sec_sents: list[tuple[int, int, str]] = []
+    sec_norm_base_by_sent: dict[tuple[int, int], int] = {}
+    for ns, ne, stxt in raw_sec_sents:
+        os, oe = _map_norm_span(sec_char_s, sec_char_e, ns, ne, sec_base)
+        sec_sents.append((os, oe, stxt))
+        sec_norm_base_by_sent[(os, oe)] = ns
+
+    def _orig_sent_span(doc_id: str, sent: tuple[int, int, str], rel_s: int, rel_e: int, base_sent_offset: int) -> tuple[int, int]:
+        """Map a span computed inside `sent[2]` back into original document offsets."""
+        if doc_id == pri_id:
+            n_base = pri_norm_base_by_sent.get((int(sent[0]), int(sent[1])))
+            if n_base is not None:
+                delta_s = max(0, rel_s - base_sent_offset)
+                delta_e = max(delta_s, rel_e - base_sent_offset)
+                return _map_norm_span(pri_char_s, pri_char_e, n_base + delta_s, n_base + delta_e, int(sent[0]))
+        else:
+            n_base = sec_norm_base_by_sent.get((int(sent[0]), int(sent[1])))
+            if n_base is not None:
+                delta_s = max(0, rel_s - base_sent_offset)
+                delta_e = max(delta_s, rel_e - base_sent_offset)
+                return _map_norm_span(sec_char_s, sec_char_e, n_base + delta_s, n_base + delta_e, int(sent[0]))
+        return rel_s, rel_e
 
     both_bounded = pri_span is not None and sec_span is not None
     pairs, unmatched_pri, unmatched_sec = _align_sentences(
@@ -830,7 +1021,13 @@ def _divergence_gaps_for_item(
         if p_norm == s_norm:
             continue
         p_quants = _extract_sentence_quantity_tokens(p_sent[2], p_sent[0])
+        for q in p_quants:
+            os, oe = _orig_sent_span(pri_id, p_sent, int(q["span"][0]), int(q["span"][1]), int(p_sent[0]))
+            q["span"] = [os, oe]
         s_quants = _extract_sentence_quantity_tokens(s_sent[2], s_sent[0])
+        for q in s_quants:
+            os, oe = _orig_sent_span(sec_id, s_sent, int(q["span"][0]), int(q["span"][1]), int(s_sent[0]))
+            q["span"] = [os, oe]
         p_keys = {q["token"] for q in p_quants}
         s_keys = {q["token"] for q in s_quants}
         p_diff = [q for q in p_quants if q["token"] not in s_keys]
@@ -849,8 +1046,14 @@ def _divergence_gaps_for_item(
                 _emit_quantity_gap(sec_id, q, s_sent, pri_id, p_sent)
 
         # Token-level diff check on ALL differing aligned sentence pairs (even when quantities differ).
-        p_tokens = _tokenize_with_spans(p_sent[2], int(p_sent[0]))
-        s_tokens = _tokenize_with_spans(s_sent[2], int(s_sent[0]))
+        p_tokens = [
+            (norm_t, *_orig_sent_span(pri_id, p_sent, ts, te, int(p_sent[0])), raw_t)
+            for norm_t, ts, te, raw_t in _tokenize_with_spans(p_sent[2], int(p_sent[0]))
+        ]
+        s_tokens = [
+            (norm_t, *_orig_sent_span(sec_id, s_sent, ts, te, int(s_sent[0])), raw_t)
+            for norm_t, ts, te, raw_t in _tokenize_with_spans(s_sent[2], int(s_sent[0]))
+        ]
         sm = difflib.SequenceMatcher(
             None,
             [t[0] for t in p_tokens],
@@ -1018,13 +1221,17 @@ def _divergence_gaps_for_item(
     if pri_span is not None:
         for p_sent in unmatched_pri:
             for q in _extract_sentence_quantity_tokens(p_sent[2], p_sent[0]):
-                q_span = (int(q["span"][0]), int(q["span"][1]))
+                os, oe = _orig_sent_span(pri_id, p_sent, int(q["span"][0]), int(q["span"][1]), int(p_sent[0]))
+                q["span"] = [os, oe]
+                q_span = (os, oe)
                 if not _span_index_intersects(eff_unit_idx, pri_id, q_span):
                     _emit_quantity_gap(pri_id, q, p_sent, sec_id, None)
     if sec_span is not None:
         for s_sent in unmatched_sec:
             for q in _extract_sentence_quantity_tokens(s_sent[2], s_sent[0]):
-                q_span = (int(q["span"][0]), int(q["span"][1]))
+                os, oe = _orig_sent_span(sec_id, s_sent, int(q["span"][0]), int(q["span"][1]), int(s_sent[0]))
+                q["span"] = [os, oe]
+                q_span = (os, oe)
                 if not _span_index_intersects(eff_unit_idx, sec_id, q_span):
                     _emit_quantity_gap(sec_id, q, s_sent, pri_id, None)
 

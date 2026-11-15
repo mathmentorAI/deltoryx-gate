@@ -29,7 +29,7 @@ from ..semantic.store import VerificationStore
 from .epistemics import DEFAULT_PROFILE, EXPLICIT, EpistemicProfile
 from .fidelity import FieldEvidence, FidelityFinding, verify_extraction_fidelity
 from .models import AcceptancePolicy, EvidenceUnit, context_key
-from .vocabulary import UnmappedProposal, Vocabulary, decimal_text, label_key, value_relation
+from .vocabulary import NORMALIZER_VERSION, UnmappedProposal, Vocabulary, decimal_text, label_key, value_relation
 
 ENGINE_VERSION = '4.0.0a1'
 CONTRACT = 'claimlayer-evidence-v4'
@@ -79,6 +79,7 @@ class UnitEvaluation:
     pending_conditions: list[dict[str, Any]] = field(default_factory=list)
     pending_scope: dict[str, Any] = field(default_factory=dict)
     premise_ids: tuple[str, ...] = ()
+    normalizer_version: str = NORMALIZER_VERSION
 
     def as_basis(self) -> dict[str, Any]:
         return {
@@ -372,6 +373,11 @@ def evaluate_unit_admissibility(
                     require_field_evidence=require_field_evidence,
                     vocabulary=vocabulary,
                     documents=resolved_docs,
+                    table_context=(
+                        unit.proposal.get('table_context')
+                        if isinstance(unit.proposal, Mapping)
+                        else None
+                    ),
                 )
                 if f_findings:
                     return UnitEvaluation(
@@ -534,6 +540,7 @@ class EvidenceLayer:
     @property
     def configuration(self):
         return {'engine_version': ENGINE_VERSION, 'contract': CONTRACT,
+                'normalizer_version': NORMALIZER_VERSION,
                 'vocabulary': {'name': self.vocabulary.name, 'version': self.vocabulary.version,
                                'fingerprint': self.vocabulary.fingerprint},
                 'profile': {'name': self.profile.name, 'version': self.profile.version,
@@ -752,6 +759,20 @@ class EvidenceLayer:
                         self._store_field_evidence(uid, item['field_evidence'])
         return summary
 
+    def _split_proposal_table_context(self, proposal, extra_table_context=None):
+        if type(proposal) is not dict:
+            raise UnmappedProposal('proposal_object_required', '', proposal)
+        prop_clean = dict(proposal)
+        raw_tc = prop_clean.pop('table_context', None)
+        if extra_table_context is not None:
+            raw_tc = extra_table_context
+        stored_proposal = json.loads(canonical(prop_clean))
+        if raw_tc is not None:
+            if not isinstance(raw_tc, Mapping) or not raw_tc:
+                raise UnmappedProposal('invalid_table_context', 'table_context', raw_tc)
+            stored_proposal['table_context'] = json.loads(canonical(dict(raw_tc)))
+        return prop_clean, stored_proposal
+
     def ingest_units(self, items, *, attestor: str, structural_reliability: float | None = 1.0):
         """Admit application-supplied typed proposals bound to exact spans (no model involved)."""
         if not isinstance(attestor, str) or not attestor.strip():
@@ -761,8 +782,16 @@ class EvidenceLayer:
         with self.store.transaction(mode='IMMEDIATE'):
             for item in items:
                 evidence = [asdict(r) if isinstance(r, EvidenceRef) else r for r in item.get('evidence', ())]
-                unit_id = self._admit(item.get('proposal'), item.get('basis', EXPLICIT), evidence, 'application',
-                                      producer, structural_reliability, summary)
+                unit_id = self._admit(
+                    item.get('proposal'),
+                    item.get('basis', EXPLICIT),
+                    evidence,
+                    'application',
+                    producer,
+                    structural_reliability,
+                    summary,
+                    table_context=item.get('table_context'),
+                )
                 if unit_id is not None:
                     if item.get('field_evidence'):
                         self._store_field_evidence(unit_id, item['field_evidence'])
@@ -796,9 +825,10 @@ class EvidenceLayer:
                 basis = item.get('basis', EXPLICIT)
                 evidence = [asdict(r) if isinstance(r, EvidenceRef) else r for r in item.get('evidence', ())]
                 try:
-                    if type(proposal) is not dict:
-                        raise UnmappedProposal('proposal_object_required', '', proposal)
-                    proposition = self.vocabulary.proposition(proposal)
+                    prop_clean, stored_proposal = self._split_proposal_table_context(
+                        proposal, item.get('table_context')
+                    )
+                    proposition = self.vocabulary.proposition(prop_clean)
                     if not self.profile.admissible(basis):
                         raise UnmappedProposal(
                             'basis_blocked' if basis in self.profile.blocked else 'unknown_basis',
@@ -814,7 +844,7 @@ class EvidenceLayer:
                         'reader',
                         dict(producer),
                         structural_reliability,
-                        proposal=json.loads(canonical(proposal)),
+                        proposal=stored_proposal,
                     )
                     fe_list: list[FieldEvidence] = []
                     raw_fe = item.get('field_evidence')
@@ -895,17 +925,16 @@ class EvidenceLayer:
         summary['rejection_reasons'][error['reason']] = summary['rejection_reasons'].get(error['reason'], 0) + 1
         return None
 
-    def _admit(self, proposal, basis, evidence, origin, producer, structural_reliability, summary):
+    def _admit(self, proposal, basis, evidence, origin, producer, structural_reliability, summary, *, table_context=None):
         try:
-            if type(proposal) is not dict:
-                raise UnmappedProposal('proposal_object_required', '', proposal)
-            proposition = self.vocabulary.proposition(proposal)
+            prop_clean, stored_proposal = self._split_proposal_table_context(proposal, table_context)
+            proposition = self.vocabulary.proposition(prop_clean)
             if not self.profile.admissible(basis):
                 raise UnmappedProposal('basis_blocked' if basis in self.profile.blocked else 'unknown_basis', 'basis', basis)
             refs = tuple(EvidenceRef(**r) for r in (evidence or ()))
             self._refs_valid(refs)
             unit = EvidenceUnit(proposition, refs, basis, origin, producer, structural_reliability,
-                                proposal=json.loads(canonical(proposal)))
+                                proposal=stored_proposal)
         except UnmappedProposal as exc:
             return self._reject(proposal, basis, producer, exc.as_dict(), summary)
         except (ValueError, TypeError, KeyError) as exc:
@@ -1374,8 +1403,18 @@ class EvidenceLayer:
             nearest = min(response['results'], key=lambda r: len(self._context_differences(target_context, proposition, r)))
             matched = nearest
             differences = self._context_differences(target_context, proposition, nearest)
+            if nearest.get('status') == 'accepted':
+                if canonical({'value': nearest['value'], 'unit': nearest['unit'], 'polarity': nearest['polarity']}) == canonical(claim_value):
+                    relation = 'equal'
+                elif nearest['unit'] == claim_value['unit'] and nearest['polarity'] == claim_value['polarity']:
+                    relation = value_relation(spec.value, nearest['value'], claim_value['value'])
+                else:
+                    a = {'assertion': 'x', **{k: nearest[k] for k in ('value', 'unit', 'polarity')}}
+                    b = {'assertion': 'y', **claim_value}
+                    relation = self._relation(spec, a, b) if self._incompatible(spec, a, b) else 'compatible'
         return self._issue({'operation': 'check_claim', 'status': status, 'proposition': proposition,
                             'matched_result': matched, 'differences': differences, 'relation': relation,
+                            'normalizer_version': NORMALIZER_VERSION,
                             'ledger_response_id': response['response_id'], 'configuration': self.configuration,
                             'decision_kind': 'deterministic comparison with ledger; truth not certified'})
 
@@ -1399,7 +1438,7 @@ class EvidenceLayer:
         ledger = dict(result['context'])
         if result['conditional']:
             ledger['conditions'] = result['pending_conditions']
-        for key in ('assertion_kind', 'scope', 'conditions'):
+        for key in ('assertion_kind', 'scope', 'conditions', 'condition_status'):
             if canonical(target.get(key)) != canonical(ledger.get(key)):
                 out.append({'path': '/' + key, 'claim': target.get(key), 'ledger': ledger.get(key)})
         out.extend(self._differences({k: proposition[k] for k in ('value', 'unit', 'polarity')},

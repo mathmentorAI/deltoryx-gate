@@ -21,8 +21,10 @@ from ..verifiers.diff import build_comparison_policy
 from ..verifiers.quote_quantity import (
     _SECTION_HEADER_ONLY_RE,
     _STRUCTURAL_ID_RE,
+    _normalize_pdf_ocr_with_map,
     extract_dates_with_spans,
     extract_quantities,
+    normalize_pdf_ocr_noise,
     segment_sentences_with_spans,
 )
 from .domain_profile import DomainProfile
@@ -256,17 +258,23 @@ def _units_incompatible(vocabulary: Vocabulary, spec: Any, u1: Any, u2: Any) -> 
     p2 = u2.proposition
     if u1.assertion_key == u2.assertion_key:
         return False
-    u1_unit = p1.get("unit")
-    u2_unit = p2.get("unit")
-    if u1_unit is not None and u2_unit is not None:
-        if vocabulary.units.dimension_of(u1_unit) != vocabulary.units.dimension_of(u2_unit):
-            # Incompatible counting conventions on same predicate (e.g. calendar_days vs business_days)
-            if p1.get("predicate") == p2.get("predicate") and u1_unit != u2_unit:
-                return True
-            return False
+    is_multi = getattr(spec, "cardinality", "single") == "multi"
+    if not is_multi:
+        u1_unit = p1.get("unit")
+        u2_unit = p2.get("unit")
+        if u1_unit is not None and u2_unit is not None:
+            if vocabulary.units.dimension_of(u1_unit) != vocabulary.units.dimension_of(u2_unit):
+                # Incompatible counting conventions on same predicate (e.g. calendar_days vs business_days)
+                if p1.get("predicate") == p2.get("predicate") and u1_unit != u2_unit:
+                    return True
+                return False
     rel = value_relation(spec.value, p1.get("value"), p2.get("value"))
     if rel == "equal":
-        return p1.get("polarity") != p2.get("polarity")
+        return (p1.get("polarity") or "affirmed") != (p2.get("polarity") or "affirmed")
+    if is_multi:
+        # Multi-valued predicates (e.g. clauses, permitted jurisdictions, collateral types) hold sets
+        # of concurrent items; distinct affirmed values are non-conflicting unless explicitly negated.
+        return False
     return rel == "incompatible"
 
 
@@ -426,159 +434,6 @@ def _extract_sentence_quantity_tokens(
     return tokens
 
 
-_OCR_LIGATURE_MAP: dict[str, str] = {
-    "\ufb00": "ff",
-    "\ufb01": "fi",
-    "\ufb02": "fl",
-    "\ufb03": "ffi",
-    "\ufb04": "ffl",
-    "\ufb05": "ft",
-    "\ufb06": "st",
-}
-
-_OCR_PUNCT_MAP: dict[str, str] = {
-    "\u201c": '"',
-    "\u201d": '"',
-    "\u201e": '"',
-    "\u201f": '"',
-    "\u00ab": '"',
-    "\u00bb": '"',
-    "\u2018": "'",
-    "\u2019": "'",
-    "\u201a": "'",
-    "\u201b": "'",
-    "\u2013": "-",
-    "\u2014": "-",
-    "\u2212": "-",
-    "\u00a0": " ",
-}
-
-_OCR_STRIP_CHARS = frozenset({"\u00ad", "\u200b", "\u200c", "\u200d", "\ufeff"})
-
-
-def normalize_pdf_ocr_noise(text: str) -> str:
-    """Normalize PDF/OCR extraction noise (ligatures, line-break hyphens, wraps, smart punctuation)."""
-    norm_text, _, _ = _normalize_pdf_ocr_with_map(text or "", base_offset=0)
-    return norm_text
-
-
-def _normalize_pdf_ocr_with_map(
-    text: str,
-    *,
-    base_offset: int = 0,
-) -> tuple[str, list[int], list[int]]:
-    """Return `(normalized_text, norm_char_to_orig_start, norm_char_to_orig_end)`."""
-    if not text:
-        return "", [], []
-
-    # Step 1: per-character ligatures, typographic punctuation, soft hyphens, CRLF -> LF
-    stage1: list[tuple[str, int, int]] = []
-    n = len(text)
-    i = 0
-    while i < n:
-        ch = text[i]
-        orig_s = base_offset + i
-        if ch == "\r":
-            orig_e = base_offset + i + (2 if (i + 1 < n and text[i + 1] == "\n") else 1)
-            stage1.append(("\n", orig_s, orig_e))
-            i += 2 if (i + 1 < n and text[i + 1] == "\n") else 1
-            continue
-        i += 1
-        if ch in _OCR_STRIP_CHARS:
-            continue
-        if ch in _OCR_LIGATURE_MAP:
-            for rep_ch in _OCR_LIGATURE_MAP[ch]:
-                stage1.append((rep_ch, orig_s, orig_s + 1))
-            continue
-        if ch in _OCR_PUNCT_MAP:
-            stage1.append((_OCR_PUNCT_MAP[ch], orig_s, orig_s + 1))
-            continue
-        nfkc = unicodedata.normalize("NFKC", ch)
-        for rep_ch in nfkc:
-            stage1.append((rep_ch, orig_s, orig_s + 1))
-
-    # Step 2: join line-break hyphens and intra-paragraph wrapped lines
-    stage2: list[tuple[str, int, int]] = []
-    m = len(stage1)
-    j = 0
-    while j < m:
-        ch, orig_s, orig_e = stage1[j]
-        # Line-break hyphen: letter + '-' + optional spaces + '\n' + optional spaces + continuation letter
-        if (
-            ch == "-"
-            and stage2
-            and stage2[-1][0].isalpha()
-        ):
-            k = j + 1
-            while k < m and stage1[k][0] in (" ", "\t"):
-                k += 1
-            if k < m and stage1[k][0] == "\n":
-                k += 1
-                while k < m and stage1[k][0] in (" ", "\t"):
-                    k += 1
-                if k < m and stage1[k][0].isalpha():
-                    next_ch = stage1[k][0]
-                    # Rejoin when continuation starts lowercase (word split across lines) or ALL-CAPS wrap
-                    all_caps_wrap = next_ch.isupper() and len(stage2) >= 2 and stage2[-1][0].isupper() and stage2[-2][0].isupper()
-                    if next_ch.islower() or all_caps_wrap:
-                        j = k
-                        continue
-
-        # Intra-paragraph newline: single '\n' mid-sentence wrapped across PDF lines
-        if ch == "\n" and stage2:
-            k = j + 1
-            while k < m and stage1[k][0] in (" ", "\t"):
-                k += 1
-            prev_line_chars: list[str] = []
-            idx_p = len(stage2) - 1
-            while idx_p >= 0 and stage2[idx_p][0] != "\n":
-                prev_line_chars.append(stage2[idx_p][0])
-                idx_p -= 1
-            prev_line = "".join(reversed(prev_line_chars)).strip()
-            if (
-                prev_line
-                and prev_line[-1] not in ".:;!?"
-                and "|" not in prev_line
-                and k < m
-                and stage1[k][0] != "\n"
-            ):
-                # Look ahead to check next line is not a bullet, numbered list, or pipe row
-                next_line_chars: list[str] = []
-                idx_n = k
-                while idx_n < m and stage1[idx_n][0] != "\n" and len(next_line_chars) < 24:
-                    next_line_chars.append(stage1[idx_n][0])
-                    idx_n += 1
-                next_prefix = "".join(next_line_chars).lstrip()
-                is_structural_next = bool(
-                    next_prefix.startswith(("|", "- ", "* ", "•"))
-                    or re.match(r"^(?:\(\d+\)|\(\w\)|\d+\.\s)", next_prefix)
-                )
-                is_email_header_prev = bool(
-                    prev_line.endswith(">")
-                    or re.match(r"^(?:From|To|Cc|Bcc|Subject|Date|Sent|Reply-To)\s*:", prev_line, re.IGNORECASE)
-                )
-                # Real headings do not wrap onto a lowercase continuation word
-                header_only_prev = _SECTION_HEADER_ONLY_RE.match(prev_line) is not None and not (
-                    next_prefix and next_prefix[0].islower()
-                )
-                if not is_email_header_prev and not header_only_prev and not is_structural_next and next_prefix and (
-                    next_prefix[0].islower()
-                    or re.match(r"^(?:[A-Za-z0-9$\"'(])", next_prefix)
-                ):
-                    if stage2[-1][0] != " ":
-                        stage2.append((" ", orig_s, orig_e))
-                    j = k
-                    continue
-
-        stage2.append((ch, orig_s, orig_e))
-        j += 1
-
-    norm_text = "".join(c for c, _, _ in stage2)
-    orig_starts = [s for _, s, _ in stage2]
-    orig_ends = [e for _, _, e in stage2]
-    return norm_text, orig_starts, orig_ends
-
-
 def _norm_sentence_eq(text: str) -> str:
     cleaned = re.sub(r"\s+", " ", normalize_pdf_ocr_noise(text).strip().lower())
     return cleaned.rstrip(" .;:")
@@ -588,6 +443,33 @@ def _sentence_content_words(text: str) -> set[str]:
     norm = normalize_pdf_ocr_noise(text).lower()
     words = {w for w in re.findall(r"[^\W\d_]{2,}", norm) if w not in _SENTENCE_STOPWORDS}
     return words
+
+
+def _coalesce_unterminated_fragments(
+    sents: Sequence[tuple[int, int, str]],
+    unused_indices: Sequence[int],
+) -> list[tuple[int, int, str]]:
+    """Coalesce adjacent unused fragments split mid-sentence onto a lowercase continuation."""
+    groups: list[list[int]] = []
+    for idx in unused_indices:
+        cur_txt = sents[idx][2].lstrip()
+        if groups and idx == groups[-1][-1] + 1 and cur_txt and cur_txt[0].islower():
+            prev_txt = sents[groups[-1][-1]][2].rstrip(" \t\r\n\"'”’)]")
+            if prev_txt and prev_txt[-1] not in ".!?;:":
+                groups[-1].append(idx)
+                continue
+        groups.append([idx])
+    out: list[tuple[int, int, str]] = []
+    for grp in groups:
+        if len(grp) == 1:
+            out.append(sents[grp[0]])
+        else:
+            out.append((
+                int(sents[grp[0]][0]),
+                int(sents[grp[-1]][1]),
+                " ".join(sents[g][2].strip() for g in grp if sents[g][2].strip()),
+            ))
+    return out
 
 
 def _align_sentences(
@@ -605,13 +487,16 @@ def _align_sentences(
     used_pri: set[int] = set()
     used_sec: set[int] = set()
 
+    pri_raw_norms = [re.sub(r"\s+", " ", normalize_pdf_ocr_noise(p[2]).strip().lower()) for p in pri_sents]
+    sec_raw_norms = [re.sub(r"\s+", " ", normalize_pdf_ocr_noise(s[2]).strip().lower()) for s in sec_sents]
+
     sec_norms_map: dict[str, deque[int]] = {}
-    for si, s in enumerate(sec_sents):
-        sn = _norm_sentence_eq(s[2])
+    for si, raw_s in enumerate(sec_raw_norms):
+        sn = raw_s.rstrip(" .;:")
         if sn:
             sec_norms_map.setdefault(sn, deque()).append(si)
-    for pi, p in enumerate(pri_sents):
-        pn = _norm_sentence_eq(p[2])
+    for pi, raw_p in enumerate(pri_raw_norms):
+        pn = raw_p.rstrip(" .;:")
         if not pn:
             used_pri.add(pi)
             continue
@@ -621,19 +506,107 @@ def _align_sentences(
             used_pri.add(pi)
             used_sec.add(si)
 
-    rem_pri_idx = [
+    # Cancel contiguous wrapped runs (1-vs-k, k-vs-1, m-vs-n) broken differently by line wraps
+    def _first_word(s: str) -> str:
+        m = re.match(r"[^\s]+", s)
+        return m.group(0).rstrip(".,;:") if m else ""
+
+    sec_by_first: dict[str, list[int]] = {}
+    for si, raw_s in enumerate(sec_raw_norms):
+        if si in used_sec or _is_pure_section_heading(sec_sents[si][2]):
+            continue
+        fw = _first_word(raw_s)
+        if fw:
+            sec_by_first.setdefault(fw, []).append(si)
+
+    for pi in range(len(pri_sents)):
+        if pi in used_pri or _is_pure_section_heading(pri_sents[pi][2]):
+            continue
+        fw = _first_word(pri_raw_norms[pi])
+        if not fw:
+            continue
+        cand_starts = sorted(
+            (si for si in sec_by_first.get(fw, ()) if si not in used_sec),
+            key=lambda si: abs(si - pi),
+        )
+        for si in cand_starts:
+            p_end = pi + 1
+            s_end = si + 1
+            p_acc = pri_raw_norms[pi]
+            s_acc = sec_raw_norms[si]
+            matched_span = False
+            for _ in range(14):
+                if p_acc.rstrip(" .;:") == s_acc.rstrip(" .;:"):
+                    if (p_end - pi) > 1 or (s_end - si) > 1:
+                        matched_span = True
+                    break
+                if len(p_acc) < len(s_acc) and (
+                    s_acc.startswith(p_acc + " ") or s_acc.startswith(p_acc.rstrip(".") + " ")
+                ):
+                    if (
+                        p_end < len(pri_sents)
+                        and p_end not in used_pri
+                        and not _is_pure_section_heading(pri_sents[p_end][2])
+                        and pri_raw_norms[p_end]
+                    ):
+                        p_acc = f"{p_acc} {pri_raw_norms[p_end]}"
+                        p_end += 1
+                        continue
+                elif len(s_acc) < len(p_acc) and (
+                    p_acc.startswith(s_acc + " ") or p_acc.startswith(s_acc.rstrip(".") + " ")
+                ):
+                    if (
+                        s_end < len(sec_sents)
+                        and s_end not in used_sec
+                        and not _is_pure_section_heading(sec_sents[s_end][2])
+                        and sec_raw_norms[s_end]
+                    ):
+                        s_acc = f"{s_acc} {sec_raw_norms[s_end]}"
+                        s_end += 1
+                        continue
+                break
+            if matched_span:
+                used_pri.update(range(pi, p_end))
+                used_sec.update(range(si, s_end))
+                break
+
+    raw_rem_pri_idx = [
         i
         for i, (_, _, t) in enumerate(pri_sents)
         if i not in used_pri and not _is_pure_section_heading(t)
     ]
-    rem_sec_idx = [
+    raw_rem_sec_idx = [
         i
         for i, (_, _, t) in enumerate(sec_sents)
         if i not in used_sec and not _is_pure_section_heading(t)
     ]
 
-    pri_words = {i: _sentence_content_words(pri_sents[i][2]) for i in rem_pri_idx}
-    sec_words = {j: _sentence_content_words(sec_sents[j][2]) for j in rem_sec_idx}
+    rem_pri_items = _coalesce_unterminated_fragments(pri_sents, raw_rem_pri_idx)
+    rem_sec_items = _coalesce_unterminated_fragments(sec_sents, raw_rem_sec_idx)
+
+    # Second exact-match pass after unterminated coalescing
+    rem_sec_map: dict[str, deque[int]] = {}
+    for si, s in enumerate(rem_sec_items):
+        sn = _norm_sentence_eq(s[2])
+        if sn:
+            rem_sec_map.setdefault(sn, deque()).append(si)
+    c_used_pri: set[int] = set()
+    c_used_sec: set[int] = set()
+    for pi, p in enumerate(rem_pri_items):
+        pn = _norm_sentence_eq(p[2])
+        if not pn:
+            c_used_pri.add(pi)
+            continue
+        q = rem_sec_map.get(pn)
+        if q:
+            c_used_pri.add(pi)
+            c_used_sec.add(q.popleft())
+
+    rem_pri_idx = [i for i in range(len(rem_pri_items)) if i not in c_used_pri]
+    rem_sec_idx = [i for i in range(len(rem_sec_items)) if i not in c_used_sec]
+
+    pri_words = {i: _sentence_content_words(rem_pri_items[i][2]) for i in rem_pri_idx}
+    sec_words = {j: _sentence_content_words(rem_sec_items[j][2]) for j in rem_sec_idx}
 
     candidates: list[tuple[float, int, int, int, int]] = []
     for pi in rem_pri_idx:
@@ -660,10 +633,10 @@ def _align_sentences(
             continue
         paired_pri.add(pi)
         paired_sec.add(si)
-        pairs.append((pri_sents[pi], sec_sents[si]))
+        pairs.append((rem_pri_items[pi], rem_sec_items[si]))
 
-    unmatched_pri = [pri_sents[i] for i in rem_pri_idx if i not in paired_pri]
-    unmatched_sec = [sec_sents[j] for j in rem_sec_idx if j not in paired_sec]
+    unmatched_pri = [rem_pri_items[i] for i in rem_pri_idx if i not in paired_pri]
+    unmatched_sec = [rem_sec_items[j] for j in rem_sec_idx if j not in paired_sec]
     return pairs, unmatched_pri, unmatched_sec
 
 
@@ -811,8 +784,10 @@ def _bridges_two_differing_spans(
 
 _HEADING_CLAUSE_VERB_RE = re.compile(
     r"\b(?:shall|must|may|will|should|can|cannot|is|are|was|were|has|have|had|"
-    r"not|never|no|unless|except|provided|bear|bears|pay|pays|exceed|exceeds|"
-    r"includes?|excludes?|applies|apply|constitutes?|guarantees?|prohibit(?:ed|s)?|forbid(?:den)?)\b",
+    r"not|never|no|unless|except|notwithstanding|subject\s+to|provided|other\s+than|"
+    r"save\s+for|save\s+as|save\s+that|solely|exclusively|only\s+if|"
+    r"bear|bears|pay|pays|exceed|exceeds|"
+    r"includes?|excludes?|excluding|applies|apply|constitutes?|guarantees?|prohibit(?:ed|s)?|forbid(?:den)?)\b",
     re.IGNORECASE,
 )
 
@@ -833,8 +808,10 @@ _GAP_POLARITY_RE = re.compile(
     r"\b(?:in\s+no\s+event|under\s+no\s+circumstances|shall\s+not|may\s+not|must\s+not|"
     r"cannot|can\s+not|will\s+not|is\s+not|are\s+not|do\s+not|does\s+not|did\s+not|"
     r"never|not|no|neither|nor|none|without|no\s+longer|prohibit(?:ed|s)?|forbid(?:den)?|"
-    r"unless|except|excluded|waived|unable|impermissible|unenforceable|void|"
-    r"en\s+ning[uú]n\s+caso|no\s+podr[aá]|nunca|jam[aá]s|sin|salvo|excepto|prohibid[oa])\b",
+    r"unless|except\s+as|except\s+that|except|excluded|excluding|notwithstanding|subject\s+to|"
+    r"provided,?\s+however|provided\s+that|other\s+than|save\s+for|save\s+as|save\s+that|"
+    r"solely|exclusively|only\s+if|waived|unable|impermissible|unenforceable|void|"
+    r"en\s+ning[uú]n\s+caso|no\s+podr[aá]|nunca|jam[aá]s|sin|salvo|excepto|prohibid[oa]|no\s+obstante|sujeto\s+a)\b",
     re.IGNORECASE,
 )
 
@@ -853,9 +830,13 @@ def _extract_clause_polarity_tokens(text: str) -> frozenset[str]:
     """Return normalized negation/polarity markers present in *text*."""
     out: set[str] = set()
     for m in _GAP_POLARITY_RE.finditer(text or ""):
-        tok = re.sub(r"\s+", " ", m.group(0).strip().lower())
+        tok = re.sub(r"\s+", " ", m.group(0).strip().lower()).replace(", ", " ")
         if tok in ("shall not", "may not", "must not", "cannot", "can not", "will not", "is not", "are not", "do not", "does not", "did not"):
             out.add("not")
+        elif tok in ("except as", "except that"):
+            out.add("except")
+        elif tok in ("provided however",):
+            out.add("provided that")
         else:
             out.add(tok)
     return frozenset(out)
@@ -864,6 +845,7 @@ def _extract_clause_polarity_tokens(text: str) -> frozenset[str]:
 def _extract_unit_coverage_spec(
     unit: Any,
     conflict_obs_by_uid: Mapping[str, Sequence[VerificationObligation]],
+    polarity_by_uid: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build semantic coverage descriptor for an admitted unit."""
     prop = getattr(unit, "proposition", {}) or {}
@@ -949,7 +931,8 @@ def _extract_unit_coverage_spec(
     pol_tokens = set(_extract_clause_polarity_tokens(joined_val))
     if cond and cond.lower() not in ("unconditional", "unknown_condition", "conditional"):
         pol_tokens.update(_extract_clause_polarity_tokens(cond))
-    is_negated = assertion_kind in ("negation", "absence", "prohibition") or bool(pol_tokens)
+    prop_pol = str(prop.get("polarity", "affirmed") or "affirmed").lower()
+    is_negated = assertion_kind in ("negation", "absence", "prohibition") or prop_pol == "negated" or bool(pol_tokens)
 
     val_words: set[str] = set()
     for tok in re.findall(r"[A-Za-z0-9áéíóúñüÁÉÍÓÚÑÜ]{2,}", joined_val.lower()):
@@ -965,6 +948,7 @@ def _extract_unit_coverage_spec(
     conflict_pol_flip = False
     conflict_val_words: set[str] = set()
     conflict_is_numeric_only = bool(isinstance(raw_val, Mapping) or (scalar_nums and not val_words))
+    conflict_entries: list[dict[str, Any]] = []
 
     for ob in obs:
         params = ob.parameters or {}
@@ -979,24 +963,54 @@ def _extract_unit_coverage_spec(
             if isinstance(cv, Mapping) and cv.get("value") is not None:
                 vals_to_inspect.append(cv.get("value"))
 
-        side_strs: list[str] = []
+        ob_side_strs: list[str] = []
+        ob_side_words: set[str] = set()
+        ob_numeric_only = bool(isinstance(raw_val, Mapping) or (scalar_nums and not val_words))
         for vv in vals_to_inspect:
             if isinstance(vv, Mapping):
                 vv_str = str(vv.get("value", "") or "").strip()
-                side_strs.append(vv_str)
+                ob_side_strs.append(vv_str)
             else:
                 vv_str = str(vv or "").strip()
-                side_strs.append(vv_str)
+                ob_side_strs.append(vv_str)
                 if vv_str and not re.fullmatch(r"[-+]?\d+(?:\.\d+)?%?", vv_str):
+                    ob_numeric_only = False
                     conflict_is_numeric_only = False
                     for wt in re.findall(r"[A-Za-z0-9áéíóúñüÁÉÍÓÚÑÜ]{2,}", vv_str.lower()):
                         if wt not in _GAP_FRAMING_STOPWORDS:
+                            ob_side_words.add(wt)
                             conflict_val_words.add(wt)
-        if len(side_strs) >= 2:
-            pols = {bool(_extract_clause_polarity_tokens(s)) for s in side_strs if s}
-            bools = {s.lower() for s in side_strs if s.lower() in ("true", "false", "yes", "no", "permitted", "prohibited")}
-            if len(pols) > 1 or len(bools) > 1:
-                conflict_pol_flip = True
+
+        ob_pol_delta: set[str] = set()
+        ob_pol_flip = False
+        side_pols = [_extract_clause_polarity_tokens(s) for s in ob_side_strs if s]
+        if len(side_pols) >= 2:
+            all_pols: set[str] = set()
+            common_pols: set[str] = set(side_pols[0])
+            for sp_set in side_pols:
+                all_pols.update(sp_set)
+                common_pols &= sp_set
+            ob_pol_delta = all_pols - common_pols
+            bools = {s.lower() for s in ob_side_strs if s.lower() in ("true", "false", "yes", "no", "permitted", "prohibited")}
+            if bool({bool(sp_set) for sp_set in side_pols}) and len({bool(sp_set) for sp_set in side_pols}) > 1:
+                ob_pol_flip = True
+            if len(bools) > 1:
+                ob_pol_flip = True
+                ob_pol_delta.add("not")
+        if polarity_by_uid:
+            unit_pols = {polarity_by_uid.get(str(x), "") for x in (params.get("unit_ids") or ()) if polarity_by_uid.get(str(x), "")}
+            if len(unit_pols) > 1:
+                ob_pol_flip = True
+                ob_pol_delta.add("not")
+
+        if ob_pol_flip:
+            conflict_pol_flip = True
+        conflict_entries.append({
+            "pol_flip": ob_pol_flip,
+            "pol_delta": frozenset(ob_pol_delta),
+            "side_words": frozenset(ob_side_words),
+            "numeric_only": ob_numeric_only,
+        })
 
     return {
         "unit_id": uid,
@@ -1009,6 +1023,7 @@ def _extract_unit_coverage_spec(
         "pol_tokens": frozenset(pol_tokens),
         "is_conflict": is_conflict,
         "conflict_pol_flip": conflict_pol_flip,
+        "conflict_entries": tuple(conflict_entries),
         "conflict_val_words": frozenset(conflict_val_words),
         "conflict_is_numeric_only": conflict_is_numeric_only,
     }
@@ -1028,9 +1043,13 @@ def _build_unit_coverage_index(
         for uid in (ob.parameters or {}).get("unit_ids") or ():
             conflict_obs_by_uid.setdefault(str(uid), []).append(ob)
 
+    polarity_by_uid = {
+        str(getattr(u, "unit_id", "") or ""): str(((getattr(u, "proposition", {}) or {}).get("polarity") or "affirmed")).lower()
+        for u in admitted_units
+    }
     raw_by_doc: dict[str, list[tuple[int, int, dict[str, Any]]]] = {}
     for u in admitted_units:
-        spec = _extract_unit_coverage_spec(u, conflict_obs_by_uid)
+        spec = _extract_unit_coverage_spec(u, conflict_obs_by_uid, polarity_by_uid)
         uid = spec["unit_id"]
         seen_spans: set[tuple[str, int, int]] = set()
         for ref in getattr(u, "evidence", ()) or ():
@@ -1225,10 +1244,18 @@ def _conflict_covers_text_hunk(
     sent_pol = _extract_clause_polarity_tokens(sent_text)
     other_sent_pol = _extract_clause_polarity_tokens(counterpart_sent_text)
 
-    has_polarity_diff = bool((hunk_pol ^ other_pol) or (sent_pol ^ other_sent_pol))
-    if has_polarity_diff:
-        # Only cover a polarity/negation flip if a conflict obligation explicitly flips polarity/boolean!
-        return any(sp["conflict_pol_flip"] for sp in specs)
+    needed_pol_diff = (hunk_pol ^ other_pol) or (sent_pol ^ other_sent_pol)
+    if needed_pol_diff:
+        # Only cover a polarity/exception diff if an overlapping conflict obligation
+        # explicitly contrasts the exact polarity/exception markers that changed.
+        for sp in specs:
+            entries = sp.get("conflict_entries") or ()
+            if entries:
+                if any(ce.get("pol_flip") and needed_pol_diff <= set(ce.get("pol_delta") or ()) for ce in entries):
+                    return True
+            elif sp.get("conflict_pol_flip"):
+                return True
+        return False
 
     own_doc_words = set(
         _doc_stem_words(
@@ -1304,10 +1331,13 @@ def _unit_covers_unmatched_clause(
                 return False
         return True
 
-    # Purely textual clause: require matching polarity and overlapping predicate/value substantive word
+    # Purely textual clause: require matching polarity and overlapping predicate/value substantive word.
+    # A standalone non-conflicting unit on one doc must not mask an omitted/added negation or exception clause.
     s_words = _sentence_content_words(s_text) - _GAP_FRAMING_STOPWORDS
     for sp in specs:
         if bool(sent_pol) != bool(sp["is_negated"]) and not sp["conflict_pol_flip"]:
+            continue
+        if sent_pol and not (sp["is_conflict"] and sp["conflict_pol_flip"]):
             continue
         if (sp["val_words"] & s_words) or (sp["pred_words"] & s_words) or (sp["conflict_val_words"] & s_words):
             return True
@@ -1442,19 +1472,28 @@ def _divergence_gaps_for_item(
 
     def _orig_sent_span(doc_id: str, sent: tuple[int, int, str], rel_s: int, rel_e: int, base_sent_offset: int) -> tuple[int, int]:
         """Map a span computed inside `sent[2]` back into original document offsets."""
+        s0, s1 = int(sent[0]), int(sent[1])
+        delta_s = max(0, rel_s - base_sent_offset)
+        delta_e = max(delta_s, rel_e - base_sent_offset)
         if doc_id == pri_id:
-            n_base = pri_norm_base_by_sent.get((int(sent[0]), int(sent[1])))
+            n_base = pri_norm_base_by_sent.get((s0, s1))
             if n_base is not None:
-                delta_s = max(0, rel_s - base_sent_offset)
-                delta_e = max(delta_s, rel_e - base_sent_offset)
-                return _map_norm_span(pri_char_s, pri_char_e, n_base + delta_s, n_base + delta_e, int(sent[0]))
+                return _map_norm_span(pri_char_s, pri_char_e, n_base + delta_s, n_base + delta_e, s0)
+            full_txt = pri_full
         else:
-            n_base = sec_norm_base_by_sent.get((int(sent[0]), int(sent[1])))
+            n_base = sec_norm_base_by_sent.get((s0, s1))
             if n_base is not None:
-                delta_s = max(0, rel_s - base_sent_offset)
-                delta_e = max(delta_s, rel_e - base_sent_offset)
-                return _map_norm_span(sec_char_s, sec_char_e, n_base + delta_s, n_base + delta_e, int(sent[0]))
-        return rel_s, rel_e
+                return _map_norm_span(sec_char_s, sec_char_e, n_base + delta_s, n_base + delta_e, s0)
+            full_txt = sec_full
+        frag = sent[2][delta_s:delta_e]
+        if frag and full_txt and s1 > s0:
+            search_from = min(s1, max(s0, s0 + delta_s - 4))
+            found = full_txt.find(frag, search_from, s1)
+            if found < 0:
+                found = full_txt.find(frag, s0, s1)
+            if found >= 0:
+                return found, found + len(frag)
+        return min(s1, s0 + delta_s), min(s1, max(s0 + delta_s, s0 + delta_e))
 
     both_bounded = pri_span is not None and sec_span is not None
     pairs, unmatched_pri, unmatched_sec = _align_sentences(
@@ -1834,12 +1873,60 @@ def _divergence_gaps_for_item(
                     })
     if sec_span is not None:
         for s_sent in unmatched_sec:
-            for q in _extract_sentence_quantity_tokens(s_sent[2], s_sent[0]):
+            s_quants = _extract_sentence_quantity_tokens(s_sent[2], s_sent[0])
+            for q in s_quants:
                 os, oe = _orig_sent_span(sec_id, s_sent, int(q["span"][0]), int(q["span"][1]), int(s_sent[0]))
                 q["span"] = [os, oe]
                 q_span = (os, oe)
                 if not _span_quantity_covered(eff_cov_idx, sec_id, str(q["token"]), q_span, s_sent[2]):
                     _emit_quantity_gap(sec_id, q, s_sent, pri_id, None)
+
+            if not _is_pure_section_heading(s_sent[2]):
+                s_toks = [
+                    (norm_t, *_orig_sent_span(sec_id, s_sent, ts, te, int(s_sent[0])), raw_t)
+                    for norm_t, ts, te, raw_t in _tokenize_with_spans(s_sent[2], int(s_sent[0]))
+                ]
+                is_doc_title = _is_doc_id_diff_fragment(
+                    s_toks,
+                    sec_id,
+                    sec_aliases,
+                    doc_meta=sec_meta,
+                    other_doc_id=pri_id,
+                    other_meta=pri_meta,
+                    single_side=True,
+                ) or (
+                    not _HEADING_CLAUSE_VERB_RE.search(s_sent[2])
+                    and not s_quants
+                    and len(_sentence_content_words(s_sent[2])) <= 6
+                )
+                has_pol_or_exc = bool(_extract_clause_polarity_tokens(s_sent[2]))
+                has_substance = len(_sentence_content_words(s_sent[2]) - _GAP_FRAMING_STOPWORDS) >= 2 and bool(
+                    _HEADING_CLAUSE_VERB_RE.search(s_sent[2])
+                )
+                if (
+                    not is_doc_title
+                    and (has_pol_or_exc or has_substance)
+                    and not _unit_covers_unmatched_clause(eff_cov_idx, sec_id, s_sent)
+                ):
+                    gaps.append({
+                        "kind": "textual",
+                        "document_id": sec_id,
+                        "offset": int(s_sent[0]),
+                        "span": [int(s_sent[0]), int(s_sent[1])],
+                        "token": "ADDED_CLAUSE",
+                        "changed_text": sec_full[int(s_sent[0]) : int(s_sent[1])] if sec_full else s_sent[2],
+                        "sentence": s_sent[2],
+                        "sentence_span": [int(s_sent[0]), int(s_sent[1])],
+                        "counterpart_document_id": pri_id,
+                        "counterpart_offset": None,
+                        "counterpart_span": None,
+                        "counterpart_changed_text": "",
+                        "counterpart_sentence": None,
+                        "section_key": sec_key,
+                        "section_label": sec_label,
+                        "primary_source_id": pri_id,
+                        "secondary_source_id": sec_id,
+                    })
 
     return gaps
 
@@ -2075,61 +2162,119 @@ def _compute_register_state(
         except Exception:
             continue
 
+        is_multi = getattr(spec, "cardinality", "single") == "multi"
+        unit_pols = [str(u.proposition.get("polarity", "affirmed") or "affirmed") for u in pred_units]
+        if is_multi and len(set(unit_pols)) < 2:
+            # Multi-valued predicates with uniform polarity (all affirmed or all negated)
+            # cannot produce cross-value conflicts; skipping preserves O(N) scaling.
+            continue
+
         unit_docs = [_unit_doc_id(u) for u in pred_units]
         unit_ents_norm = [_norm(str(u.proposition.get("entity", ""))) for u in pred_units]
         unit_ctxs = [unit_ctx_cache[str(u.unit_id)] for u in pred_units]
-        unit_valsigs = [
-            (canonical(u.proposition.get("value")), u.proposition.get("unit"), u.proposition.get("polarity"))
-            for u in pred_units
-        ]
 
-        # Track per-document normalized entities and group indices by context/entity/val_sig to avoid O(N^2) scans.
-        doc_entities: dict[str, set[str]] = {}
-        ctx_val_buckets: dict[str, dict[tuple[str, Any, Any], list[int]]] = {}
-        ent_val_buckets: dict[str, dict[tuple[str, Any, Any], list[int]]] = {}
-        for idx in range(len(pred_units)):
-            d_i = unit_docs[idx]
-            e_i = unit_ents_norm[idx]
-            vs_i = unit_valsigs[idx]
-            doc_entities.setdefault(d_i, set()).add(e_i)
-            ctx_val_buckets.setdefault(unit_ctxs[idx], {}).setdefault(vs_i, []).append(idx)
-            if d_i:
-                ent_val_buckets.setdefault(e_i, {}).setdefault(vs_i, []).append(idx)
+        if is_multi:
+            def _multi_val_bucket_key(val: Any) -> str:
+                raw_c = str(canonical(val) or "").strip()
+                if re.fullmatch(r"[-+]?\d+(?:\.\d+)?", raw_c):
+                    try:
+                        return _fmt_decimal_compact(Decimal(raw_c))
+                    except Exception:
+                        pass
+                return re.sub(r"\s+", " ", raw_c.lower())
 
-        candidate_pairs: set[tuple[int, int]] = set()
-
-        def _collect_cross_val_pairs(
-            val_map: Mapping[tuple[str, Any, Any], list[int]],
-            *,
-            require_diff_doc: bool,
-        ) -> None:
-            if len(val_map) < 2:
-                return
-            groups = list(val_map.values())
-            m = len(groups)
-            for gi in range(m):
-                g1 = groups[gi]
-                for gj in range(gi + 1, m):
-                    g2 = groups[gj]
-                    for a in g1:
-                        da = unit_docs[a]
-                        for b in g2:
-                            if require_diff_doc and (not da or not unit_docs[b] or da == unit_docs[b]):
-                                continue
-                            candidate_pairs.add((a, b) if a < b else (b, a))
-
-        for val_map in ctx_val_buckets.values():
-            _collect_cross_val_pairs(val_map, require_diff_doc=False)
-        for val_map in ent_val_buckets.values():
-            _collect_cross_val_pairs(val_map, require_diff_doc=True)
-
-        singleton_docs = {d for d, ents in doc_entities.items() if d and len(ents) == 1}
-        if len(singleton_docs) >= 2:
-            singleton_val_buckets: dict[tuple[str, Any, Any], list[int]] = {}
+            # On multi-valued predicates, only identical normalized values with opposing polarity conflict.
+            multi_ctx_val_pol: dict[tuple[str, str], dict[str, list[int]]] = {}
+            multi_ent_val_pol: dict[tuple[str, str], dict[str, list[int]]] = {}
+            multi_singleton_val_pol: dict[str, dict[str, list[int]]] = {}
+            doc_entities_m: dict[str, set[str]] = {}
+            multi_val_keys = [_multi_val_bucket_key(u.proposition.get("value")) for u in pred_units]
             for idx in range(len(pred_units)):
-                if unit_docs[idx] in singleton_docs:
-                    singleton_val_buckets.setdefault(unit_valsigs[idx], []).append(idx)
-            _collect_cross_val_pairs(singleton_val_buckets, require_diff_doc=True)
+                d_i = unit_docs[idx]
+                e_i = unit_ents_norm[idx]
+                vk_i = multi_val_keys[idx]
+                p_i = unit_pols[idx]
+                doc_entities_m.setdefault(d_i, set()).add(e_i)
+                multi_ctx_val_pol.setdefault((unit_ctxs[idx], vk_i), {}).setdefault(p_i, []).append(idx)
+                if d_i:
+                    multi_ent_val_pol.setdefault((e_i, vk_i), {}).setdefault(p_i, []).append(idx)
+            singleton_docs_m = {d for d, ents in doc_entities_m.items() if d and len(ents) == 1}
+            if len(singleton_docs_m) >= 2:
+                for idx in range(len(pred_units)):
+                    if unit_docs[idx] in singleton_docs_m:
+                        multi_singleton_val_pol.setdefault(multi_val_keys[idx], {}).setdefault(unit_pols[idx], []).append(idx)
+
+            candidate_pairs: set[tuple[int, int]] = set()
+            for bucket_map, req_diff in (
+                (multi_ctx_val_pol, False),
+                (multi_ent_val_pol, True),
+                (multi_singleton_val_pol, True),
+            ):
+                for pol_map in bucket_map.values():
+                    if len(pol_map) < 2:
+                        continue
+                    pol_groups = list(pol_map.values())
+                    for gi in range(len(pol_groups)):
+                        for gj in range(gi + 1, len(pol_groups)):
+                            for a in pol_groups[gi]:
+                                da = unit_docs[a]
+                                for b in pol_groups[gj]:
+                                    if req_diff and (not da or not unit_docs[b] or da == unit_docs[b]):
+                                        continue
+                                    candidate_pairs.add((a, b) if a < b else (b, a))
+        else:
+            unit_valsigs = [
+                (canonical(u.proposition.get("value")), u.proposition.get("unit"), u.proposition.get("polarity"))
+                for u in pred_units
+            ]
+
+            # Track per-document normalized entities and group indices by context/entity/val_sig to avoid O(N^2) scans.
+            doc_entities: dict[str, set[str]] = {}
+            ctx_val_buckets: dict[str, dict[tuple[str, Any, Any], list[int]]] = {}
+            ent_val_buckets: dict[str, dict[tuple[str, Any, Any], list[int]]] = {}
+            for idx in range(len(pred_units)):
+                d_i = unit_docs[idx]
+                e_i = unit_ents_norm[idx]
+                vs_i = unit_valsigs[idx]
+                doc_entities.setdefault(d_i, set()).add(e_i)
+                ctx_val_buckets.setdefault(unit_ctxs[idx], {}).setdefault(vs_i, []).append(idx)
+                if d_i:
+                    ent_val_buckets.setdefault(e_i, {}).setdefault(vs_i, []).append(idx)
+
+            candidate_pairs = set()
+
+            def _collect_cross_val_pairs(
+                val_map: Mapping[tuple[str, Any, Any], list[int]],
+                *,
+                require_diff_doc: bool,
+            ) -> None:
+                if len(val_map) < 2:
+                    return
+                groups = list(val_map.values())
+                m = len(groups)
+                for gi in range(m):
+                    g1 = groups[gi]
+                    for gj in range(gi + 1, m):
+                        g2 = groups[gj]
+                        for a in g1:
+                            da = unit_docs[a]
+                            for b in g2:
+                                if require_diff_doc and (not da or not unit_docs[b] or da == unit_docs[b]):
+                                    continue
+                                candidate_pairs.add((a, b) if a < b else (b, a))
+
+            for val_map in ctx_val_buckets.values():
+                _collect_cross_val_pairs(val_map, require_diff_doc=False)
+            for val_map in ent_val_buckets.values():
+                _collect_cross_val_pairs(val_map, require_diff_doc=True)
+
+            singleton_docs = {d for d, ents in doc_entities.items() if d and len(ents) == 1}
+            if len(singleton_docs) >= 2:
+                singleton_val_buckets: dict[tuple[str, Any, Any], list[int]] = {}
+                for idx in range(len(pred_units)):
+                    if unit_docs[idx] in singleton_docs:
+                        singleton_val_buckets.setdefault(unit_valsigs[idx], []).append(idx)
+                _collect_cross_val_pairs(singleton_val_buckets, require_diff_doc=True)
 
         for i, j in sorted(candidate_pairs):
             u1, u2 = pred_units[i], pred_units[j]

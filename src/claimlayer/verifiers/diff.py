@@ -12,7 +12,11 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from claimlayer.models import Policy, Source, normalize_key
-from claimlayer.verifiers.quote_quantity import extract_dates, extract_quantities
+from claimlayer.verifiers.quote_quantity import (
+    _normalize_pdf_ocr_with_map,
+    extract_dates,
+    extract_quantities,
+)
 
 _CROSS_REF_CONTINUATION_RE = re.compile(
     r"^(?:above|below|hereof|hereto|thereof|herein|therein|of\b|in\b|to\b|for\b|and\b|or\b|"
@@ -210,20 +214,47 @@ def _quantity_tokens(body: str) -> set[str]:
     return tokens
 
 
+def _map_norm_span(
+    starts: list[int],
+    ends: list[int],
+    norm_span: tuple[int, int] | None,
+    raw_len: int,
+) -> tuple[int, int] | None:
+    if norm_span is None:
+        return None
+    s, e = norm_span
+    if not starts or not ends or e <= s:
+        return (0, raw_len)
+    mapped_s = starts[min(max(s, 0), len(starts) - 1)]
+    mapped_e = ends[min(max(e - 1, 0), len(ends) - 1)]
+    return (mapped_s, max(mapped_s, mapped_e))
+
+
 def extract_divergent_sections(
     primary: Source,
     secondary: Source,
 ) -> list[SectionDivergence]:
     """Identify sections where *secondary* diverges quantitatively, structurally, or adds/omits provisions."""
-    prim_secs = _split_into_sections(primary.text)
-    sec_secs = _split_into_sections(secondary.text)
+    p_norm, p_starts, p_ends = _normalize_pdf_ocr_with_map(primary.text, base_offset=0)
+    s_norm, s_starts, s_ends = _normalize_pdf_ocr_with_map(secondary.text, base_offset=0)
+
+    p_norm_all_key = normalize_key(p_norm)
+    s_norm_all_key = normalize_key(s_norm)
+    if (
+        p_norm_all_key == s_norm_all_key
+        and _quantity_tokens(p_norm) == _quantity_tokens(s_norm)
+    ):
+        return []
+
+    prim_secs = _split_into_sections(p_norm)
+    sec_secs = _split_into_sections(s_norm)
     divergences: list[SectionDivergence] = []
 
     # Fail-closed when documents have no structured headers
     if not prim_secs and not sec_secs:
-        p_quants = _quantity_tokens(primary.text)
-        s_quants = _quantity_tokens(secondary.text)
-        if p_quants != s_quants or normalize_key(primary.text) != normalize_key(secondary.text):
+        p_quants = _quantity_tokens(p_norm)
+        s_quants = _quantity_tokens(s_norm)
+        if p_quants != s_quants or p_norm_all_key != s_norm_all_key:
             divergences.append(
                 SectionDivergence(
                     section_key="document_body",
@@ -266,6 +297,9 @@ def extract_divergent_sections(
                     break
 
         if s_sec is None:
+            p_sec_full_key = normalize_key(p_sec.body)
+            if p_sec_full_key and len(p_sec_full_key) >= 16 and p_sec_full_key in s_norm_all_key:
+                continue
             divergences.append(
                 SectionDivergence(
                     section_key=key,
@@ -275,7 +309,7 @@ def extract_divergent_sections(
                     primary_quantities=tuple(sorted(p_quants)),
                     secondary_quantities=(),
                     reason=f"Section '{p_sec.label}' present in '{primary.id}' is missing from '{secondary.id}'.",
-                    primary_span=(p_sec.start, p_sec.end),
+                    primary_span=_map_norm_span(p_starts, p_ends, (p_sec.start, p_sec.end), len(primary.text)),
                     secondary_span=None,
                 )
             )
@@ -295,8 +329,8 @@ def extract_divergent_sections(
                         f"Quantitative divergence in '{p_sec.label}': "
                         f"{primary.id}={sorted(p_quants)} vs {secondary.id}={sorted(s_quants)}."
                     ),
-                    primary_span=(p_sec.start, p_sec.end),
-                    secondary_span=(s_sec.start, s_sec.end),
+                    primary_span=_map_norm_span(p_starts, p_ends, (p_sec.start, p_sec.end), len(primary.text)),
+                    secondary_span=_map_norm_span(s_starts, s_ends, (s_sec.start, s_sec.end), len(secondary.text)),
                 )
             )
         elif normalize_key(p_sec.body_without_header) != normalize_key(s_sec.body_without_header):
@@ -309,8 +343,8 @@ def extract_divergent_sections(
                     primary_quantities=tuple(sorted(p_quants)),
                     secondary_quantities=tuple(sorted(s_quants)),
                     reason=f"Textual/structural divergence in '{p_sec.label}' between '{primary.id}' and '{secondary.id}'.",
-                    primary_span=(p_sec.start, p_sec.end),
-                    secondary_span=(s_sec.start, s_sec.end),
+                    primary_span=_map_norm_span(p_starts, p_ends, (p_sec.start, p_sec.end), len(primary.text)),
+                    secondary_span=_map_norm_span(s_starts, s_ends, (s_sec.start, s_sec.end), len(secondary.text)),
                 )
             )
 
@@ -319,6 +353,9 @@ def extract_divergent_sections(
         if sec_key in matched_sec_keys:
             continue
         s_sec = sec_secs[sec_key]
+        s_sec_full_key = normalize_key(s_sec.body)
+        if s_sec_full_key and len(s_sec_full_key) >= 16 and s_sec_full_key in p_norm_all_key:
+            continue
         s_quants = _quantity_tokens(s_sec.body)
         divergences.append(
             SectionDivergence(
@@ -332,7 +369,7 @@ def extract_divergent_sections(
                     f"Section '{s_sec.label}' added in '{secondary.id}' is absent from governing '{primary.id}'."
                 ),
                 primary_span=None,
-                secondary_span=(s_sec.start, s_sec.end),
+                secondary_span=_map_norm_span(s_starts, s_ends, (s_sec.start, s_sec.end), len(secondary.text)),
             )
         )
 

@@ -373,9 +373,13 @@ _NUMERIC_QUANTITY_RE = re.compile(
 
 # Scale declarations are evaluated in their source block, not a character window.
 _TABLE_SCALE_HEADER_RE = re.compile(
-    r"\b(?:in|en)\s+(?P<scale>thousands|millions|billions|miles|millones)\b"
-    r"(?:\s+(?:of|de)\s+(?:U\.S\.\s+)?(?:dollars?|euros?|pounds?))?"
-    r"|\(\s*[$€£](?P<zeros>0{3,9})s?\s*\)", re.IGNORECASE)
+    r"(?:\(\s*(?:(?:amounts?|dollars?|usd|eur|gbp|[$€£])\s+)?(?:in|en)\s+(?:[$€£]\s*)?(?P<scale_p1>thousands|millions|billions|miles|millones)\b"
+    r"|\b(?:in|en)\s+(?:[$€£]\s*)?(?P<scale>thousands|millions|billions|miles|millones)\b(?:\s+(?:of|de)\s+(?:U\.S\.\s+)?(?:dollars?|euros?|pounds?))?"
+    r"|\(\s*(?:[$€£]|USD|EUR|GBP|dollars?|euros?|pounds?)\s+(?:in\s+)?(?P<scale_p2>thousands|millions|billions)\b[^()\n]{0,80}\)"
+    r"|\(\s*(?P<scale_p3>thousands|millions|billions)\b(?:\s*,\s*except[^()\n]{0,80})?\)"
+    r"|\(\s*[$€£](?P<zeros>0{3,9})s?\s*\))",
+    re.IGNORECASE,
+)
 
 _SPANISH_CONTEXT_RE = re.compile(
     r"(?:\b(?:el|la|los|las|del|al|es|será|sera|por\s+ciento|euros?|d[ií]as?|a[ñn]os?|"
@@ -419,7 +423,7 @@ _SECTION_HEADER_ONLY_RE = re.compile(
 )
 
 _ABBREV_BEFORE_DOT_RE = re.compile(
-    r"\b(?:sec|art|no|inc|corp|ltd|llc|co|plc|v|vs|cf|al|jr|sr|dr|mr|mrs|ms|st|p|pp|fig|eq|ch|vol)\.$",
+    r"(?:(?:[a-z]\.){2,}|\b(?:sec|art|no|inc|corp|ltd|llc|co|plc|v|vs|cf|al|jr|sr|dr|mr|mrs|ms|st|p|pp|fig|eq|ch|vol|approx|est|misc|ref|jan|feb|mar|apr|aug|sept?|oct|nov|dec)\.$)",
     re.IGNORECASE,
 )
 
@@ -503,6 +507,166 @@ def normalize_span(text: str) -> str:
     nfkc = unicodedata.normalize("NFKC", cleaned)
     translated = nfkc.translate(_QUOTE_MAP).replace("\\$", "$")
     return re.sub(r"\s+", " ", translated).strip()
+
+
+_OCR_LIGATURE_MAP: dict[str, str] = {
+    "\ufb00": "ff",
+    "\ufb01": "fi",
+    "\ufb02": "fl",
+    "\ufb03": "ffi",
+    "\ufb04": "ffl",
+    "\ufb05": "ft",
+    "\ufb06": "st",
+}
+
+_OCR_PUNCT_MAP: dict[str, str] = {
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u201e": '"',
+    "\u201f": '"',
+    "\u00ab": '"',
+    "\u00bb": '"',
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201a": "'",
+    "\u201b": "'",
+    "\u2013": "-",
+    "\u2014": "-",
+    "\u2212": "-",
+    "\u00a0": " ",
+}
+
+_OCR_STRIP_CHARS = frozenset({"\u00ad", "\u200b", "\u200c", "\u200d", "\ufeff"})
+
+
+def _normalize_pdf_ocr_with_map(
+    text: str,
+    *,
+    base_offset: int = 0,
+) -> tuple[str, list[int], list[int]]:
+    """Return `(normalized_text, norm_char_to_orig_start, norm_char_to_orig_end)`."""
+    if not text:
+        return "", [], []
+
+    # Step 1: per-character ligatures, typographic punctuation, soft hyphens, CRLF -> LF
+    stage1: list[tuple[str, int, int]] = []
+    n = len(text)
+    i = 0
+    while i < n:
+        ch = text[i]
+        orig_s = base_offset + i
+        if ch == "\r":
+            orig_e = base_offset + i + (2 if (i + 1 < n and text[i + 1] == "\n") else 1)
+            stage1.append(("\n", orig_s, orig_e))
+            i += 2 if (i + 1 < n and text[i + 1] == "\n") else 1
+            continue
+        i += 1
+        if ch in _OCR_STRIP_CHARS:
+            continue
+        if ch in _OCR_LIGATURE_MAP:
+            for rep_ch in _OCR_LIGATURE_MAP[ch]:
+                stage1.append((rep_ch, orig_s, orig_s + 1))
+            continue
+        if ch in _OCR_PUNCT_MAP:
+            stage1.append((_OCR_PUNCT_MAP[ch], orig_s, orig_s + 1))
+            continue
+        nfkc = unicodedata.normalize("NFKC", ch)
+        for rep_ch in nfkc:
+            stage1.append((rep_ch, orig_s, orig_s + 1))
+
+    # Step 2: join line-break hyphens and intra-paragraph wrapped lines (including after non-boundary dots)
+    stage2: list[tuple[str, int, int]] = []
+    m = len(stage1)
+    j = 0
+    while j < m:
+        ch, orig_s, orig_e = stage1[j]
+        if ch == "-" and stage2 and stage2[-1][0].isalpha():
+            k = j + 1
+            while k < m and stage1[k][0] in (" ", "\t"):
+                k += 1
+            if k < m and stage1[k][0] == "\n":
+                k += 1
+                while k < m and stage1[k][0] in (" ", "\t"):
+                    k += 1
+                if k < m and stage1[k][0].isalpha():
+                    next_ch = stage1[k][0]
+                    all_caps_wrap = (
+                        next_ch.isupper()
+                        and len(stage2) >= 2
+                        and stage2[-1][0].isupper()
+                        and stage2[-2][0].isupper()
+                    )
+                    if next_ch.islower() or all_caps_wrap:
+                        j = k
+                        continue
+
+        if ch == "\n" and stage2:
+            k = j + 1
+            nl_count = 1
+            while k < m and stage1[k][0] in (" ", "\t", "\n"):
+                if stage1[k][0] == "\n":
+                    nl_count += 1
+                k += 1
+            prev_line_chars: list[str] = []
+            idx_p = len(stage2) - 1
+            while idx_p >= 0 and stage2[idx_p][0] != "\n":
+                prev_line_chars.append(stage2[idx_p][0])
+                idx_p -= 1
+            prev_line = "".join(reversed(prev_line_chars)).strip()
+            ends_sentence = bool(prev_line) and (
+                prev_line[-1] in ":;!?"
+                or (prev_line[-1] == "." and _is_sentence_boundary_dot(prev_line, len(prev_line) - 1))
+            )
+            if (
+                prev_line
+                and not ends_sentence
+                and "|" not in prev_line
+                and k < m
+            ):
+                next_line_chars: list[str] = []
+                idx_n = k
+                while idx_n < m and stage1[idx_n][0] != "\n" and len(next_line_chars) < 24:
+                    next_line_chars.append(stage1[idx_n][0])
+                    idx_n += 1
+                next_prefix = "".join(next_line_chars).lstrip()
+                is_structural_next = bool(
+                    next_prefix.startswith(("|", "- ", "* ", "•"))
+                    or re.match(r"^(?:\(\d+\)|\(\w\)|\d+\.\s)", next_prefix)
+                )
+                is_email_header_prev = bool(
+                    prev_line.endswith(">")
+                    or re.match(r"^(?:From|To|Cc|Bcc|Subject|Date|Sent|Reply-To)\s*:", prev_line, re.IGNORECASE)
+                )
+                header_only_prev = _SECTION_HEADER_ONLY_RE.match(prev_line) is not None and not (
+                    next_prefix and next_prefix[0].islower()
+                )
+                allow_blank_unwrap = nl_count == 1 or (nl_count <= 2 and bool(next_prefix) and next_prefix[0].islower())
+                if (
+                    allow_blank_unwrap
+                    and not is_email_header_prev
+                    and not header_only_prev
+                    and not is_structural_next
+                    and next_prefix
+                    and (next_prefix[0].islower() or re.match(r"^(?:[A-Za-z0-9$\"'(])", next_prefix))
+                ):
+                    if stage2[-1][0] != " ":
+                        stage2.append((" ", orig_s, orig_e))
+                    j = k
+                    continue
+
+        stage2.append((ch, orig_s, orig_e))
+        j += 1
+
+    norm_text = "".join(c for c, _, _ in stage2)
+    orig_starts = [s for _, s, _ in stage2]
+    orig_ends = [e for _, _, e in stage2]
+    return norm_text, orig_starts, orig_ends
+
+
+def normalize_pdf_ocr_noise(text: str) -> str:
+    """Normalize PDF/OCR extraction noise (ligatures, line-break hyphens, wraps, smart punctuation)."""
+    norm_text, _, _ = _normalize_pdf_ocr_with_map(text or "", base_offset=0)
+    return norm_text
 
 
 def canonicalize_unit(raw_unit: str | None) -> str:
@@ -774,32 +938,112 @@ _COMPOUND_WORD_QTY_RE = re.compile(
 def _extract_scale_value(m: re.Match[str]) -> Decimal | None:
     if m.group("zeros"):
         return Decimal(10) ** len(m.group("zeros"))
-    return _SCALE_FACTORS.get(m.group("scale").lower())
+    raw = m.group("scale") or m.group("scale_p1") or m.group("scale_p2") or m.group("scale_p3")
+    return _SCALE_FACTORS.get(raw.lower()) if raw else None
 
 
-def _detect_contextual_table_scale(quote: str, source: str | None = None) -> Decimal | None:
-    """Track block-scoped headers; row-local declarations never leak to later lines."""
+def _extract_table_header_currency(header_snippet: str) -> str | None:
+    low = (header_snippet or "").lower()
+    if "$" in header_snippet or re.search(r"\b(?:usd|u\.s\.?\s*dollars?|dollars?)\b", low):
+        return "USD"
+    if "€" in header_snippet or re.search(r"\b(?:eur|euros?)\b", low):
+        return "EUR"
+    if "£" in header_snippet or re.search(r"\b(?:gbp|pounds?)\b", low):
+        return "GBP"
+    return None
+
+
+def _has_blocking_table_boundary(between: str) -> bool:
+    """Return True if *between* separates a contextual table scale header from a later row."""
+    if not between:
+        return False
+    # Allow 1-2 blank lines common in PDF table banners, but stop after >=3 blank lines.
+    if re.search(r"\n\s*\n\s*\n\s*\n", between):
+        return True
+    if ";" in between:
+        return True
+    for i, ch in enumerate(between):
+        if ch == "." and _is_sentence_boundary_dot(between, i):
+            nxt = between[i + 1 : i + 2]
+            if not nxt or nxt.isspace():
+                return True
+    return False
+
+
+def _detect_contextual_table_context(
+    quote: str, source: str | None = None
+) -> tuple[Decimal | None, str | None]:
+    """Track block-scoped headers `(scale, explicit_currency)`; row-local values never leak."""
     source = source or quote
     # Keep line/paragraph boundaries while tolerating whitespace wrapping in a quote.
     normalized_source = "\n".join(normalize_span(line) for line in source.splitlines())
     norm_quote = normalize_span(quote)
     location = re.search(re.escape(norm_quote).replace(r"\ ", r"\s+"), normalized_source, re.IGNORECASE)
     if not location:
-        return None
+        return None, None
     offset = location.start()
     matches = list(_TABLE_SCALE_HEADER_RE.finditer(normalized_source[:location.end()]))
     if not matches:
-        return None
+        return None, None
     match = matches[-1]
-    between = normalized_source[match.end():offset].lstrip(" .:;)-")
-    if re.search(r"[.;](?:\s|$)|\n\s*\n", between):
-        return None
-    line_end = normalized_source.find("\n", match.end())
+    tail_start = match.end()
+    # Advance past the rest of a parenthetical table header such as "(in millions, except per share data)."
+    open_before = normalized_source.rfind("(", 0, match.start() + 1)
+    if open_before >= 0 and normalized_source.find(")", open_before, match.start()) < 0:
+        close_paren = normalized_source.find(")", tail_start)
+        next_nl = normalized_source.find("\n", tail_start)
+        if close_paren >= 0 and (next_nl < 0 or close_paren < next_nl):
+            tail_start = close_paren + 1
+    between = normalized_source[tail_start:offset].lstrip(" .:;)-")
+    if _has_blocking_table_boundary(between):
+        return None, None
+    hdr_start = open_before if (open_before >= 0 and normalized_source.find(")", open_before, match.start()) < 0) else match.start()
+    hdr_raw_snippet = normalized_source[hdr_start:tail_start].strip()
+    is_paren_or_bracket_hdr = hdr_raw_snippet.startswith(("(", "["))
+    looks_like_prose_sentence = (
+        norm_quote.endswith((".", "!", "?"))
+        and "|" not in quote
+        and not re.search(r"\s{2,}(?:[$€£]?\d)", quote)
+    )
+    if re.search(r"\n\s*\n", between) and (not is_paren_or_bracket_hdr or looks_like_prose_sentence):
+        return None, None
+    line_end = normalized_source.find("\n", tail_start)
     if line_end >= 0 and offset > line_end:
-        tail = normalized_source[match.end():line_end]
-        if re.search(r"\d", tail):
-            return None
-    return _extract_scale_value(match)
+        tail = normalized_source[tail_start:line_end].strip()
+        # Reject row-local quantities on the header line (e.g. "Revenue (in thousands): $125"),
+        # while allowing bare 4-digit year columns (e.g. "(in millions)   2023   2022").
+        if tail and re.search(
+            r"(?:[$€£]|:\s*[-−]?\d|\d+(?:[.,]\d+)?\s*(?:%|usd|eur|gbp|millions?|thousands?|billions?)|"
+            r"(?<![A-Za-z0-9])(?!19\d\d\b|20\d\d\b)\d+(?:,\d{3})*(?:\.\d+)?(?![A-Za-z0-9]))",
+            tail,
+            re.IGNORECASE,
+        ):
+            return None, None
+    scale = _extract_scale_value(match)
+    if scale is None:
+        return None, None
+    currency = _extract_table_header_currency(normalized_source[hdr_start:tail_start])
+    if currency is None:
+        table_window = normalized_source[max(0, hdr_start - 120) : min(len(normalized_source), location.end() + 250)]
+        has_usd = bool(re.search(r"(?:\$|\busd\b|\bdollars?\b)", table_window, re.IGNORECASE))
+        has_eur = bool(re.search(r"(?:€|\beur\b|\beuros?\b)", table_window, re.IGNORECASE))
+        has_gbp = bool(re.search(r"(?:£|\bgbp\b|\bpounds?\b|\bsterling\b)", table_window, re.IGNORECASE))
+        if has_usd and not has_eur and not has_gbp:
+            currency = "USD"
+        elif has_eur and not has_usd and not has_gbp:
+            currency = "EUR"
+        elif has_gbp and not has_usd and not has_eur:
+            currency = "GBP"
+        elif re.search(r"\bper[- ]share\b", normalized_source[hdr_start:tail_start], re.IGNORECASE):
+            if not re.search(r"(?:€|£|\beur\b|\beuros?\b|\bgbp\b|\bpounds?\b|\bsterling\b)", normalized_source, re.IGNORECASE):
+                currency = "USD"
+    return scale, currency
+
+
+def _detect_contextual_table_scale(quote: str, source: str | None = None) -> Decimal | None:
+    """Track block-scoped headers; row-local declarations never leak to later lines."""
+    scale, _ = _detect_contextual_table_context(quote, source)
+    return scale
 
 
 def _mask_preserving_len(match: re.Match[str]) -> str:
@@ -1087,19 +1331,51 @@ def segment_sentences_with_spans(text: str, base_offset: int = 0) -> list[tuple[
     return sentences
 
 
-def _has_truncated_sentence_qualifier(norm_source: str, norm_quote: str) -> str | None:
-    """Return the truncated prefix or suffix if *norm_quote* drops a negation or exception from its sentence."""
-    idx = norm_source.lower().find(norm_quote.lower())
-    if idx < 0:
-        return None
-    quote_end = idx + len(norm_quote)
-    sent_start, sent_end = _enclosing_sentence_bounds(norm_source, idx, quote_end)
+_TABLE_PARENS_NOTE_RE = re.compile(
+    r"\(\s*(?:(?:amounts?|dollars?|usd|eur|gbp|[$€£])\s+)?(?:in|en)\s+"
+    r"(?:thousands|millions|billions|miles|millones)\b[^()\n]{0,100}\)",
+    re.IGNORECASE,
+)
 
-    leading_clause = norm_source[sent_start:idx].strip()
+
+def _has_truncated_sentence_qualifier(
+    norm_source: str,
+    norm_quote: str,
+    raw_source: str | None = None,
+) -> str | None:
+    """Return the truncated prefix or suffix if *norm_quote* drops a negation or exception from its sentence."""
+    search_text = norm_source
+    q_start = -1
+    q_end = -1
+    if raw_source:
+        line_source = "\n".join(normalize_span(line) for line in raw_source.splitlines())
+        loc = re.search(re.escape(norm_quote).replace(r"\ ", r"\s+"), line_source, re.IGNORECASE)
+        if loc:
+            search_text = line_source
+            q_start, q_end = loc.start(), loc.end()
+    if q_start < 0:
+        idx = norm_source.lower().find(norm_quote.lower())
+        if idx < 0:
+            return None
+        q_start, q_end = idx, idx + len(norm_quote)
+
+    sent_start, sent_end = _enclosing_sentence_bounds(search_text, q_start, q_end)
+
+    # Do not let a blank line (\n\n) earlier in a block or a parenthetical "(in millions, except ...)" banner
+    # pretend to negate/modify a subsequent table row or separate paragraph.
+    raw_leading = search_text[sent_start:q_start]
+    if "\n" in raw_leading:
+        # Stop at blank line breaks even if no punctuation separates a header from rows
+        parts_blank = re.split(r"\n\s*\n", raw_leading)
+        raw_leading = parts_blank[-1]
+    leading_clause = _TABLE_PARENS_NOTE_RE.sub(" ", raw_leading).strip()
     if leading_clause and _TRUNCATED_QUALIFIER_RE.search(leading_clause):
         return leading_clause
 
-    trailing_clause = norm_source[quote_end:sent_end].strip()
+    raw_trailing = search_text[q_end:sent_end]
+    if "\n" in raw_trailing:
+        raw_trailing = re.split(r"\n\s*\n", raw_trailing)[0]
+    trailing_clause = raw_trailing.strip()
     if trailing_clause and _TRAILING_EXCEPTION_RE.search(trailing_clause):
         return trailing_clause
 
@@ -1188,6 +1464,7 @@ def _check_multi_quantity_subject_binding(
     assertion: Assertion,
     vq: ParsedQuantity,
     same_unit_quote_quantities: list[ParsedQuantity],
+    reference_text: str | None = None,
 ) -> bool:
     """When a quote contains multiple distinct quantities of the same unit (and not a single range),
     bind *vq* to the sub-clause matching `(assertion.subject, assertion.predicate)`."""
@@ -1195,6 +1472,20 @@ def _check_multi_quantity_subject_binding(
     distinct_mags = {qq.magnitude for qq in non_range}
     if len(distinct_mags) <= 1:
         return True
+
+    ref_text = reference_text if reference_text is not None else assertion.quote
+    if "\n" not in ref_text.strip() and not re.search(r"[;]", ref_text):
+        sorted_nr = sorted(non_range, key=lambda q: q.span[0])
+        prefix_txt = ref_text[: sorted_nr[0].span[0]]
+        trailing_txt = ref_text[sorted_nr[0].span[0] :]
+        if (
+            re.search(r"[A-Za-z]{2,}", prefix_txt)
+            and not re.search(r"[A-Za-z]", trailing_txt)
+            and re.search(r"\brespectively\b", ref_text, re.IGNORECASE) is None
+        ):
+            # Single-line comparative financial table row ("Revenue   24,500   21,200" or "| Revenue | $24,500 | $21,200 |"):
+            # all trailing numeric columns share the same row label without rival subject/entity clauses.
+            return any(vq.matches(qq) for qq in non_range)
 
     norm_quote = normalize_span(assertion.quote)
     # Ordered parallel lists have positional binding, not nearest-neighbour binding.
@@ -1556,9 +1847,18 @@ def verify_quote_and_quantities(
 
         # Reject bare single-token / out-of-context quotes or section-header-only quotes
         quote_words = re.findall(r"[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]+", norm_quote)
+        is_tabular_label_qty = (
+            len(quote_words) == 1
+            and bool(re.search(r"\d", norm_quote))
+            and not re.match(
+                r"^(?:section|sec|article|art|clause|part|item|step|note|schedule|exhibit|annex|table|figure|fig|page|line|appendix)$",
+                quote_words[0],
+                re.IGNORECASE,
+            )
+        )
         if len(norm_source) > len(norm_quote) and (
             len(norm_quote) < 6
-            or len(quote_words) < 2
+            or (len(quote_words) < 2 and not is_tabular_label_qty)
             or _SECTION_HEADER_ONLY_RE.match(norm_quote) is not None
         ):
             issues.append(
@@ -1579,7 +1879,7 @@ def verify_quote_and_quantities(
             return issues
 
         # Reject quotes that truncate a leading negation or trailing exception from the sentence
-        truncated_qual = _has_truncated_sentence_qualifier(norm_source, norm_quote)
+        truncated_qual = _has_truncated_sentence_qualifier(norm_source, norm_quote, raw_source=source.text)
         if truncated_qual is not None:
             issues.append(
                 Issue(
@@ -1637,7 +1937,9 @@ def verify_quote_and_quantities(
                 )
 
         # 2. Check numeric quantities & units strictly against the verified quote
-        table_scale = _detect_contextual_table_scale(assertion.quote if quote_in_source else source.text, source.text)
+        table_scale, table_currency = _detect_contextual_table_context(
+            assertion.quote if quote_in_source else source.text, source.text
+        )
         def rate_period(text: str) -> str | None:
             match = re.search(r"(?:%|percent|bps)\s+(?:per\s+|/)([a-z]+)", text, re.IGNORECASE)
             if not match:
@@ -1652,11 +1954,29 @@ def verify_quote_and_quantities(
                                 message="The proposed rate uses a different time denominator from the citation.",
                                 remediation="Preserve the rate period; annualization requires an explicit conversion policy."))
         val_quantities = extract_quantities(assertion.value, explicit_unit=assertion.unit, es_context=is_es)
-        quote_quantities = extract_quantities(
+        raw_quote_quantities = extract_quantities(
             reference_text,
             table_scale=table_scale,
             es_context=is_es,
         )
+        quote_quantities = list(raw_quote_quantities)
+        if table_scale is not None and table_currency is not None:
+            # Allow bare tabular cells under an explicit currency table header (e.g. "($ in millions)")
+            # to also match assertions specifying that currency, while keeping raw NONE quantities intact.
+            for qq in raw_quote_quantities:
+                if qq.unit == "NONE":
+                    raw_slice = reference_text[qq.span[0] : qq.span[1]].strip()
+                    is_bare_year = bool(re.fullmatch(r"(?:19|20)\d{2}", raw_slice))
+                    if not is_bare_year:
+                        quote_quantities.append(
+                            ParsedQuantity(
+                                magnitude=qq.magnitude,
+                                unit=table_currency,
+                                is_fraction=qq.is_fraction,
+                                is_range_endpoint=qq.is_range_endpoint,
+                                span=qq.span,
+                            )
+                        )
 
         # If predicate explicitly requires a dimension (e.g. cure_period_days) and value is dimensionless (unit="NONE"), reject
         req_dim = infer_predicate_dimension(assertion.predicate)
@@ -1689,7 +2009,12 @@ def verify_quote_and_quantities(
                     for qq in quote_quantities
                     if _to_commensurable_base(qq.magnitude, qq.unit)[1] == base_u
                 ]
-                if not _check_multi_quantity_subject_binding(assertion, vq, same_unit_in_quote):
+                if not _check_multi_quantity_subject_binding(
+                    assertion,
+                    vq,
+                    same_unit_in_quote,
+                    reference_text=reference_text,
+                ):
                     issues.append(
                         Issue(
                             code="QUANTITY_MISMATCH",

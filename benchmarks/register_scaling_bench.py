@@ -145,11 +145,106 @@ def run_scaling_suite(
     }
 
 
+def build_dense_multi_entity_layer(n_units: int) -> tuple[EvidenceLayer, Any]:
+    """Build two identical docs whose N clauses share a single entity on a multi-valued predicate."""
+    if n_units % 2 != 0 or n_units <= 0:
+        raise ValueError("n_units must be a positive even integer")
+    from claimlayer.v4.vocabulary import FieldSpec, PredicateSpec, Vocabulary
+
+    vocab = Vocabulary(
+        name="multi_bench",
+        version="1.0",
+        predicates=(PredicateSpec(name="clause", value=FieldSpec(type="string"), cardinality="multi"),),
+    )
+    n_per_doc = n_units // 2
+    lines: list[str] = []
+    for i in range(n_per_doc):
+        # Pad to 59 chars + '\n' = 60 chars/line so 30 lines align cleanly on 1800-char fragments
+        s = f"Clause {i:04d}: Obligor owes item {i:04d} under Section {i % 9 + 1}."
+        extra = 59 - len(s)
+        if extra > 0:
+            s = s[:-1] + " " + ("c" * max(0, extra - 1)) + "."
+        lines.append(s)
+    text = "\n".join(lines)
+    d1 = SourceDocument(document_id="multi_a.docx", text=text, authority_rank=100, attribution="controlling_instrument")
+    d2 = SourceDocument(document_id="multi_b.docx", text=text, authority_rank=80, attribution="source_statement")
+
+    class _MultiDenseReader:
+        identity = {"provider": "bench", "model": f"multi_dense_{n_units}", "prompt_version": "t", "prompt_digest": "d"}
+
+        def propose(self, req: dict[str, Any]) -> dict[str, Any]:
+            doc = req["document"]
+            frags = _build_document_fragments(doc, 1800)
+            frag_map = dict(frags)
+            raw: list[dict[str, Any]] = []
+            seen_q: set[str] = set()
+            for fid, fobj in frags:
+                for line in fobj["quote"].split("\n"):
+                    ls = line.strip()
+                    if not (ls.startswith("Clause ") and ls.endswith(".")) or ls in seen_q:
+                        continue
+                    seen_q.add(ls)
+                    raw.append({
+                        "entity": "Obligor",
+                        "predicate": "clause",
+                        "value": ls,
+                        "assertion_kind": "fact",
+                        "conditions": [],
+                        "condition_status": "unconditional",
+                        "basis": "explicit",
+                        "evidence": [fid],
+                        "quote": ls,
+                        "field_evidence": {"entity": "Obligor", "value": ls},
+                    })
+            items: list[Any] = []
+            rej: list[Any] = []
+            _bind_raw_proposals(raw, frag_map, doc["text"], items, rej)
+            return {"items": items, "rejected": rej, "calls": [], "errors": [], "fragments": len(frags), "windows": 1}
+
+    layer = EvidenceLayer(vocabulary=vocab, policy=SECURITIZATION_ACCEPTANCE_POLICY, reader=_MultiDenseReader())
+    layer.ingest([d1, d2])
+    return layer, vocab
+
+
+def run_multi_scaling_suite(
+    sizes: tuple[int, ...] = (50, 100, 200, 400, 1006, 2000),
+) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    pts: list[tuple[int, float]] = []
+    for n in sizes:
+        layer, vocab = build_dense_multi_entity_layer(n)
+        t0 = time.perf_counter()
+        reg = build_corpus_reference_register(layer, vocab)
+        dt = time.perf_counter() - t0
+        actual_u = len(layer.units)
+        assert actual_u == n, f"Expected {n} admitted units, got {actual_u}"
+        conflicts = [o for o in reg.obligations if (o.parameters or {}).get("corpus_obligation_kind") == "material_conflict"]
+        assert len(conflicts) == 0, f"Unexpected multi conflicts: {len(conflicts)}"
+        pts.append((actual_u, dt))
+        rows.append({
+            "target_units": n,
+            "actual_units": actual_u,
+            "elapsed_seconds": round(dt, 4),
+            "obligations": len(reg.obligations),
+            "conflicts": len(conflicts),
+        })
+    slope = ols_log_log_slope(pts)
+    return {
+        "sizes": list(sizes),
+        "rows": rows,
+        "ols_log_log_exponent": round(slope, 4),
+        "max_elapsed_seconds": round(max(r["elapsed_seconds"] for r in rows), 4),
+    }
+
+
 def main() -> int:
     rep = run_scaling_suite()
-    print(json.dumps(rep, indent=2))
+    rep_multi = run_multi_scaling_suite()
+    print(json.dumps({"single_predicate": rep, "multi_predicate_single_entity": rep_multi}, indent=2))
     assert rep["ols_log_log_exponent"] <= 1.3, f"Exponent too high: {rep['ols_log_log_exponent']}"
     assert rep["rows"][-1]["elapsed_seconds"] < 60.0, f"2000-unit runtime exceeded 60s: {rep['rows'][-1]}"
+    assert rep_multi["ols_log_log_exponent"] <= 1.3, f"Multi exponent too high: {rep_multi['ols_log_log_exponent']}"
+    assert rep_multi["rows"][-1]["elapsed_seconds"] < 10.0, f"Multi 2000-unit runtime exceeded 10s: {rep_multi['rows'][-1]}"
     return 0
 
 

@@ -365,6 +365,53 @@ def _normalize_evidence_inputs(
     raise ValueError("Unsupported evidence container.")
 
 
+def _leaf_matches_admitted_corpus_unit(
+    node: ClaimNode,
+    corpus_register: CorpusReferenceRegister | None,
+) -> bool:
+    """Return True if *node* mirrors an already-admitted corpus EvidenceUnit at an overlapping span."""
+    if corpus_register is None or not getattr(corpus_register, "admitted_unit_refs", ()):
+        return False
+    refs = getattr(node, "evidence", ()) or ()
+    if not refs:
+        return False
+
+    def _norm_val_pair(val: Any, unit_hint: str | None) -> tuple[str, str]:
+        if isinstance(val, Mapping) and "value" in val:
+            raw_v = val.get("value")
+            raw_u = str(val.get("unit") or unit_hint or "")
+        else:
+            raw_v = val
+            raw_u = str(unit_hint or "")
+        try:
+            num_s = f"{float(raw_v):.6g}"
+        except (TypeError, ValueError):
+            num_s = label_key(str(raw_v or ""))
+        return num_s, label_key(raw_u)
+
+    node_val = _norm_val_pair(node.value, node.unit)
+    node_pred = str(node.predicate or "")
+    node_cs = str(node.condition_status or "unconditional")
+
+    for uref in corpus_register.admitted_unit_refs:
+        if str(uref.get("predicate", "")) != node_pred:
+            continue
+        u_cs = str(uref.get("condition_status", "unconditional"))
+        if u_cs != node_cs and not (u_cs == "unconditional" and node_cs == "conditional"):
+            continue
+        u_val = _norm_val_pair(uref.get("value"), uref.get("unit"))
+        if u_val != node_val:
+            continue
+        udoc = str(uref.get("document_id", ""))
+        ustart, uend = uref.get("start"), uref.get("end")
+        if ustart is None or uend is None:
+            continue
+        for ref in refs:
+            if str(ref.document_id) == udoc and max(int(ref.start), int(ustart)) < min(int(ref.end), int(uend)):
+                return True
+    return False
+
+
 def _evaluate_leaf_claim(
     node: ClaimNode,
     *,
@@ -372,6 +419,7 @@ def _evaluate_leaf_claim(
     profile: DomainProfile,
     layer: EvidenceLayer | None,
     as_of: str | None,
+    corpus_register: CorpusReferenceRegister | None = None,
 ) -> tuple[tuple[VerifierResult, ...], tuple[tuple[frozenset[str], float], ...], bool, bool, str]:
     """Evaluate a leaf ClaimNode (grounding, fidelity, authority, reliability)."""
     unverified_roles = {label_key(r) for r in profile.policy.unverified_attestor_roles}
@@ -544,6 +592,17 @@ def _evaluate_leaf_claim(
                         vocabulary=profile.vocabulary,
                         documents=documents,
                     )
+                    if fid_findings and _leaf_matches_admitted_corpus_unit(node, corpus_register):
+                        # Corpus EvidenceLayer already admitted this canonical proposition at this
+                        # overlapping span; keep structural/conditionality/polarity checks active while
+                        # allowing normalized Vocabulary enums/units admitted in the register.
+                        _ABSTRACTED_CODES = {
+                            "VALUE_NOT_IN_EVIDENCE",
+                            "ENTITY_NOT_IN_EVIDENCE",
+                            "PREDICATE_NOT_IN_EVIDENCE",
+                            "RELATIONAL_ASSOCIATION_MISMATCH",
+                        }
+                        fid_findings = [f for f in fid_findings if f.code not in _ABSTRACTED_CODES]
                     if fid_findings:
                         refuted = True
                         checks.append(
@@ -774,6 +833,20 @@ def evaluate_response(
     if cache is not None and documents:
         cache.invalidate_changed_sources({did: doc.revision for did, doc in documents.items()})
 
+    eff_corpus_register = corpus_register
+    if eff_corpus_register is None and require_reference_register:
+        if profile.vocabulary is not None:
+            eff_corpus_register = build_corpus_reference_register(
+                layer,
+                profile.vocabulary,
+                question=question,
+            )
+        else:
+            eff_corpus_register = CorpusReferenceRegister(
+                available=False,
+                reason="REFERENCE_REGISTER_MISSING: no Vocabulary available to build reference register.",
+            )
+
     semantic_domain_info = infer_conclusion_semantic_domain(
         graph,
         question=question,
@@ -864,6 +937,7 @@ def evaluate_response(
                 "unit_ids": list(node.evidence_unit_ids),
                 "as_of": as_of,
                 "profile_fp": profile_fp,
+                "reg_units_cnt": len(eff_corpus_register.admitted_unit_refs) if eff_corpus_register else 0,
             })
             cached = cache.get_leaf(leaf_key) if cache is not None else None
             if cached is not None:
@@ -881,7 +955,12 @@ def evaluate_response(
                 cache_misses += 1
                 recomputed_nodes += 1
                 leaf_checks, leaf_derivs, is_ref, unv_att, eff_kind = _evaluate_leaf_claim(
-                    node, documents=documents, profile=profile, layer=layer, as_of=as_of
+                    node,
+                    documents=documents,
+                    profile=profile,
+                    layer=layer,
+                    as_of=as_of,
+                    corpus_register=eff_corpus_register,
                 )
                 eff_dig = digest({"leaf_key": leaf_key, "refuted": is_ref, "eff_kind": eff_kind})
                 node_effective_digest[cid] = eff_dig
@@ -1399,20 +1478,6 @@ def evaluate_response(
             all_checks.append(chk)
             critical_check_keys.add((chk.step_id, chk.obligation_id))
 
-    eff_corpus_register = corpus_register
-    if eff_corpus_register is None and require_reference_register:
-        if profile.vocabulary is not None:
-            eff_corpus_register = build_corpus_reference_register(
-                layer,
-                profile.vocabulary,
-                question=question,
-            )
-        else:
-            eff_corpus_register = CorpusReferenceRegister(
-                available=False,
-                reason="REFERENCE_REGISTER_MISSING: no Vocabulary available to build reference register.",
-            )
-
     corpus_coverage_dict: dict[str, Any] = {}
     if eff_corpus_register is not None:
         refuted_cids = {cid for cid, is_ref in node_refuted.items() if is_ref}
@@ -1425,6 +1490,10 @@ def evaluate_response(
         )
         corpus_coverage_dict = {
             "available": eff_corpus_register.available,
+            "incomplete": eff_corpus_register.incomplete,
+            "incomplete_documents": list(eff_corpus_register.incomplete_documents),
+            "document_statuses": {k: dict(v) for k, v in eff_corpus_register.document_statuses.items()},
+            "gap_divergences": [dict(g) for g in eff_corpus_register.gap_divergences],
             "total_obligations": cov_res.total_obligations,
             "covered_count": cov_res.covered_count,
             "rejected_count": cov_res.rejected_count,

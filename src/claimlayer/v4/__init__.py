@@ -86,7 +86,7 @@ from .justification import (
 )
 from .models import AcceptancePolicy, EvidenceUnit
 from .paths import TransitiveRule
-from .reader import LLMProposalReader, ProposalReader, READER_PROMPT, STRICT_READER_PROMPT
+from .reader import LLMProposalReader, ProposalReader, READER_PROMPT, RecordedProposalReader, STRICT_READER_PROMPT
 from .repair import (
     LLMGraphProposalAdapter,
     LLMRepairAgent,
@@ -128,7 +128,7 @@ from ..semantic.adapters import OpenAICompatibleModel
 __all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'UnitEvaluation', 'evaluate_unit_admissibility',
            'Vocabulary', 'PredicateSpec', 'FieldSpec', 'Unit', 'UnitRegistry',
            'STANDARD_UNITS', 'CONDITION_STATUSES', 'UnmappedProposal', 'EpistemicProfile', 'DEFAULT_PROFILE', 'EXPLICIT',
-           'AcceptancePolicy', 'EvidenceUnit', 'TransitiveRule', 'LLMProposalReader', 'ProposalReader',
+           'AcceptancePolicy', 'EvidenceUnit', 'TransitiveRule', 'LLMProposalReader', 'ProposalReader', 'RecordedProposalReader',
            'READER_PROMPT', 'STRICT_READER_PROMPT', 'SourceDocument', 'EvidenceRef', 'StructuredQuery', 'OpenAICompatibleModel',
            'TIER_PRIMARY', 'TIER_ANNEX', 'TIER_EXTERNAL', 'propose_vocabulary', 'build_vocabulary', 'with_entities',
            'verify_draft', 'triage', 'segment_text', 'LANES', 'draft_vocabulary',

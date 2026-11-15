@@ -95,9 +95,9 @@ def _make_valid_synthetic_candidate(
         "a 25 bps / 0.25 percentage point understatement). Assuming constant principal as a simple annual calculation before "
         "amortization or day-count adjustments, 50,000,000 * 0.0025 = $125,000 per year (illustrative only, not automatic legal damages).\n"
         "2. Waterfall Priority (Section 5.01(a), correcting email's non-existent Section 5.04): Reserve Account replenishment is "
-        "Step 13, junior to Class B and Class C principal (steps 11 and 12), whereas the OM puts Reserve replenishment ahead at Step 6/10.\n"
+        "Step 13, junior to Class B and Class C principal (steps 11 and 12), whereas in the OM Reserve Account Replenishment is senior (placed ahead of Class B and Class C principal).\n"
         "3. Events of Default Grace Period (Section 10.01): 5 business days (not 5 calendar days or 3 business days).\n"
-        "4. Optional Redemption Clean-Up Call (Section 12.01): 10% of Initial Pool Balance (versus 15% in draft OM excerpt)."
+        "4. Optional Redemption Clean-Up Call (Section 12.01): Servicer clean-up call is 10% of Initial Pool Balance (Optional Redemption is 15% in draft OM excerpt)."
     )
     default_assertions = assertions if assertions is not None else [
         Assertion(
@@ -339,6 +339,9 @@ def test_07_omitted_assumptions_and_damages_rejected_then_accepted_with_escalate
     q_spread = "Class C 25 bps coupon gap ($125,000/yr)"
     q_c_ind = "Class C Notes ($50,000,000 principal) bear interest at 6.75% per annum"
     q_c_om = "Class C Notes ($50,000,000 principal) 6.50% per annum"
+    q_spread_pp = "25 bps / 0.25 percentage points lower than Indenture"
+    q_impact_eml = "($125,000/yr)"
+    q_wf_c = "Steps 3-7 Class A-1, A-2, A-3, B, and C Interest"
     q_wf = "Step 13 Reserve Account Replenishment (junior to Class B and Class C principal)"
     q_wf_om = "Step 6/10 Reserve Account Replenishment (placed senior/ahead of Class B and Class C principal)"
     q_gp = "Failure to pay interest continuing for 5 business days constitutes an Event of Default."
@@ -363,7 +366,7 @@ def test_07_omitted_assumptions_and_damages_rejected_then_accepted_with_escalate
                 "coupon_rate",
                 5.95,
                 "percent_per_annum",
-                evidence=({"document_id": ind_id, "start": ind_txt.index(q_b), "end": ind_txt.index(q_b) + len(q_b) + 0, "quote": q_b},),
+                evidence=({"document_id": ind_id, "start": ind_txt.index(q_b), "end": ind_txt.index(q_b) + len(q_b), "quote": q_b},),
             ),
             "c_prin": ClaimNode(
                 "c_prin",
@@ -382,6 +385,24 @@ def test_07_omitted_assumptions_and_damages_rejected_then_accepted_with_escalate
                 25,
                 "basis_point",
                 evidence=({"document_id": eml_id, "start": eml_txt.index(q_spread), "end": eml_txt.index(q_spread) + len(q_spread), "quote": q_spread},),
+            ),
+            "c_spread_pp": ClaimNode(
+                "c_spread_pp",
+                "extraction",
+                "Class C Notes",
+                "coupon_spread",
+                0.25,
+                "percentage_point",
+                evidence=({"document_id": om_id, "start": om_txt.index(q_spread_pp), "end": om_txt.index(q_spread_pp) + len(q_spread_pp), "quote": q_spread_pp},),
+            ),
+            "c_impact_eml": ClaimNode(
+                "c_impact_eml",
+                "extraction",
+                "Class C",
+                "annual_interest_impact",
+                125000,
+                "USD_per_year",
+                evidence=({"document_id": eml_id, "start": eml_txt.index(q_impact_eml), "end": eml_txt.index(q_impact_eml) + len(q_impact_eml), "quote": q_impact_eml},),
             ),
             "c_impact": ClaimNode(
                 "c_impact",
@@ -410,65 +431,78 @@ def test_07_omitted_assumptions_and_damages_rejected_then_accepted_with_escalate
                 "percent_per_annum",
                 evidence=({"document_id": om_id, "start": om_txt.index(q_c_om), "end": om_txt.index(q_c_om) + len(q_c_om), "quote": q_c_om},),
             ),
+            "c_wf_c": ClaimNode(
+                "c_wf_c",
+                "extraction",
+                "Class C Notes",
+                "waterfall_priority",
+                "junior",
+                evidence=({"document_id": ind_id, "start": ind_txt.index(q_wf_c), "end": ind_txt.index(q_wf_c) + len(q_wf_c), "quote": q_wf_c},),
+            ),
             "c_wf": ClaimNode(
                 "c_wf",
                 "extraction",
-                "Waterfall",
-                "waterfall_step",
-                "Step 13",
+                "Reserve Account Replenishment",
+                "waterfall_priority",
+                "junior",
                 evidence=({"document_id": ind_id, "start": ind_txt.index(q_wf), "end": ind_txt.index(q_wf) + len(q_wf), "quote": q_wf},),
             ),
             "c_wf_om": ClaimNode(
                 "c_wf_om",
                 "extraction",
-                "Waterfall",
-                "waterfall_step",
-                "Step 6/10",
+                "Reserve Account Replenishment",
+                "waterfall_priority",
+                "senior",
                 evidence=({"document_id": om_id, "start": om_txt.index(q_wf_om), "end": om_txt.index(q_wf_om) + len(q_wf_om), "quote": q_wf_om},),
             ),
             "c_gp": ClaimNode(
                 "c_gp",
                 "extraction",
                 "Grace Period",
-                "grace_period",
+                "cure_period",
                 5,
                 "business_days",
+                condition_status="conditional",
                 evidence=({"document_id": ind_id, "start": ind_txt.index(q_gp), "end": ind_txt.index(q_gp) + len(q_gp), "quote": q_gp},),
             ),
             "c_gp_om_cal": ClaimNode(
                 "c_gp_om_cal",
                 "extraction",
                 "Grace Period",
-                "grace_period",
+                "cure_period",
                 5,
                 "calendar_days",
+                condition_status="conditional",
                 evidence=({"document_id": om_id, "start": om_txt.index(q_gp_om), "end": om_txt.index(q_gp_om) + len(q_gp_om), "quote": q_gp_om},),
             ),
             "c_gp_om_bd": ClaimNode(
                 "c_gp_om_bd",
                 "extraction",
                 "Grace Period",
-                "grace_period",
+                "cure_period",
                 3,
                 "business_days",
+                condition_status="conditional",
                 evidence=({"document_id": om_id, "start": om_txt.index(q_gp_om), "end": om_txt.index(q_gp_om) + len(q_gp_om), "quote": q_gp_om},),
             ),
             "c_cc": ClaimNode(
                 "c_cc",
                 "extraction",
-                "Clean-Up Call",
-                "cleanup_call_threshold",
+                "Servicer",
+                "clean_up_call_threshold",
                 10,
                 "percent",
+                condition_status="conditional",
                 evidence=({"document_id": ind_id, "start": ind_txt.index(q_cc), "end": ind_txt.index(q_cc) + len(q_cc), "quote": q_cc},),
             ),
             "c_cc_om": ClaimNode(
                 "c_cc_om",
                 "extraction",
-                "Clean-Up Call",
-                "cleanup_call_threshold",
+                "Optional Redemption",
+                "clean_up_call_threshold",
                 15,
                 "percent",
+                condition_status="conditional",
                 evidence=({"document_id": om_id, "start": om_txt.index(q_cc_om), "end": om_txt.index(q_cc_om) + len(q_cc_om), "quote": q_cc_om},),
             ),
         },

@@ -53,6 +53,7 @@ from claimlayer.v4 import (
     DomainProfile,
     InferenceStep,
     JustificationGraph,
+    RecordedProposalReader,
     SECURITIZATION_ACCEPTANCE_POLICY,
     SECURITIZATION_VOCABULARY,
     VerificationBudget,
@@ -200,6 +201,7 @@ def _build_corpus_objects(
     common_chars: int,
     total_lines: int,
     task_instructions: str = "",
+    reader: Any = None,
 ) -> LoadedCaseCorpus:
     """Assemble v3 Ledger + v4 SourceDocument mapping from normalized document entries."""
     loaded_docs: dict[str, LoadedDocument] = {}
@@ -239,6 +241,7 @@ def _build_corpus_objects(
     layer = EvidenceLayer(
         vocabulary=SECURITIZATION_VOCABULARY,
         policy=SECURITIZATION_ACCEPTANCE_POLICY,
+        reader=reader,
     )
     return LoadedCaseCorpus(
         case_id=case_id,
@@ -343,8 +346,12 @@ def load_case_documents(
     )
 
 
-def build_synthetic_securitization_corpus() -> LoadedCaseCorpus:
-    """Build an explicitly labeled synthetic_replay corpus aligned with Harness2 v3 excerpts."""
+def build_synthetic_securitization_corpus(*, reader: Any = None) -> LoadedCaseCorpus:
+    """Build an explicitly labeled synthetic_replay corpus aligned with Harness2 v3 excerpts.
+
+    Reference readings are produced strictly through the configured ``reader`` on
+    ``EvidenceLayer`` (defaulting to the recorded unedited real-model outputs).
+    """
     indenture_text = (
         "Section 2.04: Note Interest Rates. The Class A Notes bear interest at 5.10% per annum, "
         "Class B Notes at 5.95% per annum, and Class C Notes ($50,000,000 principal) bear interest at 6.75% per annum.\n"
@@ -375,6 +382,11 @@ def build_synthetic_securitization_corpus() -> LoadedCaseCorpus:
         ("D3", "cart-2024-2-offering-memorandum.docx", "disclosure_document", "standard", 60, False, 1, om_text),
     ]
     combined = "\n".join(x[-1] for x in docs_cfg)
+    eff_reader = (
+        reader
+        if reader is not None
+        else RecordedProposalReader.from_file(_HARNESS_DIR / "recorded_reads" / "cart_synth.json")
+    )
     corpus = _build_corpus_objects(
         case_id="cart_2024_2_synthetic_replay",
         task_id="structured-finance-securitization/synthetic-replay",
@@ -383,75 +395,9 @@ def build_synthetic_securitization_corpus() -> LoadedCaseCorpus:
         common_sha256=hashlib.sha256(combined.encode("utf-8")).hexdigest(),
         common_chars=len(combined),
         total_lines=len(combined.splitlines()),
+        reader=eff_reader,
     )
-    ind_src = corpus.v4_sources["cart-2024-2-indenture.docx"]
-    om_src = corpus.v4_sources["cart-2024-2-offering-memorandum.docx"]
-    corpus.evidence_layer.ingest([ind_src, om_src])
-    q_prin = "Class C Notes ($50,000,000 principal)"
-    s_prin = ind_src.text.index(q_prin)
-    q_coup_ind = "Class C Notes ($50,000,000 principal) bear interest at 6.75% per annum"
-    s_coup_ind = ind_src.text.index(q_coup_ind)
-    q_coup_om = "Class C Notes ($50,000,000 principal) 6.50% per annum"
-    s_coup_om = om_src.text.index(q_coup_om)
-    corpus.evidence_layer.ingest_units(
-        [
-            {
-                "proposal": {
-                    "entity": "Class C Notes",
-                    "predicate": "note_principal",
-                    "value": {"value": 50000000, "unit": "USD"},
-                    "assertion_kind": "fact",
-                    "condition_status": "unconditional",
-                },
-                "evidence": [
-                    {
-                        "document_id": ind_src.document_id,
-                        "revision": ind_src.revision,
-                        "start": s_prin,
-                        "end": s_prin + len(q_prin),
-                        "quote": q_prin,
-                    }
-                ],
-            },
-            {
-                "proposal": {
-                    "entity": "Class C Notes",
-                    "predicate": "coupon_rate",
-                    "value": {"value": 6.75, "unit": "percent_per_annum"},
-                    "assertion_kind": "fact",
-                    "condition_status": "unconditional",
-                },
-                "evidence": [
-                    {
-                        "document_id": ind_src.document_id,
-                        "revision": ind_src.revision,
-                        "start": s_coup_ind,
-                        "end": s_coup_ind + len(q_coup_ind),
-                        "quote": q_coup_ind,
-                    }
-                ],
-            },
-            {
-                "proposal": {
-                    "entity": "Class C Notes",
-                    "predicate": "coupon_rate",
-                    "value": {"value": 6.50, "unit": "percent_per_annum"},
-                    "assertion_kind": "fact",
-                    "condition_status": "unconditional",
-                },
-                "evidence": [
-                    {
-                        "document_id": om_src.document_id,
-                        "revision": om_src.revision,
-                        "start": s_coup_om,
-                        "end": s_coup_om + len(q_coup_om),
-                        "quote": q_coup_om,
-                    }
-                ],
-            },
-        ],
-        attestor="corpus_reference_builder",
-    )
+    corpus.evidence_layer.ingest(list(corpus.v4_sources.values()))
     return corpus
 
 
@@ -1485,22 +1431,58 @@ def evaluate_securitization_candidate(
     if gate_mode == "v3_v4":
         # Compute corpus reference register & origin="corpus" obligations independently of agent output.
         layer = corpus.evidence_layer
-        if not layer.units and getattr(layer, "reader", None) is not None:
-            for sdoc in corpus.v4_sources.values():
-                try:
-                    layer.ingest([sdoc])
-                except Exception:
-                    pass
-                try:
-                    props = layer.reader.read(sdoc, layer.vocabulary)
-                    if props:
-                        layer.ingest_units(props, attestor=getattr(layer.reader, "reader_id", "corpus_reader"))
-                except Exception:
-                    pass
+        if (
+            getattr(layer, "reader", None) is not None
+            and not layer.units
+            and not getattr(layer, "document_read_statuses", {})
+        ):
+            # Populate EvidenceLayer once through the configured reader (errors stay in read_statuses; never swallowed).
+            layer.ingest(list(corpus.v4_sources.values()))
+
+        # Deterministic v3 comparison divergences cross-check reader coverage.
+        docs = list(corpus.documents.values())
+        if adapter.domain_id == "banking_finance":
+            term_docs = [
+                d
+                for d in docs
+                if d.role not in ("quantitative_financial_model", "client_instructions_scope")
+            ]
+            comp_docs = term_docs if len(term_docs) >= 2 else docs
+        else:
+            comp_docs = docs
+        comp_divs: list[Any] = []
+        if len(comp_docs) >= 2:
+            gov_cmp = max(comp_docs, key=lambda d: int(d.authority_rank))
+            pri_src = Source(
+                id=gov_cmp.filename,
+                text=gov_cmp.text,
+                tier=gov_cmp.authority_tier,
+                authority_rank=gov_cmp.authority_rank,
+                title=f"{gov_cmp.doc_key}: {gov_cmp.filename}",
+            )
+            for d in comp_docs:
+                if d.filename == gov_cmp.filename:
+                    continue
+                sec_src = Source(
+                    id=d.filename,
+                    text=d.text,
+                    tier=d.authority_tier,
+                    authority_rank=d.authority_rank,
+                    title=f"{d.doc_key}: {d.filename}",
+                )
+                _, d_divs = build_comparison_policy(
+                    pri_src,
+                    sec_src,
+                    policy_id=f"ref_cmp::{gov_cmp.filename}::{d.filename}",
+                )
+                comp_divs.extend(d_divs)
+
         corpus_register = build_corpus_reference_register(
             layer,
             adapter.vocabulary,
             question=parsed.question,
+            comparison_divergences=comp_divs,
+            expected_documents=corpus.v4_sources,
         )
         if not corpus_register.available:
             issues.append({

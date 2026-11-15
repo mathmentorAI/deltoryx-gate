@@ -58,6 +58,7 @@ VERIFIER_FAMILIES: tuple[str, ...] = (
     "explicit_logic",
     "relations",
     "document_authority",
+    "section_divergence",
     "open_semantics",
 )
 

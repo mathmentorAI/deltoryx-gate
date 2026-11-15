@@ -1,0 +1,1292 @@
+{
+  "corpus_id": "cart_synth",
+  "case_id": "cart_2024_2_synthetic_replay",
+  "model": "nvidia/nemotron-3-ultra-550b-a55b",
+  "provider": "openai-compatible",
+  "prompt_version": "v4-proposals-3",
+  "prompt_digest": "5736166d93ad3ec377deea4111f9bd67e578cb6a78f445517cce5f4c4dc0a1b3",
+  "recorded_at": "2026-11-15T14:38:25.057673+00:00",
+  "fragment_chars": 1800,
+  "documents": {
+    "associate-review-email.eml": {
+      "revision": "2f6483e16a4e0b3e4bb54bb75f94cbe1bfe6cf6f79e3c9b0a71e01937eb3f2b5",
+      "raw_proposals": [
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class C",
+          "evidence": [
+            "ev-293848d0920479a6aee436b171f571735d858b1c844044bf032bccd33c9f1b69"
+          ],
+          "field_evidence": {
+            "entity": "Class C",
+            "value": "25 bps coupon gap"
+          },
+          "polarity": "affirmed",
+          "predicate": "coupon_spread",
+          "quote": "Class C 25 bps coupon gap",
+          "scope": {},
+          "valid_from": null,
+          "valid_until": null,
+          "value": {
+            "unit": "basis_point",
+            "value": 25
+          }
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class C",
+          "evidence": [
+            "ev-293848d0920479a6aee436b171f571735d858b1c844044bf032bccd33c9f1b69"
+          ],
+          "field_evidence": {
+            "entity": "Class C",
+            "value": "$125,000/yr"
+          },
+          "polarity": "affirmed",
+          "predicate": "annual_interest_impact",
+          "quote": "($125,000/yr)",
+          "scope": {},
+          "valid_from": null,
+          "valid_until": null,
+          "value": {
+            "unit": "USD_per_year",
+            "value": 125000
+          }
+        }
+      ],
+      "calls": [
+        {
+          "response": {
+            "output": {
+              "proposals": [
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class C",
+                  "evidence": [
+                    "ev-293848d0920479a6aee436b171f571735d858b1c844044bf032bccd33c9f1b69"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class C",
+                    "value": "25 bps coupon gap"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "coupon_spread",
+                  "quote": "Class C 25 bps coupon gap",
+                  "scope": {},
+                  "valid_from": null,
+                  "valid_until": null,
+                  "value": {
+                    "unit": "basis_point",
+                    "value": 25
+                  }
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class C",
+                  "evidence": [
+                    "ev-293848d0920479a6aee436b171f571735d858b1c844044bf032bccd33c9f1b69"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class C",
+                    "value": "$125,000/yr"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "annual_interest_impact",
+                  "quote": "($125,000/yr)",
+                  "scope": {},
+                  "valid_from": null,
+                  "valid_until": null,
+                  "value": {
+                    "unit": "USD_per_year",
+                    "value": 125000
+                  }
+                }
+              ]
+            },
+            "provider_response": {
+              "choices": [
+                {
+                  "finish_reason": "stop",
+                  "index": 0,
+                  "logprobs": null,
+                  "message": {
+                    "content": "{\"proposals\": [{\"entity\": \"Class C\", \"predicate\": \"coupon_spread\", \"value\": {\"value\": 25, \"unit\": \"basis_point\"}, \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"scope\": {}, \"valid_from\": null, \"valid_until\": null, \"basis\": \"explicit\", \"evidence\": [\"ev-293848d0920479a6aee436b171f571735d858b1c844044bf032bccd33c9f1b69\"], \"quote\": \"Class C 25 bps coupon gap\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class C\", \"value\": \"25 bps coupon gap\"}}, {\"entity\": \"Class C\", \"predicate\": \"annual_interest_impact\", \"value\": {\"value\": 125000, \"unit\": \"USD_per_year\"}, \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"scope\": {}, \"valid_from\": null, \"valid_until\": null, \"basis\": \"explicit\", \"evidence\": [\"ev-293848d0920479a6aee436b171f571735d858b1c844044bf032bccd33c9f1b69\"], \"quote\": \"($125,000/yr)\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class C\", \"value\": \"$125,000/yr\"}}]}",
+                    "refusal": null,
+                    "role": "assistant"
+                  }
+                }
+              ],
+              "created": 1794753424,
+              "id": "chatcmpl-99665991-a2ff-48ff-a44d-ad0cfe7bd59b",
+              "model": "nvidia/nemotron-3-ultra-550b-a55b",
+              "object": "chat.completion",
+              "usage": {
+                "completion_tokens": 412,
+                "completion_tokens_details": {
+                  "reasoning_tokens": 0
+                },
+                "prompt_tokens": 3158,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                },
+                "total_tokens": 3570
+              }
+            },
+            "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+            "transport_attempts": [
+              {
+                "attempt": 1,
+                "status": "success"
+              }
+            ],
+            "usage": {
+              "completion_tokens": 412,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "prompt_tokens": 3158,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 3570
+            }
+          },
+          "window": "0+1"
+        }
+      ],
+      "errors": []
+    },
+    "cart-2024-2-indenture.docx": {
+      "revision": "336cb4d40230fa2362340d202876535fec49c2884e28cbd77c235d701d36b7b6",
+      "raw_proposals": [
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class A Notes",
+          "evidence": [
+            "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+          ],
+          "field_evidence": {
+            "entity": "Class A Notes",
+            "value": "5.10% per annum"
+          },
+          "polarity": "affirmed",
+          "predicate": "coupon_rate",
+          "quote": "The Class A Notes bear interest at 5.10% per annum",
+          "scope": {
+            "tranche": "Class A"
+          },
+          "value": {
+            "unit": "percent_per_annum",
+            "value": 5.1
+          }
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class B Notes",
+          "evidence": [
+            "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+          ],
+          "field_evidence": {
+            "entity": "Class B Notes",
+            "value": "5.95% per annum"
+          },
+          "polarity": "affirmed",
+          "predicate": "coupon_rate",
+          "quote": "Class B Notes at 5.95% per annum",
+          "scope": {
+            "tranche": "Class B"
+          },
+          "value": {
+            "unit": "percent_per_annum",
+            "value": 5.95
+          }
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class C Notes",
+          "evidence": [
+            "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+          ],
+          "field_evidence": {
+            "entity": "Class C Notes",
+            "value": "6.75% per annum"
+          },
+          "polarity": "affirmed",
+          "predicate": "coupon_rate",
+          "quote": "Class C Notes ($50,000,000 principal) bear interest at 6.75% per annum",
+          "scope": {
+            "tranche": "Class C"
+          },
+          "value": {
+            "unit": "percent_per_annum",
+            "value": 6.75
+          }
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class C Notes",
+          "evidence": [
+            "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+          ],
+          "field_evidence": {
+            "entity": "Class C Notes",
+            "value": "$50,000,000 principal"
+          },
+          "polarity": "affirmed",
+          "predicate": "note_principal",
+          "quote": "Class C Notes ($50,000,000 principal)",
+          "scope": {
+            "tranche": "Class C"
+          },
+          "value": {
+            "unit": "USD",
+            "value": 50000000
+          }
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class A-1 Notes",
+          "evidence": [
+            "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+          ],
+          "field_evidence": {
+            "entity": "Class A-1 Notes",
+            "value": "Steps 3-7 Class A-1"
+          },
+          "polarity": "affirmed",
+          "predicate": "waterfall_priority",
+          "quote": "Steps 3-7 Class A-1, A-2, A-3, B, and C Interest",
+          "scope": {
+            "tranche": "Class A-1"
+          },
+          "value": "senior"
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class A-2 Notes",
+          "evidence": [
+            "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+          ],
+          "field_evidence": {
+            "entity": "Class A-2 Notes",
+            "value": "Steps 3-7 Class A-2"
+          },
+          "polarity": "affirmed",
+          "predicate": "waterfall_priority",
+          "quote": "Steps 3-7 Class A-1, A-2, A-3, B, and C Interest",
+          "scope": {
+            "tranche": "Class A-2"
+          },
+          "value": "senior"
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class A-3 Notes",
+          "evidence": [
+            "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+          ],
+          "field_evidence": {
+            "entity": "Class A-3 Notes",
+            "value": "Steps 3-7 Class A-3"
+          },
+          "polarity": "affirmed",
+          "predicate": "waterfall_priority",
+          "quote": "Steps 3-7 Class A-1, A-2, A-3, B, and C Interest",
+          "scope": {
+            "tranche": "Class A-3"
+          },
+          "value": "senior"
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class B Notes",
+          "evidence": [
+            "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+          ],
+          "field_evidence": {
+            "entity": "Class B Notes",
+            "value": "Steps 3-7 Class B"
+          },
+          "polarity": "affirmed",
+          "predicate": "waterfall_priority",
+          "quote": "Steps 3-7 Class A-1, A-2, A-3, B, and C Interest",
+          "scope": {
+            "tranche": "Class B"
+          },
+          "value": "mezzanine"
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class C Notes",
+          "evidence": [
+            "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+          ],
+          "field_evidence": {
+            "entity": "Class C Notes",
+            "value": "Steps 3-7 Class C"
+          },
+          "polarity": "affirmed",
+          "predicate": "waterfall_priority",
+          "quote": "Steps 3-7 Class A-1, A-2, A-3, B, and C Interest",
+          "scope": {
+            "tranche": "Class C"
+          },
+          "value": "junior"
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Reserve Account Replenishment",
+          "evidence": [
+            "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+          ],
+          "field_evidence": {
+            "entity": "Reserve Account Replenishment",
+            "value": "junior to Class B and Class C principal"
+          },
+          "polarity": "affirmed",
+          "predicate": "waterfall_priority",
+          "quote": "Step 13 Reserve Account Replenishment (junior to Class B and Class C principal)",
+          "scope": {
+            "clause_id": "Section 5.01 Step 13"
+          },
+          "value": "junior"
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Certificateholder",
+          "evidence": [
+            "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+          ],
+          "field_evidence": {
+            "entity": "Certificateholder",
+            "value": "Step 14 Certificateholder"
+          },
+          "polarity": "affirmed",
+          "predicate": "waterfall_priority",
+          "quote": "Step 14 Certificateholder",
+          "scope": {
+            "clause_id": "Section 5.01 Step 14"
+          },
+          "value": "equity"
+        },
+        {
+          "assertion_kind": "requirement",
+          "basis": "explicit",
+          "condition_status": "conditional",
+          "conditions": [
+            {
+              "field": "breach_type",
+              "operator": "eq",
+              "value": "payment"
+            }
+          ],
+          "entity": "Indenture",
+          "evidence": [
+            "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+          ],
+          "field_evidence": {
+            "conditions": "Failure to pay interest continuing for 5 business days",
+            "entity": "Indenture",
+            "value": "5 business days"
+          },
+          "polarity": "affirmed",
+          "predicate": "cure_period",
+          "quote": "Failure to pay interest continuing for 5 business days constitutes an Event of Default",
+          "scope": {
+            "clause_id": "Section 10.01"
+          },
+          "value": {
+            "unit": "business_days",
+            "value": 5
+          }
+        },
+        {
+          "assertion_kind": "requirement",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Servicer",
+          "evidence": [
+            "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+          ],
+          "field_evidence": {
+            "entity": "Servicer",
+            "value": "10% of Initial Pool Balance"
+          },
+          "polarity": "affirmed",
+          "predicate": "clean_up_call_threshold",
+          "quote": "Servicer may redeem Notes when Pool Balance falls to 10% of Initial Pool Balance",
+          "scope": {
+            "clause_id": "Section 12.01"
+          },
+          "value": {
+            "unit": "percent",
+            "value": 10
+          }
+        }
+      ],
+      "calls": [
+        {
+          "response": {
+            "output": {
+              "proposals": [
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class A Notes",
+                  "evidence": [
+                    "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class A Notes",
+                    "value": "5.10% per annum"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "coupon_rate",
+                  "quote": "The Class A Notes bear interest at 5.10% per annum",
+                  "scope": {
+                    "tranche": "Class A"
+                  },
+                  "value": {
+                    "unit": "percent_per_annum",
+                    "value": 5.1
+                  }
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class B Notes",
+                  "evidence": [
+                    "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class B Notes",
+                    "value": "5.95% per annum"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "coupon_rate",
+                  "quote": "Class B Notes at 5.95% per annum",
+                  "scope": {
+                    "tranche": "Class B"
+                  },
+                  "value": {
+                    "unit": "percent_per_annum",
+                    "value": 5.95
+                  }
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class C Notes",
+                  "evidence": [
+                    "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class C Notes",
+                    "value": "6.75% per annum"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "coupon_rate",
+                  "quote": "Class C Notes ($50,000,000 principal) bear interest at 6.75% per annum",
+                  "scope": {
+                    "tranche": "Class C"
+                  },
+                  "value": {
+                    "unit": "percent_per_annum",
+                    "value": 6.75
+                  }
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class C Notes",
+                  "evidence": [
+                    "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class C Notes",
+                    "value": "$50,000,000 principal"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "note_principal",
+                  "quote": "Class C Notes ($50,000,000 principal)",
+                  "scope": {
+                    "tranche": "Class C"
+                  },
+                  "value": {
+                    "unit": "USD",
+                    "value": 50000000
+                  }
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class A-1 Notes",
+                  "evidence": [
+                    "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class A-1 Notes",
+                    "value": "Steps 3-7 Class A-1"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "waterfall_priority",
+                  "quote": "Steps 3-7 Class A-1, A-2, A-3, B, and C Interest",
+                  "scope": {
+                    "tranche": "Class A-1"
+                  },
+                  "value": "senior"
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class A-2 Notes",
+                  "evidence": [
+                    "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class A-2 Notes",
+                    "value": "Steps 3-7 Class A-2"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "waterfall_priority",
+                  "quote": "Steps 3-7 Class A-1, A-2, A-3, B, and C Interest",
+                  "scope": {
+                    "tranche": "Class A-2"
+                  },
+                  "value": "senior"
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class A-3 Notes",
+                  "evidence": [
+                    "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class A-3 Notes",
+                    "value": "Steps 3-7 Class A-3"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "waterfall_priority",
+                  "quote": "Steps 3-7 Class A-1, A-2, A-3, B, and C Interest",
+                  "scope": {
+                    "tranche": "Class A-3"
+                  },
+                  "value": "senior"
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class B Notes",
+                  "evidence": [
+                    "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class B Notes",
+                    "value": "Steps 3-7 Class B"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "waterfall_priority",
+                  "quote": "Steps 3-7 Class A-1, A-2, A-3, B, and C Interest",
+                  "scope": {
+                    "tranche": "Class B"
+                  },
+                  "value": "mezzanine"
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class C Notes",
+                  "evidence": [
+                    "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class C Notes",
+                    "value": "Steps 3-7 Class C"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "waterfall_priority",
+                  "quote": "Steps 3-7 Class A-1, A-2, A-3, B, and C Interest",
+                  "scope": {
+                    "tranche": "Class C"
+                  },
+                  "value": "junior"
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Reserve Account Replenishment",
+                  "evidence": [
+                    "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+                  ],
+                  "field_evidence": {
+                    "entity": "Reserve Account Replenishment",
+                    "value": "junior to Class B and Class C principal"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "waterfall_priority",
+                  "quote": "Step 13 Reserve Account Replenishment (junior to Class B and Class C principal)",
+                  "scope": {
+                    "clause_id": "Section 5.01 Step 13"
+                  },
+                  "value": "junior"
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Certificateholder",
+                  "evidence": [
+                    "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+                  ],
+                  "field_evidence": {
+                    "entity": "Certificateholder",
+                    "value": "Step 14 Certificateholder"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "waterfall_priority",
+                  "quote": "Step 14 Certificateholder",
+                  "scope": {
+                    "clause_id": "Section 5.01 Step 14"
+                  },
+                  "value": "equity"
+                },
+                {
+                  "assertion_kind": "requirement",
+                  "basis": "explicit",
+                  "condition_status": "conditional",
+                  "conditions": [
+                    {
+                      "field": "breach_type",
+                      "operator": "eq",
+                      "value": "payment"
+                    }
+                  ],
+                  "entity": "Indenture",
+                  "evidence": [
+                    "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+                  ],
+                  "field_evidence": {
+                    "conditions": "Failure to pay interest continuing for 5 business days",
+                    "entity": "Indenture",
+                    "value": "5 business days"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "cure_period",
+                  "quote": "Failure to pay interest continuing for 5 business days constitutes an Event of Default",
+                  "scope": {
+                    "clause_id": "Section 10.01"
+                  },
+                  "value": {
+                    "unit": "business_days",
+                    "value": 5
+                  }
+                },
+                {
+                  "assertion_kind": "requirement",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Servicer",
+                  "evidence": [
+                    "ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d"
+                  ],
+                  "field_evidence": {
+                    "entity": "Servicer",
+                    "value": "10% of Initial Pool Balance"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "clean_up_call_threshold",
+                  "quote": "Servicer may redeem Notes when Pool Balance falls to 10% of Initial Pool Balance",
+                  "scope": {
+                    "clause_id": "Section 12.01"
+                  },
+                  "value": {
+                    "unit": "percent",
+                    "value": 10
+                  }
+                }
+              ]
+            },
+            "provider_response": {
+              "choices": [
+                {
+                  "finish_reason": "stop",
+                  "index": 0,
+                  "logprobs": null,
+                  "message": {
+                    "content": "{\"proposals\": [{\"entity\": \"Class A Notes\", \"predicate\": \"coupon_rate\", \"value\": {\"value\": 5.10, \"unit\": \"percent_per_annum\"}, \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"scope\": {\"tranche\": \"Class A\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d\"], \"quote\": \"The Class A Notes bear interest at 5.10% per annum\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class A Notes\", \"value\": \"5.10% per annum\"}}, {\"entity\": \"Class B Notes\", \"predicate\": \"coupon_rate\", \"value\": {\"value\": 5.95, \"unit\": \"percent_per_annum\"}, \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"scope\": {\"tranche\": \"Class B\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d\"], \"quote\": \"Class B Notes at 5.95% per annum\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class B Notes\", \"value\": \"5.95% per annum\"}}, {\"entity\": \"Class C Notes\", \"predicate\": \"coupon_rate\", \"value\": {\"value\": 6.75, \"unit\": \"percent_per_annum\"}, \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"scope\": {\"tranche\": \"Class C\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d\"], \"quote\": \"Class C Notes ($50,000,000 principal) bear interest at 6.75% per annum\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class C Notes\", \"value\": \"6.75% per annum\"}}, {\"entity\": \"Class C Notes\", \"predicate\": \"note_principal\", \"value\": {\"value\": 50000000, \"unit\": \"USD\"}, \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"scope\": {\"tranche\": \"Class C\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d\"], \"quote\": \"Class C Notes ($50,000,000 principal)\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class C Notes\", \"value\": \"$50,000,000 principal\"}}, {\"entity\": \"Class A-1 Notes\", \"predicate\": \"waterfall_priority\", \"value\": \"senior\", \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"scope\": {\"tranche\": \"Class A-1\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d\"], \"quote\": \"Steps 3-7 Class A-1, A-2, A-3, B, and C Interest\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class A-1 Notes\", \"value\": \"Steps 3-7 Class A-1\"}}, {\"entity\": \"Class A-2 Notes\", \"predicate\": \"waterfall_priority\", \"value\": \"senior\", \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"scope\": {\"tranche\": \"Class A-2\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d\"], \"quote\": \"Steps 3-7 Class A-1, A-2, A-3, B, and C Interest\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class A-2 Notes\", \"value\": \"Steps 3-7 Class A-2\"}}, {\"entity\": \"Class A-3 Notes\", \"predicate\": \"waterfall_priority\", \"value\": \"senior\", \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"scope\": {\"tranche\": \"Class A-3\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d\"], \"quote\": \"Steps 3-7 Class A-1, A-2, A-3, B, and C Interest\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class A-3 Notes\", \"value\": \"Steps 3-7 Class A-3\"}}, {\"entity\": \"Class B Notes\", \"predicate\": \"waterfall_priority\", \"value\": \"mezzanine\", \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"scope\": {\"tranche\": \"Class B\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d\"], \"quote\": \"Steps 3-7 Class A-1, A-2, A-3, B, and C Interest\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class B Notes\", \"value\": \"Steps 3-7 Class B\"}}, {\"entity\": \"Class C Notes\", \"predicate\": \"waterfall_priority\", \"value\": \"junior\", \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"scope\": {\"tranche\": \"Class C\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d\"], \"quote\": \"Steps 3-7 Class A-1, A-2, A-3, B, and C Interest\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class C Notes\", \"value\": \"Steps 3-7 Class C\"}}, {\"entity\": \"Reserve Account Replenishment\", \"predicate\": \"waterfall_priority\", \"value\": \"junior\", \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"scope\": {\"clause_id\": \"Section 5.01 Step 13\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d\"], \"quote\": \"Step 13 Reserve Account Replenishment (junior to Class B and Class C principal)\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Reserve Account Replenishment\", \"value\": \"junior to Class B and Class C principal\"}}, {\"entity\": \"Certificateholder\", \"predicate\": \"waterfall_priority\", \"value\": \"equity\", \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"scope\": {\"clause_id\": \"Section 5.01 Step 14\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d\"], \"quote\": \"Step 14 Certificateholder\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Certificateholder\", \"value\": \"Step 14 Certificateholder\"}}, {\"entity\": \"Indenture\", \"predicate\": \"cure_period\", \"value\": {\"value\": 5, \"unit\": \"business_days\"}, \"polarity\": \"affirmed\", \"assertion_kind\": \"requirement\", \"conditions\": [{\"field\": \"breach_type\", \"operator\": \"eq\", \"value\": \"payment\"}], \"scope\": {\"clause_id\": \"Section 10.01\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d\"], \"quote\": \"Failure to pay interest continuing for 5 business days constitutes an Event of Default\", \"condition_status\": \"conditional\", \"field_evidence\": {\"entity\": \"Indenture\", \"value\": \"5 business days\", \"conditions\": \"Failure to pay interest continuing for 5 business days\"}}, {\"entity\": \"Servicer\", \"predicate\": \"clean_up_call_threshold\", \"value\": {\"value\": 10, \"unit\": \"percent\"}, \"polarity\": \"affirmed\", \"assertion_kind\": \"requirement\", \"conditions\": [], \"scope\": {\"clause_id\": \"Section 12.01\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-ea84246bb2452ea52b37ded0d9c226f63ffe5b92fbc799308d6d73b807823b6d\"], \"quote\": \"Servicer may redeem Notes when Pool Balance falls to 10% of Initial Pool Balance\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Servicer\", \"value\": \"10% of Initial Pool Balance\"}}]}",
+                    "refusal": null,
+                    "role": "assistant"
+                  }
+                }
+              ],
+              "created": 1794753430,
+              "id": "chatcmpl-1bf4e37c-6f33-47fb-8e4b-bc7f2adca1dc",
+              "model": "nvidia/nemotron-3-ultra-550b-a55b",
+              "object": "chat.completion",
+              "usage": {
+                "completion_tokens": 2622,
+                "completion_tokens_details": {
+                  "reasoning_tokens": 0
+                },
+                "prompt_tokens": 3353,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                },
+                "total_tokens": 5975
+              }
+            },
+            "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+            "transport_attempts": [
+              {
+                "attempt": 1,
+                "status": "success"
+              }
+            ],
+            "usage": {
+              "completion_tokens": 2622,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "prompt_tokens": 3353,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 5975
+            }
+          },
+          "window": "0+1"
+        }
+      ],
+      "errors": []
+    },
+    "cart-2024-2-offering-memorandum.docx": {
+      "revision": "c884825ba7c80f29d9426bf93ebb4a0cef1fa70592b509c084d75f63e87d9b0e",
+      "raw_proposals": [
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class A Notes",
+          "evidence": [
+            "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+          ],
+          "field_evidence": {
+            "entity": "Class A Notes 5.10% per annum",
+            "value": "5.10% per annum"
+          },
+          "predicate": "coupon_rate",
+          "quote": "Class A Notes 5.10% per annum",
+          "value": {
+            "unit": "percent_per_annum",
+            "value": 5.1
+          }
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class B Notes",
+          "evidence": [
+            "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+          ],
+          "field_evidence": {
+            "entity": "Class B Notes 5.95% per annum",
+            "value": "5.95% per annum"
+          },
+          "predicate": "coupon_rate",
+          "quote": "Class B Notes 5.95% per annum",
+          "value": {
+            "unit": "percent_per_annum",
+            "value": 5.95
+          }
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class C Notes",
+          "evidence": [
+            "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+          ],
+          "field_evidence": {
+            "entity": "Class C Notes ($50,000,000 principal) 6.50% per annum",
+            "value": "6.50% per annum"
+          },
+          "predicate": "coupon_rate",
+          "quote": "Class C Notes ($50,000,000 principal) 6.50% per annum",
+          "value": {
+            "unit": "percent_per_annum",
+            "value": 6.5
+          }
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class C Notes",
+          "evidence": [
+            "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+          ],
+          "field_evidence": {
+            "entity": "Class C Notes ($50,000,000 principal) 6.50% per annum",
+            "value": "$50,000,000 principal"
+          },
+          "predicate": "note_principal",
+          "quote": "Class C Notes ($50,000,000 principal) 6.50% per annum",
+          "value": {
+            "unit": "USD",
+            "value": 50000000
+          }
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class C Notes",
+          "evidence": [
+            "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+          ],
+          "field_evidence": {
+            "entity": "Class C Notes ($50,000,000 principal) 6.50% per annum (25 bps / 0.25 percentage points lower than Indenture)",
+            "value": "25 bps / 0.25 percentage points lower than Indenture"
+          },
+          "predicate": "coupon_spread",
+          "quote": "25 bps / 0.25 percentage points lower than Indenture",
+          "value": {
+            "unit": "basis_point",
+            "value": 25
+          }
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Reserve Account Replenishment",
+          "evidence": [
+            "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+          ],
+          "field_evidence": {
+            "entity": "Step 6/10 Reserve Account Replenishment (placed senior/ahead of Class B and Class C principal)",
+            "value": "placed senior/ahead of Class B and Class C principal"
+          },
+          "predicate": "waterfall_priority",
+          "quote": "Step 6/10 Reserve Account Replenishment (placed senior/ahead of Class B and Class C principal)",
+          "value": "senior"
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "conditional",
+          "conditions": [
+            {
+              "field": "breach_type",
+              "operator": "eq",
+              "value": "payment"
+            }
+          ],
+          "entity": "Events of Default",
+          "evidence": [
+            "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+          ],
+          "field_evidence": {
+            "conditions": "5 calendar days (or 3 business days) cure period variant",
+            "entity": "Events of Default Draft Note: 5 calendar days (or 3 business days) cure period variant",
+            "value": "5 calendar days"
+          },
+          "predicate": "cure_period",
+          "quote": "5 calendar days (or 3 business days) cure period variant",
+          "value": {
+            "unit": "calendar_days",
+            "value": 5
+          }
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "conditional",
+          "conditions": [
+            {
+              "field": "breach_type",
+              "operator": "eq",
+              "value": "payment"
+            }
+          ],
+          "entity": "Events of Default",
+          "evidence": [
+            "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+          ],
+          "field_evidence": {
+            "conditions": "5 calendar days (or 3 business days) cure period variant",
+            "entity": "Events of Default Draft Note: 5 calendar days (or 3 business days) cure period variant",
+            "value": "3 business days"
+          },
+          "predicate": "cure_period",
+          "quote": "5 calendar days (or 3 business days) cure period variant",
+          "value": {
+            "unit": "business_days",
+            "value": 3
+          }
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "conditional",
+          "conditions": [
+            {
+              "field": "pool_factor_below_threshold",
+              "operator": "eq",
+              "value": true
+            }
+          ],
+          "entity": "Optional Redemption",
+          "evidence": [
+            "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+          ],
+          "field_evidence": {
+            "conditions": "when Pool Balance falls to 15% of Initial Pool Balance",
+            "entity": "Optional Redemption: Servicer may redeem Notes when Pool Balance falls to 15% of Initial Pool Balance",
+            "value": "15% of Initial Pool Balance"
+          },
+          "predicate": "clean_up_call_threshold",
+          "quote": "Servicer may redeem Notes when Pool Balance falls to 15% of Initial Pool Balance",
+          "value": {
+            "unit": "percent",
+            "value": 15
+          }
+        }
+      ],
+      "calls": [
+        {
+          "response": {
+            "output": {
+              "proposals": [
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class A Notes",
+                  "evidence": [
+                    "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class A Notes 5.10% per annum",
+                    "value": "5.10% per annum"
+                  },
+                  "predicate": "coupon_rate",
+                  "quote": "Class A Notes 5.10% per annum",
+                  "value": {
+                    "unit": "percent_per_annum",
+                    "value": 5.1
+                  }
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class B Notes",
+                  "evidence": [
+                    "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class B Notes 5.95% per annum",
+                    "value": "5.95% per annum"
+                  },
+                  "predicate": "coupon_rate",
+                  "quote": "Class B Notes 5.95% per annum",
+                  "value": {
+                    "unit": "percent_per_annum",
+                    "value": 5.95
+                  }
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class C Notes",
+                  "evidence": [
+                    "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class C Notes ($50,000,000 principal) 6.50% per annum",
+                    "value": "6.50% per annum"
+                  },
+                  "predicate": "coupon_rate",
+                  "quote": "Class C Notes ($50,000,000 principal) 6.50% per annum",
+                  "value": {
+                    "unit": "percent_per_annum",
+                    "value": 6.5
+                  }
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class C Notes",
+                  "evidence": [
+                    "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class C Notes ($50,000,000 principal) 6.50% per annum",
+                    "value": "$50,000,000 principal"
+                  },
+                  "predicate": "note_principal",
+                  "quote": "Class C Notes ($50,000,000 principal) 6.50% per annum",
+                  "value": {
+                    "unit": "USD",
+                    "value": 50000000
+                  }
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class C Notes",
+                  "evidence": [
+                    "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class C Notes ($50,000,000 principal) 6.50% per annum (25 bps / 0.25 percentage points lower than Indenture)",
+                    "value": "25 bps / 0.25 percentage points lower than Indenture"
+                  },
+                  "predicate": "coupon_spread",
+                  "quote": "25 bps / 0.25 percentage points lower than Indenture",
+                  "value": {
+                    "unit": "basis_point",
+                    "value": 25
+                  }
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Reserve Account Replenishment",
+                  "evidence": [
+                    "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+                  ],
+                  "field_evidence": {
+                    "entity": "Step 6/10 Reserve Account Replenishment (placed senior/ahead of Class B and Class C principal)",
+                    "value": "placed senior/ahead of Class B and Class C principal"
+                  },
+                  "predicate": "waterfall_priority",
+                  "quote": "Step 6/10 Reserve Account Replenishment (placed senior/ahead of Class B and Class C principal)",
+                  "value": "senior"
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "conditional",
+                  "conditions": [
+                    {
+                      "field": "breach_type",
+                      "operator": "eq",
+                      "value": "payment"
+                    }
+                  ],
+                  "entity": "Events of Default",
+                  "evidence": [
+                    "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+                  ],
+                  "field_evidence": {
+                    "conditions": "5 calendar days (or 3 business days) cure period variant",
+                    "entity": "Events of Default Draft Note: 5 calendar days (or 3 business days) cure period variant",
+                    "value": "5 calendar days"
+                  },
+                  "predicate": "cure_period",
+                  "quote": "5 calendar days (or 3 business days) cure period variant",
+                  "value": {
+                    "unit": "calendar_days",
+                    "value": 5
+                  }
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "conditional",
+                  "conditions": [
+                    {
+                      "field": "breach_type",
+                      "operator": "eq",
+                      "value": "payment"
+                    }
+                  ],
+                  "entity": "Events of Default",
+                  "evidence": [
+                    "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+                  ],
+                  "field_evidence": {
+                    "conditions": "5 calendar days (or 3 business days) cure period variant",
+                    "entity": "Events of Default Draft Note: 5 calendar days (or 3 business days) cure period variant",
+                    "value": "3 business days"
+                  },
+                  "predicate": "cure_period",
+                  "quote": "5 calendar days (or 3 business days) cure period variant",
+                  "value": {
+                    "unit": "business_days",
+                    "value": 3
+                  }
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "conditional",
+                  "conditions": [
+                    {
+                      "field": "pool_factor_below_threshold",
+                      "operator": "eq",
+                      "value": true
+                    }
+                  ],
+                  "entity": "Optional Redemption",
+                  "evidence": [
+                    "ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c"
+                  ],
+                  "field_evidence": {
+                    "conditions": "when Pool Balance falls to 15% of Initial Pool Balance",
+                    "entity": "Optional Redemption: Servicer may redeem Notes when Pool Balance falls to 15% of Initial Pool Balance",
+                    "value": "15% of Initial Pool Balance"
+                  },
+                  "predicate": "clean_up_call_threshold",
+                  "quote": "Servicer may redeem Notes when Pool Balance falls to 15% of Initial Pool Balance",
+                  "value": {
+                    "unit": "percent",
+                    "value": 15
+                  }
+                }
+              ]
+            },
+            "provider_response": {
+              "choices": [
+                {
+                  "finish_reason": "stop",
+                  "index": 0,
+                  "logprobs": null,
+                  "message": {
+                    "content": "{\"proposals\": [{\"entity\": \"Class A Notes\", \"predicate\": \"coupon_rate\", \"value\": {\"value\": 5.1, \"unit\": \"percent_per_annum\"}, \"assertion_kind\": \"fact\", \"conditions\": [], \"basis\": \"explicit\", \"evidence\": [\"ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c\"], \"quote\": \"Class A Notes 5.10% per annum\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class A Notes 5.10% per annum\", \"value\": \"5.10% per annum\"}}, {\"entity\": \"Class B Notes\", \"predicate\": \"coupon_rate\", \"value\": {\"value\": 5.95, \"unit\": \"percent_per_annum\"}, \"assertion_kind\": \"fact\", \"conditions\": [], \"basis\": \"explicit\", \"evidence\": [\"ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c\"], \"quote\": \"Class B Notes 5.95% per annum\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class B Notes 5.95% per annum\", \"value\": \"5.95% per annum\"}}, {\"entity\": \"Class C Notes\", \"predicate\": \"coupon_rate\", \"value\": {\"value\": 6.5, \"unit\": \"percent_per_annum\"}, \"assertion_kind\": \"fact\", \"conditions\": [], \"basis\": \"explicit\", \"evidence\": [\"ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c\"], \"quote\": \"Class C Notes ($50,000,000 principal) 6.50% per annum\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class C Notes ($50,000,000 principal) 6.50% per annum\", \"value\": \"6.50% per annum\"}}, {\"entity\": \"Class C Notes\", \"predicate\": \"note_principal\", \"value\": {\"value\": 50000000, \"unit\": \"USD\"}, \"assertion_kind\": \"fact\", \"conditions\": [], \"basis\": \"explicit\", \"evidence\": [\"ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c\"], \"quote\": \"Class C Notes ($50,000,000 principal) 6.50% per annum\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class C Notes ($50,000,000 principal) 6.50% per annum\", \"value\": \"$50,000,000 principal\"}}, {\"entity\": \"Class C Notes\", \"predicate\": \"coupon_spread\", \"value\": {\"value\": 25, \"unit\": \"basis_point\"}, \"assertion_kind\": \"fact\", \"conditions\": [], \"basis\": \"explicit\", \"evidence\": [\"ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c\"], \"quote\": \"25 bps / 0.25 percentage points lower than Indenture\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class C Notes ($50,000,000 principal) 6.50% per annum (25 bps / 0.25 percentage points lower than Indenture)\", \"value\": \"25 bps / 0.25 percentage points lower than Indenture\"}}, {\"entity\": \"Reserve Account Replenishment\", \"predicate\": \"waterfall_priority\", \"value\": \"senior\", \"assertion_kind\": \"fact\", \"conditions\": [], \"basis\": \"explicit\", \"evidence\": [\"ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c\"], \"quote\": \"Step 6/10 Reserve Account Replenishment (placed senior/ahead of Class B and Class C principal)\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Step 6/10 Reserve Account Replenishment (placed senior/ahead of Class B and Class C principal)\", \"value\": \"placed senior/ahead of Class B and Class C principal\"}}, {\"entity\": \"Events of Default\", \"predicate\": \"cure_period\", \"value\": {\"value\": 5, \"unit\": \"calendar_days\"}, \"assertion_kind\": \"fact\", \"conditions\": [{\"field\": \"breach_type\", \"operator\": \"eq\", \"value\": \"payment\"}], \"basis\": \"explicit\", \"evidence\": [\"ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c\"], \"quote\": \"5 calendar days (or 3 business days) cure period variant\", \"condition_status\": \"conditional\", \"field_evidence\": {\"entity\": \"Events of Default Draft Note: 5 calendar days (or 3 business days) cure period variant\", \"value\": \"5 calendar days\", \"conditions\": \"5 calendar days (or 3 business days) cure period variant\"}}, {\"entity\": \"Events of Default\", \"predicate\": \"cure_period\", \"value\": {\"value\": 3, \"unit\": \"business_days\"}, \"assertion_kind\": \"fact\", \"conditions\": [{\"field\": \"breach_type\", \"operator\": \"eq\", \"value\": \"payment\"}], \"basis\": \"explicit\", \"evidence\": [\"ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c\"], \"quote\": \"5 calendar days (or 3 business days) cure period variant\", \"condition_status\": \"conditional\", \"field_evidence\": {\"entity\": \"Events of Default Draft Note: 5 calendar days (or 3 business days) cure period variant\", \"value\": \"3 business days\", \"conditions\": \"5 calendar days (or 3 business days) cure period variant\"}}, {\"entity\": \"Optional Redemption\", \"predicate\": \"clean_up_call_threshold\", \"value\": {\"value\": 15, \"unit\": \"percent\"}, \"assertion_kind\": \"fact\", \"conditions\": [{\"field\": \"pool_factor_below_threshold\", \"operator\": \"eq\", \"value\": true}], \"basis\": \"explicit\", \"evidence\": [\"ev-feb340cdfa5306ec8eec4b6f06d3a63ece6879160f5efcc0e131f5cf5a1b271c\"], \"quote\": \"Servicer may redeem Notes when Pool Balance falls to 15% of Initial Pool Balance\", \"condition_status\": \"conditional\", \"field_evidence\": {\"entity\": \"Optional Redemption: Servicer may redeem Notes when Pool Balance falls to 15% of Initial Pool Balance\", \"value\": \"15% of Initial Pool Balance\", \"conditions\": \"when Pool Balance falls to 15% of Initial Pool Balance\"}}]}",
+                    "refusal": null,
+                    "role": "assistant"
+                  }
+                }
+              ],
+              "created": 1794753472,
+              "id": "chatcmpl-b274c6a5-19c7-4eec-836f-923ce5438aa1",
+              "model": "nvidia/nemotron-3-ultra-550b-a55b",
+              "object": "chat.completion",
+              "usage": {
+                "completion_tokens": 1886,
+                "completion_tokens_details": {
+                  "reasoning_tokens": 0
+                },
+                "prompt_tokens": 3267,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                },
+                "total_tokens": 5153
+              }
+            },
+            "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+            "transport_attempts": [
+              {
+                "attempt": 1,
+                "status": "success"
+              }
+            ],
+            "usage": {
+              "completion_tokens": 1886,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "prompt_tokens": 3267,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 5153
+            }
+          },
+          "window": "0+1"
+        }
+      ],
+      "errors": []
+    }
+  }
+}

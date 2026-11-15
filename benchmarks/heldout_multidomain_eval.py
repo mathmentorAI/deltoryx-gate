@@ -29,6 +29,7 @@ for _p in (str(_SRC_DIR), str(_HARNESS_DIR)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+from claimlayer.v4 import RecordedProposalReader  # noqa: E402
 from harness2_v4_pipeline import (  # noqa: E402
     _build_corpus_objects,
     evaluate_domain_candidate,
@@ -36,7 +37,7 @@ from harness2_v4_pipeline import (  # noqa: E402
 )
 
 
-def _build_meridian_securitization_corpus():
+def _build_meridian_securitization_corpus(*, reader: Any = None):
     docs = [
         (
             "D1",
@@ -67,46 +68,26 @@ def _build_meridian_securitization_corpus():
             ),
         ),
     ]
+    eff_reader = (
+        reader
+        if reader is not None
+        else RecordedProposalReader.from_file(_HARNESS_DIR / "recorded_reads" / "meridian.json")
+    )
     corpus = _build_corpus_objects(
         case_id="heldout_sec_meridian_2026",
         task_id="structured-finance-securitization/heldout-meridian-2026",
-        dataset_role="unseen_heldout_case",
+            dataset_role="unseen_heldout_case",
         docs_cfg=docs,
         common_sha256=hashlib.sha256(b"meridian_2026_1_heldout").hexdigest(),
         common_chars=480,
         total_lines=30,
+        reader=eff_reader,
     )
-    ind_src = corpus.v4_sources["meridian-2026-1-indenture.docx"]
-    q_prin = "Class B Notes ($40,000,000 initial principal)"
-    s_prin = ind_src.text.index(q_prin)
-    corpus.evidence_layer.ingest([ind_src])
-    corpus.evidence_layer.ingest_units(
-        [
-            {
-                "proposal": {
-                    "entity": "Class B Notes",
-                    "predicate": "note_principal",
-                    "value": {"value": 40000000, "unit": "USD"},
-                    "assertion_kind": "fact",
-                    "condition_status": "unconditional",
-                },
-                "evidence": [
-                    {
-                        "document_id": ind_src.document_id,
-                        "revision": ind_src.revision,
-                        "start": s_prin,
-                        "end": s_prin + len(q_prin),
-                        "quote": q_prin,
-                    }
-                ],
-            }
-        ],
-        attestor="corpus_reference_builder",
-    )
+    corpus.evidence_layer.ingest(list(corpus.v4_sources.values()))
     return corpus
 
 
-def _build_apex_banking_corpus():
+def _build_apex_banking_corpus(*, reader: Any = None):
     docs = [
         (
             "D1",
@@ -159,6 +140,11 @@ def _build_apex_banking_corpus():
             "Financial Summary: Apex Consolidated Adjusted EBITDA is $30,000,000 for LTM Q4.",
         ),
     ]
+    eff_reader = (
+        reader
+        if reader is not None
+        else RecordedProposalReader.from_file(_HARNESS_DIR / "recorded_reads" / "apex.json")
+    )
     corpus = _build_corpus_objects(
         case_id="heldout_bank_apex_2026",
         task_id="banking-finance/heldout-apex-2026",
@@ -170,34 +156,12 @@ def _build_apex_banking_corpus():
     )
     from claimlayer.v4.domains.banking_finance import BANKING_FINANCE_ACCEPTANCE_POLICY, BANKING_FINANCE_VOCABULARY
     from claimlayer.v4.engine import EvidenceLayer
-    bank_layer = EvidenceLayer(vocabulary=BANKING_FINANCE_VOCABULARY, policy=BANKING_FINANCE_ACCEPTANCE_POLICY)
-    fac_src = corpus.v4_sources["apex-baseline-term-sheet.docx"]
-    fac_q = "Senior Secured Term Loan Facility Commitment is $150,000,000"
-    fac_s = fac_src.text.index(fac_q)
-    bank_layer.ingest([fac_src])
-    bank_layer.ingest_units(
-        [
-            {
-                "proposal": {
-                    "entity": "Term Loan",
-                    "predicate": "facility_amount",
-                    "value": {"value": 150000000, "unit": "USD"},
-                    "assertion_kind": "fact",
-                    "condition_status": "unconditional",
-                },
-                "evidence": [
-                    {
-                        "document_id": fac_src.document_id,
-                        "revision": fac_src.revision,
-                        "start": fac_s,
-                        "end": fac_s + len(fac_q),
-                        "quote": fac_q,
-                    }
-                ],
-            }
-        ],
-        attestor="corpus_reference_builder",
+    bank_layer = EvidenceLayer(
+        vocabulary=BANKING_FINANCE_VOCABULARY,
+        policy=BANKING_FINANCE_ACCEPTANCE_POLICY,
+        reader=eff_reader,
     )
+    bank_layer.ingest(list(corpus.v4_sources.values()))
     from dataclasses import replace
     return replace(corpus, evidence_layer=bank_layer)
 
@@ -217,6 +181,9 @@ def _ev_ref(corpus, doc_id: str, quote: str) -> dict[str, Any]:
 def _build_heldout_scenarios() -> list[dict[str, Any]]:
     sec = _build_meridian_securitization_corpus()
     sec_q_prin = "Class B Notes ($40,000,000 initial principal) bear interest at 5.80% per annum."
+    sec_q_draft = "Class B Notes bear interest at 5.55% per annum."
+    sec_q_wf = "Section 5.01(a) Waterfall: Step 11 Class B principal; Step 12 Reserve Account replenishment."
+    sec_q_gp = "Section 10.01 Grace Period: 5 business days cure period."
     sec_valid_graph = {
         "claims": {
             "c_prin": {
@@ -228,18 +195,71 @@ def _build_heldout_scenarios() -> list[dict[str, Any]]:
                 "unit": "USD",
                 "evidence": [_ev_ref(sec, "meridian-2026-1-indenture.docx", sec_q_prin)],
             },
+            "c_coup_ind": {
+                "claim_id": "c_coup_ind",
+                "kind": "extraction",
+                "subject": "Class B Notes",
+                "predicate": "coupon_rate",
+                "value": 5.80,
+                "unit": "percent_per_annum",
+                "evidence": [_ev_ref(sec, "meridian-2026-1-indenture.docx", sec_q_prin)],
+            },
+            "c_coup_draft": {
+                "claim_id": "c_coup_draft",
+                "kind": "extraction",
+                "subject": "Class B Notes",
+                "predicate": "coupon_rate",
+                "value": 5.55,
+                "unit": "percent_per_annum",
+                "evidence": [_ev_ref(sec, "meridian-2026-1-draft-oc.docx", sec_q_draft)],
+            },
+            "c_wf": {
+                "claim_id": "c_wf",
+                "kind": "extraction",
+                "subject": "Class B Notes",
+                "predicate": "waterfall_priority",
+                "value": "mezzanine",
+                "condition_status": "conditional",
+                "evidence": [_ev_ref(sec, "meridian-2026-1-indenture.docx", sec_q_wf)],
+            },
+            "c_gp": {
+                "claim_id": "c_gp",
+                "kind": "extraction",
+                "subject": "Meridian Auto Receivables Trust 2026-1",
+                "predicate": "cure_period",
+                "value": 5,
+                "unit": "business_days",
+                "condition_status": "conditional",
+                "evidence": [_ev_ref(sec, "meridian-2026-1-indenture.docx", sec_q_gp)],
+            },
         },
         "steps": [],
-        "conclusion_id": "c_prin",
+        "conclusion_id": "c_coup_ind",
     }
     sec_clean = {
-        "report_text": "According to the text, Class B Notes is 40000000 USD.",
+        "report_text": (
+            "Executed Indenture governs over the Draft Offering Circular. "
+            "Class B Notes principal is 40000000 USD. "
+            "Class B Notes coupon is 5.80% per annum per the executed Indenture "
+            "(the Draft Offering Circular states 5.55% per annum for Class B). "
+            "Class B Notes waterfall priority is mezzanine. "
+            "Meridian Auto Receivables Trust 2026-1 cure period is 5 business days."
+        ),
         "assertions": [
             {
                 "subject": "Class B Notes",
                 "predicate": "note_principal",
                 "value": "$40,000,000",
                 "unit": "USD",
+                "role": "governing",
+                "source_id": "meridian-2026-1-indenture.docx",
+                "quote": sec_q_prin,
+            },
+            {
+                "subject": "Class B Notes",
+                "predicate": "coupon_rate",
+                "value": "5.80%",
+                "unit": "PERCENT",
                 "role": "governing",
                 "source_id": "meridian-2026-1-indenture.docx",
                 "quote": sec_q_prin,
@@ -295,6 +315,13 @@ def _build_heldout_scenarios() -> list[dict[str, Any]]:
 
     bank = _build_apex_banking_corpus()
     bank_q_fac = "Senior Secured Term Loan Facility Commitment is $150,000,000"
+    bank_q_ebitda = "Financial Summary: Apex Consolidated Adjusted EBITDA is $30,000,000 for LTM Q4."
+    bank_q_pb_margin = "Maximum acceptable Applicable Margin is 4.50% per annum"
+    bank_q_base_margin = "at an Applicable Margin of 4.25% per annum"
+    bank_q_mk_margin = "Lender proposes Applicable Margin of 4.90% per annum"
+    bank_q_pb_lev = "target Maximum Net Leverage is 4.25x"
+    bank_q_mk_lev = "Maximum Net Leverage of 3.75x"
+    bank_q_mk_dev = "Counterparty Markup: Lender proposes"
     bank_valid_graph = {
         "claims": {
             "c_fac": {
@@ -306,12 +333,81 @@ def _build_heldout_scenarios() -> list[dict[str, Any]]:
                 "unit": "USD",
                 "evidence": [_ev_ref(bank, "apex-baseline-term-sheet.docx", bank_q_fac)],
             },
+            "c_ebitda": {
+                "claim_id": "c_ebitda",
+                "kind": "extraction",
+                "subject": "Apex Consolidated",
+                "predicate": "ebitda",
+                "value": 30000000,
+                "unit": "USD",
+                "evidence": [_ev_ref(bank, "apex-financial-summary.xlsx", bank_q_ebitda)],
+            },
+            "c_m_pb": {
+                "claim_id": "c_m_pb",
+                "kind": "extraction",
+                "subject": "Client Playbook",
+                "predicate": "interest_margin",
+                "value": 4.50,
+                "unit": "percent_per_annum",
+                "evidence": [_ev_ref(bank, "apex-negotiation-playbook.docx", bank_q_pb_margin)],
+            },
+            "c_m_base": {
+                "claim_id": "c_m_base",
+                "kind": "extraction",
+                "subject": "Term Loan",
+                "predicate": "interest_margin",
+                "value": 4.25,
+                "unit": "percent_per_annum",
+                "evidence": [_ev_ref(bank, "apex-baseline-term-sheet.docx", bank_q_base_margin)],
+            },
+            "c_m_mk": {
+                "claim_id": "c_m_mk",
+                "kind": "extraction",
+                "subject": "Lender",
+                "predicate": "interest_margin",
+                "value": 4.90,
+                "unit": "percent_per_annum",
+                "evidence": [_ev_ref(bank, "apex-lender-markup.docx", bank_q_mk_margin)],
+            },
+            "c_l_pb": {
+                "claim_id": "c_l_pb",
+                "kind": "extraction",
+                "subject": "Client Playbook",
+                "predicate": "leverage_ratio",
+                "value": 4.25,
+                "unit": "multiple",
+                "evidence": [_ev_ref(bank, "apex-negotiation-playbook.docx", bank_q_pb_lev)],
+            },
+            "c_l_mk": {
+                "claim_id": "c_l_mk",
+                "kind": "extraction",
+                "subject": "Lender",
+                "predicate": "leverage_ratio",
+                "value": 3.75,
+                "unit": "multiple",
+                "evidence": [_ev_ref(bank, "apex-lender-markup.docx", bank_q_mk_lev)],
+            },
+            "c_dev": {
+                "claim_id": "c_dev",
+                "kind": "extraction",
+                "subject": "Lender",
+                "predicate": "markup_deviation",
+                "value": "material_deviation",
+                "evidence": [_ev_ref(bank, "apex-lender-markup.docx", bank_q_mk_dev)],
+            },
         },
         "steps": [],
         "conclusion_id": "c_fac",
     }
     bank_clean = {
-        "report_text": "According to the text, the Term Loan is 150000000 USD.",
+        "report_text": (
+            "According to the source documents, Term Loan Commitment is 150000000 USD per Baseline Term Sheet, and "
+            "Apex Consolidated Adjusted EBITDA is 30000000 USD per Financial Summary. "
+            "Client Playbook governs over Counterparty Markup and Baseline Term Sheet: "
+            "Client Playbook interest margin is 4.50% per annum (Term Loan baseline interest margin is 4.25% per annum; "
+            "Lender markup interest margin is 4.90% per annum, Lender is material_deviation); "
+            "Client Playbook target Maximum Net Leverage is 4.25x, governing over Lender Maximum Net Leverage of 3.75x."
+        ),
         "assertions": [
             {
                 "subject": "Term Loan",
@@ -329,7 +425,7 @@ def _build_heldout_scenarios() -> list[dict[str, Any]]:
                 "unit": "USD",
                 "role": "governing",
                 "source_id": "apex-financial-summary.xlsx",
-                "quote": "Financial Summary: Apex Consolidated Adjusted EBITDA is $30,000,000 for LTM Q4.",
+                "quote": bank_q_ebitda,
             },
             {
                 "subject": "Term Loan",
@@ -338,7 +434,7 @@ def _build_heldout_scenarios() -> list[dict[str, Any]]:
                 "unit": "PERCENT",
                 "role": "subordinate_discrepancy",
                 "source_id": "apex-lender-markup.docx",
-                "quote": "Lender proposes Applicable Margin of 4.90% per annum",
+                "quote": bank_q_mk_margin,
             },
         ],
         "graph": bank_valid_graph,

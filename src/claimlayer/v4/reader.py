@@ -67,6 +67,174 @@ class ProposalReader(Protocol):
     def propose(self, request: Mapping[str, Any]) -> Mapping[str, Any]: ...
 
 
+def _build_document_fragments(
+    document: Mapping[str, Any], fragment_chars: int
+) -> list[tuple[str, dict[str, Any]]]:
+    text = document['text']
+    fragments: list[tuple[str, dict[str, Any]]] = []
+    # Every character is covered once; nothing is normalized or dropped.
+    for start in range(0, len(text), fragment_chars):
+        end = min(start + fragment_chars, len(text))
+        reference = {
+            'document_id': document['document_id'],
+            'revision': document['revision'],
+            'start': start,
+            'end': end,
+            'quote': text[start:end],
+        }
+        fragments.append(('ev-' + digest(reference), reference))
+    return fragments
+
+
+def _bind_raw_proposals(
+    proposals: list[Any],
+    references: Mapping[str, Mapping[str, Any]],
+    text: str,
+    items: list[dict[str, Any]],
+    rejected: list[dict[str, Any]],
+) -> None:
+    """Bind raw model proposals to exact character spans without hand-editing proposals."""
+    for raw in proposals:
+        if type(raw) is not dict or set(raw) - PROPOSAL_FIELDS or not {'entity', 'predicate', 'value', 'basis', 'evidence'} <= set(raw):
+            rejected.append({'proposal': raw, 'reason': 'reader_schema'})
+            continue
+        ids = raw['evidence']
+        if (type(ids) is not list or not ids or any(type(i) is not str for i in ids)
+                or len(set(ids)) != len(ids) or any(i not in references for i in ids)):
+            rejected.append({'proposal': raw, 'reason': 'unknown_or_foreign_evidence_id'})
+            continue
+        proposal = {k: v for k, v in raw.items() if k not in {'basis', 'evidence', 'quote', 'field_evidence'}}
+        evidence = [copy.deepcopy(references[i]) for i in ids]
+        located = None
+        for i in ids:  # narrow the evidence to the quoted words when code can find them verbatim
+            ref = references[i]
+            span = locate_quote(ref['quote'], raw.get('quote'))
+            if span is not None:
+                start, end = ref['start'] + span[0], ref['start'] + span[1]
+                located = {**ref, 'start': start, 'end': end, 'quote': text[start:end]}
+                break
+        resolved_fe = {}
+        if isinstance(raw.get('field_evidence'), dict):
+            for f_name, f_quote in raw['field_evidence'].items():
+                if not isinstance(f_quote, str) or not f_quote.strip():
+                    continue
+                for i in ids:
+                    ref = references[i]
+                    span = locate_quote(ref['quote'], f_quote)
+                    if span is None:
+                        idx = ref['quote'].find(f_quote)
+                        if idx != -1:
+                            span = (idx, idx + len(f_quote))
+                    if span is not None:
+                        st, en = ref['start'] + span[0], ref['start'] + span[1]
+                        resolved_fe[f_name] = {**ref, 'start': st, 'end': en, 'quote': text[st:en]}
+                        break
+        item_payload = {
+            'proposal': proposal,
+            'basis': raw['basis'],
+            'evidence': [located] if located else evidence,
+            'quote_located': located is not None,
+        }
+        if resolved_fe:
+            item_payload['field_evidence'] = resolved_fe
+        items.append(item_payload)
+
+
+@dataclass(frozen=True)
+class RecordedProposalReader:
+    """Replay verbatim unedited real-model reader recordings with full provenance."""
+
+    model_name: str
+    prompt_version: str
+    prompt_digest: str
+    recorded_at: str
+    documents: Mapping[str, Mapping[str, Any]]
+    fragment_chars: int = 1800
+    structural_reliability: float | None = None
+    recording_path: str | None = None
+
+    @classmethod
+    def from_file(cls, path: Any, *, structural_reliability: float | None = None) -> 'RecordedProposalReader':
+        import json
+        from pathlib import Path
+
+        p = Path(path)
+        payload = json.loads(p.read_text(encoding='utf-8'))
+        return cls(
+            model_name=str(payload['model']),
+            prompt_version=str(payload['prompt_version']),
+            prompt_digest=str(payload['prompt_digest']),
+            recorded_at=str(payload['recorded_at']),
+            documents=dict(payload.get('documents') or {}),
+            fragment_chars=int(payload.get('fragment_chars', 1800)),
+            structural_reliability=structural_reliability,
+            recording_path=str(p),
+        )
+
+    @property
+    def identity(self) -> Mapping[str, Any]:
+        return {
+            'provider': 'recorded_model',
+            'model': self.model_name,
+            'prompt_version': self.prompt_version,
+            'prompt_digest': self.prompt_digest,
+            'recorded_at': self.recorded_at,
+            'fragment_chars': self.fragment_chars,
+            'recording_digest': digest(self.documents),
+            'structural_reliability': self.structural_reliability,
+        }
+
+    def propose(self, request: Mapping[str, Any]) -> Mapping[str, Any]:
+        document = request['document']
+        doc_id = str(document['document_id'])
+        revision = str(document['revision'])
+        text = str(document['text'])
+        fragments = _build_document_fragments(document, self.fragment_chars)
+        references = dict(fragments)
+        rec = self.documents.get(doc_id)
+        if rec is None:
+            return {
+                'items': [],
+                'rejected': [],
+                'calls': [],
+                'errors': [{'document_id': doc_id, 'error_type': 'RecordedDocumentMissing'}],
+                'fragments': len(fragments),
+                'windows': 0,
+            }
+        rec_rev = str(rec.get('revision', ''))
+        if rec_rev and rec_rev != revision:
+            return {
+                'items': [],
+                'rejected': [],
+                'calls': [],
+                'errors': [{'document_id': doc_id, 'error_type': 'RecordedRevisionMismatch', 'expected': revision, 'recorded': rec_rev}],
+                'fragments': len(fragments),
+                'windows': 0,
+            }
+        errors = list(rec.get('errors') or ())
+        if errors:
+            return {
+                'items': [],
+                'rejected': [],
+                'calls': list(rec.get('calls') or ()),
+                'errors': errors,
+                'fragments': len(fragments),
+                'windows': len(rec.get('calls') or ()),
+            }
+        items: list[dict[str, Any]] = []
+        rejected: list[dict[str, Any]] = []
+        raw_proposals = list(rec.get('raw_proposals') or ())
+        _bind_raw_proposals(raw_proposals, references, text, items, rejected)
+        return {
+            'items': items,
+            'rejected': rejected,
+            'calls': list(rec.get('calls') or ()),
+            'errors': [],
+            'fragments': len(fragments),
+            'windows': len(rec.get('calls') or ()) or 1,
+        }
+
+
 @dataclass(frozen=True)
 class LLMProposalReader:
     """structural_reliability must come from an evaluation of this reader; None keeps units unassessed."""
@@ -93,13 +261,7 @@ class LLMProposalReader:
     def propose(self, request):
         document = request['document']
         text = document['text']
-        fragments = []
-        # Every character is covered once; nothing is normalized or dropped.
-        for start in range(0, len(text), self.fragment_chars):
-            end = min(start + self.fragment_chars, len(text))
-            reference = {'document_id': document['document_id'], 'revision': document['revision'],
-                         'start': start, 'end': end, 'quote': text[start:end]}
-            fragments.append(('ev-' + digest(reference), reference))
+        fragments = _build_document_fragments(document, self.fragment_chars)
         bases = sorted(request['profile']['admissible_bases'])
         items, rejected, calls, errors = [], [], [], []
         # Windows of fragments; a window whose answer was cut off (or exceeded max_proposals) is split in two
@@ -135,45 +297,6 @@ class LLMProposalReader:
             if type(proposals) is not list or len(proposals) > self.max_proposals:
                 errors.append({'window': label, 'error_type': 'ReaderContractError'})
                 continue
-            for raw in proposals:
-                if type(raw) is not dict or set(raw) - PROPOSAL_FIELDS or not {'entity', 'predicate', 'value', 'basis', 'evidence'} <= set(raw):
-                    rejected.append({'proposal': raw, 'reason': 'reader_schema'})
-                    continue
-                ids = raw['evidence']
-                if (type(ids) is not list or not ids or any(type(i) is not str for i in ids)
-                        or len(set(ids)) != len(ids) or any(i not in references for i in ids)):
-                    rejected.append({'proposal': raw, 'reason': 'unknown_or_foreign_evidence_id'})
-                    continue
-                proposal = {k: v for k, v in raw.items() if k not in {'basis', 'evidence', 'quote', 'field_evidence'}}
-                evidence = [copy.deepcopy(references[i]) for i in ids]
-                located = None
-                for i in ids:  # narrow the evidence to the quoted words when code can find them verbatim
-                    ref = references[i]
-                    span = locate_quote(ref['quote'], raw.get('quote'))
-                    if span is not None:
-                        start, end = ref['start'] + span[0], ref['start'] + span[1]
-                        located = {**ref, 'start': start, 'end': end, 'quote': text[start:end]}
-                        break
-                resolved_fe = {}
-                if isinstance(raw.get('field_evidence'), dict):
-                    for f_name, f_quote in raw['field_evidence'].items():
-                        if not isinstance(f_quote, str) or not f_quote.strip():
-                            continue
-                        for i in ids:
-                            ref = references[i]
-                            span = locate_quote(ref['quote'], f_quote)
-                            if span is None:
-                                idx = ref['quote'].find(f_quote)
-                                if idx != -1:
-                                    span = (idx, idx + len(f_quote))
-                            if span is not None:
-                                st, en = ref['start'] + span[0], ref['start'] + span[1]
-                                resolved_fe[f_name] = {**ref, 'start': st, 'end': en, 'quote': text[st:en]}
-                                break
-                item_payload = {'proposal': proposal, 'basis': raw['basis'],
-                                'evidence': [located] if located else evidence, 'quote_located': located is not None}
-                if resolved_fe:
-                    item_payload['field_evidence'] = resolved_fe
-                items.append(item_payload)
+            _bind_raw_proposals(proposals, references, text, items, rejected)
         return {'items': items, 'rejected': rejected, 'calls': calls, 'errors': errors, 'fragments': len(fragments),
                 'windows': sum(1 for c in calls if 'split' not in c) + len(errors)}

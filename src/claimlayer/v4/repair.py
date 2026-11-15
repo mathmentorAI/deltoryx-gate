@@ -737,7 +737,12 @@ def _extract_issues_and_repairs(
                 instruction = str(chk.evidence.get("remediation") or "Cover the corpus obligation in graph and text.")
                 allowed = ("add_verified_corpus_leaf_and_text_coverage",)
                 forbidden = ("omit_corpus_obligation", "prune_prior_obligation")
-            elif code in ("REFERENCE_REGISTER_MISSING", "CORPUS_OBLIGATION_REJECTED"):
+            elif code in (
+                "REFERENCE_REGISTER_MISSING",
+                "REFERENCE_REGISTER_INCOMPLETE",
+                "REFERENCE_REGISTER_GAP",
+                "CORPUS_OBLIGATION_REJECTED",
+            ):
                 is_rep = False
                 problem = str(chk.evidence.get("message") or f"Non-repairable corpus closure failure ({code}).")
                 instruction = str(chk.evidence.get("remediation") or "Escalate to human review.")
@@ -869,7 +874,12 @@ def review_response(
     # Detect formal structural errors immediately
     has_structural_error = any(i.code == "INVALID_JUSTIFICATION_GRAPH_STRUCTURE" for i in issues)
     has_non_repairable_corpus = any(
-        i.code in ("REFERENCE_REGISTER_MISSING", "CORPUS_OBLIGATION_REJECTED")
+        i.code in (
+            "REFERENCE_REGISTER_MISSING",
+            "REFERENCE_REGISTER_INCOMPLETE",
+            "REFERENCE_REGISTER_GAP",
+            "CORPUS_OBLIGATION_REJECTED",
+        )
         for i in issues
     )
     has_budget_deferral = any(i.code == "PENDING_BUDGET" for i in issues)

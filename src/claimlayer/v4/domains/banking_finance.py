@@ -16,7 +16,7 @@ BANKING_SUBORDINATE_ROLES: frozenset[str] = frozenset({"counterparty_markup"})
 
 BANKING_FINANCE_VOCABULARY = Vocabulary(
     name="banking-finance",
-    version="1.0.0",
+    version="1.1.0",
     require_explicit_condition_status=False,
     scope_keys=("facility_id", "clause_id", "tranche", "covenant_type", "period"),
     predicates=(
@@ -27,7 +27,7 @@ BANKING_FINANCE_VOCABULARY = Vocabulary(
                 dimensions=("currency:USD", "currency:EUR"),
                 description="Committed principal amount of a credit facility.",
             ),
-            assertion_kinds=("definition", "fact", "requirement"),
+            assertion_kinds=("definition", "fact", "requirement", "proposal"),
             aliases=("facility", "commitment", "term loan", "revolving credit", "principal"),
             description="Principal commitment of a credit facility.",
         ),
@@ -42,7 +42,7 @@ BANKING_FINANCE_VOCABULARY = Vocabulary(
                 ("pricing_grid_step_up", FieldSpec("boolean")),
                 ("default_rate_applied", FieldSpec("boolean")),
             ),
-            assertion_kinds=("requirement", "definition", "fact"),
+            assertion_kinds=("requirement", "definition", "fact", "proposal"),
             aliases=("applicable margin", "interest rate", "spread", "bps", "per annum"),
             description="Applicable interest margin on a credit facility.",
         ),
@@ -57,7 +57,7 @@ BANKING_FINANCE_VOCABULARY = Vocabulary(
                 ("covenant_step_down", FieldSpec("boolean")),
                 ("testing_period", FieldSpec("enum", enum=("ltm", "quarterly", "pro_forma"))),
             ),
-            assertion_kinds=("requirement", "definition", "fact"),
+            assertion_kinds=("requirement", "definition", "fact", "proposal"),
             aliases=("leverage", "net leverage", "total leverage", "consolidated leverage"),
             description="Financial covenant leverage ratio threshold or actual multiple.",
         ),
@@ -122,8 +122,8 @@ BANKING_FINANCE_VOCABULARY = Vocabulary(
 BANKING_FINANCE_ACCEPTANCE_POLICY = AcceptancePolicy(
     tau=0.80,
     delta=0.20,
-    allowed_assertion_kinds=("fact", "definition", "requirement"),
-    version="banking-finance-v1",
+    allowed_assertion_kinds=("fact", "definition", "requirement", "proposal"),
+    version="banking-finance-v1.1",
 )
 
 

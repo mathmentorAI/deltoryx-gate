@@ -1,0 +1,124 @@
+{
+  "mode": "live",
+  "measured_at": "2026-11-15T14:40:13.245601+00:00",
+  "reader": {
+    "provider": "openai-compatible",
+    "model": "nvidia/nemotron-3-ultra-550b-a55b",
+    "endpoint": "https://integrate.api.nvidia.com/v1",
+    "parameters": {
+      "temperature": 0,
+      "max_tokens": 8192,
+      "extra_body": {
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        }
+      }
+    },
+    "prompt_version": "v4-proposals-3",
+    "prompt_digest": "5736166d93ad3ec377deea4111f9bd67e578cb6a78f445517cce5f4c4dc0a1b3",
+    "fragment_chars": 1800,
+    "window_fragments": 5,
+    "max_proposals": 40,
+    "structural_reliability": null
+  },
+  "annotations_path": "/Users/franciscohdb/Documents/Deltoryx Platform v1/claim-layer/benchmarks/conflict_annotations.json",
+  "summary": {
+    "documents_total": 15,
+    "documents_read_ok": 15,
+    "annotated_conflicts": 10,
+    "conflicts_found": 9,
+    "reader_conflict_recall": 0.9,
+    "divergent_sections_total": 17,
+    "reference_register_gaps_total": 1,
+    "reference_register_gap_rate": 0.0588
+  },
+  "corpora": [
+    {
+      "corpus_id": "cart_synth",
+      "case_id": "cart_2024_2_synthetic_replay",
+      "documents_total": 3,
+      "documents_read_ok": 3,
+      "units_admitted": 24,
+      "rejection_reasons": {},
+      "annotated_conflicts": 4,
+      "conflicts_found": 4,
+      "found_conflict_ids": [
+        "cart_class_c_coupon",
+        "cart_waterfall_reserve_priority",
+        "cart_events_of_default_cure_period",
+        "cart_optional_redemption_threshold"
+      ],
+      "missed_conflict_ids": [],
+      "recall": 1.0,
+      "divergent_sections": 8,
+      "reference_register_gaps": 0,
+      "gap_rate": 0.0,
+      "incomplete": false,
+      "incomplete_documents": []
+    },
+    {
+      "corpus_id": "meridian",
+      "case_id": "heldout_sec_meridian_2026",
+      "documents_total": 2,
+      "documents_read_ok": 2,
+      "units_admitted": 5,
+      "rejection_reasons": {},
+      "annotated_conflicts": 2,
+      "conflicts_found": 1,
+      "found_conflict_ids": [
+        "meridian_class_b_coupon"
+      ],
+      "missed_conflict_ids": [
+        "meridian_reserve_waterfall_step"
+      ],
+      "recall": 0.5,
+      "divergent_sections": 1,
+      "reference_register_gaps": 0,
+      "gap_rate": 0.0,
+      "incomplete": false,
+      "incomplete_documents": []
+    },
+    {
+      "corpus_id": "apex",
+      "case_id": "heldout_bank_apex_2026",
+      "documents_total": 5,
+      "documents_read_ok": 5,
+      "units_admitted": 8,
+      "rejection_reasons": {},
+      "annotated_conflicts": 2,
+      "conflicts_found": 2,
+      "found_conflict_ids": [
+        "apex_applicable_margin_vs_markup",
+        "apex_net_leverage_covenant"
+      ],
+      "missed_conflict_ids": [],
+      "recall": 1.0,
+      "divergent_sections": 4,
+      "reference_register_gaps": 1,
+      "gap_rate": 0.25,
+      "incomplete": false,
+      "incomplete_documents": []
+    },
+    {
+      "corpus_id": "ridgeline",
+      "case_id": "banking_finance_synthetic",
+      "documents_total": 5,
+      "documents_read_ok": 5,
+      "units_admitted": 9,
+      "rejection_reasons": {},
+      "annotated_conflicts": 2,
+      "conflicts_found": 2,
+      "found_conflict_ids": [
+        "ridgeline_applicable_margin_vs_markup",
+        "ridgeline_net_leverage_covenant"
+      ],
+      "missed_conflict_ids": [],
+      "recall": 1.0,
+      "divergent_sections": 4,
+      "reference_register_gaps": 0,
+      "gap_rate": 0.0,
+      "incomplete": false,
+      "incomplete_documents": []
+    }
+  ]
+}

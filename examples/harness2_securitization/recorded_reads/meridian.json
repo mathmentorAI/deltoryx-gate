@@ -1,0 +1,408 @@
+{
+  "corpus_id": "meridian",
+  "case_id": "heldout_sec_meridian_2026",
+  "model": "nvidia/nemotron-3-ultra-550b-a55b",
+  "provider": "openai-compatible",
+  "prompt_version": "v4-proposals-3",
+  "prompt_digest": "5736166d93ad3ec377deea4111f9bd67e578cb6a78f445517cce5f4c4dc0a1b3",
+  "recorded_at": "2026-11-15T14:38:53.920466+00:00",
+  "fragment_chars": 1800,
+  "documents": {
+    "meridian-2026-1-indenture.docx": {
+      "revision": "fe69c646115d5eb2dd1f6f774c1d4ebbe05558965747166779a380be7d33249f",
+      "raw_proposals": [
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class B Notes",
+          "evidence": [
+            "ev-09867959bc5339071481d48e90f64a5cdae7c29e5c1d0bf3029eef8fa615dca1"
+          ],
+          "field_evidence": {
+            "entity": "Class B Notes",
+            "value": "5.80% per annum"
+          },
+          "polarity": "affirmed",
+          "predicate": "coupon_rate",
+          "quote": "Class B Notes ($40,000,000 initial principal) bear interest at 5.80% per annum.",
+          "scope": {
+            "tranche": "Class B"
+          },
+          "value": {
+            "unit": "percent_per_annum",
+            "value": 5.8
+          }
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class B Notes",
+          "evidence": [
+            "ev-09867959bc5339071481d48e90f64a5cdae7c29e5c1d0bf3029eef8fa615dca1"
+          ],
+          "field_evidence": {
+            "entity": "Class B Notes",
+            "value": "$40,000,000 initial principal"
+          },
+          "polarity": "affirmed",
+          "predicate": "note_principal",
+          "quote": "Class B Notes ($40,000,000 initial principal) bear interest at 5.80% per annum.",
+          "scope": {
+            "tranche": "Class B"
+          },
+          "value": {
+            "unit": "USD",
+            "value": 40000000
+          }
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "conditional",
+          "conditions": [
+            {
+              "field": "sequential_paydown_active",
+              "operator": "eq",
+              "value": true
+            }
+          ],
+          "entity": "Class B Notes",
+          "evidence": [
+            "ev-09867959bc5339071481d48e90f64a5cdae7c29e5c1d0bf3029eef8fa615dca1"
+          ],
+          "field_evidence": {
+            "conditions": "Step 11",
+            "entity": "Class B Notes",
+            "value": "Step 11 Class B principal"
+          },
+          "polarity": "affirmed",
+          "predicate": "waterfall_priority",
+          "quote": "Section 5.01(a) Waterfall: Step 11 Class B principal; Step 12 Reserve Account replenishment.",
+          "scope": {
+            "tranche": "Class B"
+          },
+          "value": "mezzanine"
+        },
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "conditional",
+          "conditions": [
+            {
+              "field": "breach_type",
+              "operator": "eq",
+              "value": "payment"
+            }
+          ],
+          "entity": "Meridian Auto Receivables Trust 2026-1",
+          "evidence": [
+            "ev-09867959bc5339071481d48e90f64a5cdae7c29e5c1d0bf3029eef8fa615dca1"
+          ],
+          "field_evidence": {
+            "conditions": "Grace Period",
+            "entity": "Meridian Auto Receivables Trust 2026-1",
+            "value": "5 business days cure period"
+          },
+          "polarity": "affirmed",
+          "predicate": "cure_period",
+          "quote": "Section 10.01 Grace Period: 5 business days cure period.",
+          "scope": {
+            "clause_id": "Section 10.01"
+          },
+          "value": {
+            "unit": "business_days",
+            "value": 5
+          }
+        }
+      ],
+      "calls": [
+        {
+          "response": {
+            "output": {
+              "proposals": [
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class B Notes",
+                  "evidence": [
+                    "ev-09867959bc5339071481d48e90f64a5cdae7c29e5c1d0bf3029eef8fa615dca1"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class B Notes",
+                    "value": "5.80% per annum"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "coupon_rate",
+                  "quote": "Class B Notes ($40,000,000 initial principal) bear interest at 5.80% per annum.",
+                  "scope": {
+                    "tranche": "Class B"
+                  },
+                  "value": {
+                    "unit": "percent_per_annum",
+                    "value": 5.8
+                  }
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class B Notes",
+                  "evidence": [
+                    "ev-09867959bc5339071481d48e90f64a5cdae7c29e5c1d0bf3029eef8fa615dca1"
+                  ],
+                  "field_evidence": {
+                    "entity": "Class B Notes",
+                    "value": "$40,000,000 initial principal"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "note_principal",
+                  "quote": "Class B Notes ($40,000,000 initial principal) bear interest at 5.80% per annum.",
+                  "scope": {
+                    "tranche": "Class B"
+                  },
+                  "value": {
+                    "unit": "USD",
+                    "value": 40000000
+                  }
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "conditional",
+                  "conditions": [
+                    {
+                      "field": "sequential_paydown_active",
+                      "operator": "eq",
+                      "value": true
+                    }
+                  ],
+                  "entity": "Class B Notes",
+                  "evidence": [
+                    "ev-09867959bc5339071481d48e90f64a5cdae7c29e5c1d0bf3029eef8fa615dca1"
+                  ],
+                  "field_evidence": {
+                    "conditions": "Step 11",
+                    "entity": "Class B Notes",
+                    "value": "Step 11 Class B principal"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "waterfall_priority",
+                  "quote": "Section 5.01(a) Waterfall: Step 11 Class B principal; Step 12 Reserve Account replenishment.",
+                  "scope": {
+                    "tranche": "Class B"
+                  },
+                  "value": "mezzanine"
+                },
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "conditional",
+                  "conditions": [
+                    {
+                      "field": "breach_type",
+                      "operator": "eq",
+                      "value": "payment"
+                    }
+                  ],
+                  "entity": "Meridian Auto Receivables Trust 2026-1",
+                  "evidence": [
+                    "ev-09867959bc5339071481d48e90f64a5cdae7c29e5c1d0bf3029eef8fa615dca1"
+                  ],
+                  "field_evidence": {
+                    "conditions": "Grace Period",
+                    "entity": "Meridian Auto Receivables Trust 2026-1",
+                    "value": "5 business days cure period"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "cure_period",
+                  "quote": "Section 10.01 Grace Period: 5 business days cure period.",
+                  "scope": {
+                    "clause_id": "Section 10.01"
+                  },
+                  "value": {
+                    "unit": "business_days",
+                    "value": 5
+                  }
+                }
+              ]
+            },
+            "provider_response": {
+              "choices": [
+                {
+                  "finish_reason": "stop",
+                  "index": 0,
+                  "logprobs": null,
+                  "message": {
+                    "content": "{\"proposals\": [{\"entity\": \"Class B Notes\", \"predicate\": \"coupon_rate\", \"value\": {\"value\": 5.8, \"unit\": \"percent_per_annum\"}, \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"scope\": {\"tranche\": \"Class B\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-09867959bc5339071481d48e90f64a5cdae7c29e5c1d0bf3029eef8fa615dca1\"], \"quote\": \"Class B Notes ($40,000,000 initial principal) bear interest at 5.80% per annum.\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class B Notes\", \"value\": \"5.80% per annum\"}}, {\"entity\": \"Class B Notes\", \"predicate\": \"note_principal\", \"value\": {\"value\": 40000000, \"unit\": \"USD\"}, \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"scope\": {\"tranche\": \"Class B\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-09867959bc5339071481d48e90f64a5cdae7c29e5c1d0bf3029eef8fa615dca1\"], \"quote\": \"Class B Notes ($40,000,000 initial principal) bear interest at 5.80% per annum.\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class B Notes\", \"value\": \"$40,000,000 initial principal\"}}, {\"entity\": \"Class B Notes\", \"predicate\": \"waterfall_priority\", \"value\": \"mezzanine\", \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [{\"field\": \"sequential_paydown_active\", \"operator\": \"eq\", \"value\": true}], \"scope\": {\"tranche\": \"Class B\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-09867959bc5339071481d48e90f64a5cdae7c29e5c1d0bf3029eef8fa615dca1\"], \"quote\": \"Section 5.01(a) Waterfall: Step 11 Class B principal; Step 12 Reserve Account replenishment.\", \"condition_status\": \"conditional\", \"field_evidence\": {\"entity\": \"Class B Notes\", \"value\": \"Step 11 Class B principal\", \"conditions\": \"Step 11\"}}, {\"entity\": \"Meridian Auto Receivables Trust 2026-1\", \"predicate\": \"cure_period\", \"value\": {\"value\": 5, \"unit\": \"business_days\"}, \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [{\"field\": \"breach_type\", \"operator\": \"eq\", \"value\": \"payment\"}], \"scope\": {\"clause_id\": \"Section 10.01\"}, \"basis\": \"explicit\", \"evidence\": [\"ev-09867959bc5339071481d48e90f64a5cdae7c29e5c1d0bf3029eef8fa615dca1\"], \"quote\": \"Section 10.01 Grace Period: 5 business days cure period.\", \"condition_status\": \"conditional\", \"field_evidence\": {\"entity\": \"Meridian Auto Receivables Trust 2026-1\", \"value\": \"5 business days cure period\", \"conditions\": \"Grace Period\"}}]}",
+                    "refusal": null,
+                    "role": "assistant"
+                  }
+                }
+              ],
+              "created": 1794753505,
+              "id": "chatcmpl-5b2fb9e2-e3be-4925-9456-20b7e8703f7c",
+              "model": "nvidia/nemotron-3-ultra-550b-a55b",
+              "object": "chat.completion",
+              "usage": {
+                "completion_tokens": 920,
+                "completion_tokens_details": {
+                  "reasoning_tokens": 0
+                },
+                "prompt_tokens": 3203,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                },
+                "total_tokens": 4123
+              }
+            },
+            "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+            "transport_attempts": [
+              {
+                "attempt": 1,
+                "status": "success"
+              }
+            ],
+            "usage": {
+              "completion_tokens": 920,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "prompt_tokens": 3203,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 4123
+            }
+          },
+          "window": "0+1"
+        }
+      ],
+      "errors": []
+    },
+    "meridian-2026-1-draft-oc.docx": {
+      "revision": "33666b7d6e9663e39356f15e0fccdcc9bff981e29b419734dc783c11d5914a2a",
+      "raw_proposals": [
+        {
+          "assertion_kind": "fact",
+          "basis": "explicit",
+          "condition_status": "unconditional",
+          "conditions": [],
+          "entity": "Class B Notes",
+          "evidence": [
+            "ev-9214bddb649d0ff2fda23c26c06d09522284ccb4bb2b7bc0b258907c22ea4660"
+          ],
+          "field_evidence": {
+            "conditions": "",
+            "entity": "Class B Notes",
+            "value": "5.55% per annum"
+          },
+          "polarity": "affirmed",
+          "predicate": "coupon_rate",
+          "quote": "Class B Notes bear interest at 5.55% per annum.",
+          "scope": {
+            "tranche": "Class B"
+          },
+          "valid_from": null,
+          "valid_until": null,
+          "value": {
+            "unit": "percent_per_annum",
+            "value": 5.55
+          }
+        }
+      ],
+      "calls": [
+        {
+          "response": {
+            "output": {
+              "proposals": [
+                {
+                  "assertion_kind": "fact",
+                  "basis": "explicit",
+                  "condition_status": "unconditional",
+                  "conditions": [],
+                  "entity": "Class B Notes",
+                  "evidence": [
+                    "ev-9214bddb649d0ff2fda23c26c06d09522284ccb4bb2b7bc0b258907c22ea4660"
+                  ],
+                  "field_evidence": {
+                    "conditions": "",
+                    "entity": "Class B Notes",
+                    "value": "5.55% per annum"
+                  },
+                  "polarity": "affirmed",
+                  "predicate": "coupon_rate",
+                  "quote": "Class B Notes bear interest at 5.55% per annum.",
+                  "scope": {
+                    "tranche": "Class B"
+                  },
+                  "valid_from": null,
+                  "valid_until": null,
+                  "value": {
+                    "unit": "percent_per_annum",
+                    "value": 5.55
+                  }
+                }
+              ]
+            },
+            "provider_response": {
+              "choices": [
+                {
+                  "finish_reason": "stop",
+                  "index": 0,
+                  "logprobs": null,
+                  "message": {
+                    "content": "{\"proposals\": [{\"entity\": \"Class B Notes\", \"predicate\": \"coupon_rate\", \"value\": {\"value\": 5.55, \"unit\": \"percent_per_annum\"}, \"polarity\": \"affirmed\", \"assertion_kind\": \"fact\", \"conditions\": [], \"scope\": {\"tranche\": \"Class B\"}, \"valid_from\": null, \"valid_until\": null, \"basis\": \"explicit\", \"evidence\": [\"ev-9214bddb649d0ff2fda23c26c06d09522284ccb4bb2b7bc0b258907c22ea4660\"], \"quote\": \"Class B Notes bear interest at 5.55% per annum.\", \"condition_status\": \"unconditional\", \"field_evidence\": {\"entity\": \"Class B Notes\", \"value\": \"5.55% per annum\", \"conditions\": \"\"}}]}",
+                    "refusal": null,
+                    "role": "assistant"
+                  }
+                }
+              ],
+              "created": 1794753528,
+              "id": "chatcmpl-acfa0d72-b939-4323-a5fa-d50f32a38104",
+              "model": "nvidia/nemotron-3-ultra-550b-a55b",
+              "object": "chat.completion",
+              "usage": {
+                "completion_tokens": 225,
+                "completion_tokens_details": {
+                  "reasoning_tokens": 0
+                },
+                "prompt_tokens": 3138,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                },
+                "total_tokens": 3363
+              }
+            },
+            "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+            "transport_attempts": [
+              {
+                "attempt": 1,
+                "status": "success"
+              }
+            ],
+            "usage": {
+              "completion_tokens": 225,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "prompt_tokens": 3138,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 3363
+            }
+          },
+          "window": "0+1"
+        }
+      ],
+      "errors": []
+    }
+  }
+}

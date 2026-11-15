@@ -607,6 +607,30 @@ class EvidenceLayer:
         return tuple(out)
 
     @property
+    def document_read_statuses(self) -> dict[str, dict[str, Any]]:
+        """Per-document read status: 'read_ok', 'read_failed' (with errors), or 'not_read'."""
+        status_by_id = {name: st for name, _, st in self.store.heads('doc_read_status') if st}
+        out: dict[str, dict[str, Any]] = {}
+        for doc in self.documents:
+            st = status_by_id.get(doc.document_id)
+            errs = list(st.get('errors') or ()) if st else []
+            unread = True if st is None else bool(st.get('unread'))
+            if errs:
+                state = 'read_failed'
+            elif unread:
+                state = 'not_read'
+            else:
+                state = 'read_ok'
+            out[doc.document_id] = {
+                'document_id': doc.document_id,
+                'revision': doc.revision,
+                'authority_rank': int(doc.authority_rank),
+                'status': state,
+                'errors': errs,
+            }
+        return out
+
+    @property
     def field_evidences(self) -> dict[str, dict[str, dict[str, Any]]]:
         return {uid: rec for uid, _, rec in self.store.heads('field_evidence') if rec}
 
@@ -784,6 +808,9 @@ class EvidenceLayer:
         except (ValueError, TypeError, KeyError) as exc:
             return self._reject(proposal, basis, producer, {'reason': 'evidence_binding', 'path': 'evidence',
                                                             'detail': str(exc)}, summary)
+        _, existing = self.store.head('unit', unit.unit_id)
+        if existing is not None and canonical(existing) == canonical(unit.record()):
+            return unit.unit_id
         self.store.put('unit', unit.unit_id, unit.record(), head=unit.unit_id)
         summary['units_admitted'] += 1
         return unit.unit_id

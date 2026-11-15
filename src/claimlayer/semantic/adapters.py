@@ -76,7 +76,16 @@ VERIFIER_CONTEXT_ID_PROMPT = VERIFIER_ID_PROMPT.replace(
 )
 
 
-def _json_object(raw: str) -> dict[str, Any]:
+def _json_object(raw: str, *, allow_code_fence: bool = False) -> dict[str, Any]:
+    text = raw.strip()
+    if allow_code_fence and text.startswith('```'):
+        lines = text.splitlines()
+        if lines and lines[0].startswith('```'):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == '```':
+            lines = lines[:-1]
+        text = '\n'.join(lines).strip()
+
     def pairs(items):
         out = {}
         for key, value in items:
@@ -84,7 +93,7 @@ def _json_object(raw: str) -> dict[str, Any]:
                 raise ValueError('Duplicate JSON field')
             out[key] = value
         return out
-    value = json.loads(raw, object_pairs_hook=pairs, parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Nonfinite JSON')))
+    value = json.loads(text, object_pairs_hook=pairs, parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Nonfinite JSON')))
     if type(value) is not dict:
         raise ValueError('Model must return a JSON object')
     return value
@@ -100,6 +109,7 @@ class OpenAICompatibleModel:
     max_tokens: int = 4096
     retries: int = 1
     extra_body: Mapping[str, Any] = field(default_factory=dict)
+    response_format: Mapping[str, Any] | None = field(default_factory=lambda: {'type': 'json_object'})
 
     def __post_init__(self):
         url = urlsplit(self.base_url)
@@ -107,8 +117,8 @@ class OpenAICompatibleModel:
             raise ValueError('Use an HTTP(S) base URL without credentials or query parameters')
         if not 0 < self.timeout <= 600 or not 0 <= self.retries <= 3 or not 1 <= self.max_tokens <= 32768:
             raise ValueError('Invalid request limits')
-        if set(self.extra_body) - {'chat_template_kwargs'}:
-            raise ValueError('Only chat_template_kwargs are allowed in extra_body')
+        if set(self.extra_body) - {'chat_template_kwargs', 'reasoning_effort'}:
+            raise ValueError('Only chat_template_kwargs and reasoning_effort are allowed in extra_body')
 
     @property
     def identity(self):
@@ -117,10 +127,16 @@ class OpenAICompatibleModel:
                                'extra_body': dict(self.extra_body)}}
 
     def complete(self, system: str, payload: Mapping[str, Any]):
-        body = {'model': self.model, 'temperature': 0, 'max_tokens': self.max_tokens,
-                'response_format': {'type': 'json_object'},
-                'messages': [{'role': 'system', 'content': system},
-                             {'role': 'user', 'content': canonical(payload)}], **dict(self.extra_body)}
+        body: dict[str, Any] = {
+            'model': self.model,
+            'temperature': 0,
+            'max_tokens': self.max_tokens,
+            'messages': [{'role': 'system', 'content': system},
+                         {'role': 'user', 'content': canonical(payload)}],
+            **dict(self.extra_body),
+        }
+        if self.response_format is not None:
+            body['response_format'] = dict(self.response_format)
         request = Request(self.base_url.rstrip('/') + '/chat/completions',
                           data=canonical(body).encode(), method='POST',
                           headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + self.api_key})
@@ -136,7 +152,7 @@ class OpenAICompatibleModel:
                 choices = raw.get('choices', [])
                 if len(choices) != 1 or choices[0].get('finish_reason') != 'stop':
                     raise ValueError('Missing or truncated model response')
-                parsed = _json_object(choices[0]['message']['content'])
+                parsed = _json_object(choices[0]['message']['content'], allow_code_fence=self.response_format is None)
                 return {'output': parsed, 'usage': raw.get('usage', {}),
                         'response_model': raw.get('model'), 'provider_response': raw,
                         'transport_attempts': attempts + [{'attempt': attempt + 1, 'status': 'success'}]}

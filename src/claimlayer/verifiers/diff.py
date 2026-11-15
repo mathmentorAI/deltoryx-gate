@@ -61,6 +61,8 @@ class SectionDivergence:
     primary_quantities: tuple[str, ...]
     secondary_quantities: tuple[str, ...]
     reason: str
+    primary_span: tuple[int, int] | None = None
+    secondary_span: tuple[int, int] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -73,6 +75,8 @@ class _ParsedSection:
     title_key: str
     body: str
     body_without_header: str
+    start: int = 0
+    end: int = 0
 
 
 def _strip_leading_header_id(text: str, sec_id: str) -> str:
@@ -181,6 +185,8 @@ def _split_into_sections(text: str) -> dict[str, _ParsedSection]:
             title_key=title_key,
             body=body,
             body_without_header=body_no_hdr,
+            start=start,
+            end=end,
         )
         # If duplicate key appears, keep the longer substantive section (never overwrite with short reference)
         existing = sections.get(key)
@@ -229,6 +235,8 @@ def extract_divergent_sections(
                     reason=(
                         f"Unsegmented document divergence between '{primary.id}' and '{secondary.id}'."
                     ),
+                    primary_span=(0, len(primary.text)),
+                    secondary_span=(0, len(secondary.text)),
                 )
             )
         return divergences
@@ -267,6 +275,8 @@ def extract_divergent_sections(
                     primary_quantities=tuple(sorted(p_quants)),
                     secondary_quantities=(),
                     reason=f"Section '{p_sec.label}' present in '{primary.id}' is missing from '{secondary.id}'.",
+                    primary_span=(p_sec.start, p_sec.end),
+                    secondary_span=None,
                 )
             )
             continue
@@ -285,6 +295,8 @@ def extract_divergent_sections(
                         f"Quantitative divergence in '{p_sec.label}': "
                         f"{primary.id}={sorted(p_quants)} vs {secondary.id}={sorted(s_quants)}."
                     ),
+                    primary_span=(p_sec.start, p_sec.end),
+                    secondary_span=(s_sec.start, s_sec.end),
                 )
             )
         elif normalize_key(p_sec.body_without_header) != normalize_key(s_sec.body_without_header):
@@ -297,6 +309,8 @@ def extract_divergent_sections(
                     primary_quantities=tuple(sorted(p_quants)),
                     secondary_quantities=tuple(sorted(s_quants)),
                     reason=f"Textual/structural divergence in '{p_sec.label}' between '{primary.id}' and '{secondary.id}'.",
+                    primary_span=(p_sec.start, p_sec.end),
+                    secondary_span=(s_sec.start, s_sec.end),
                 )
             )
 
@@ -317,6 +331,8 @@ def extract_divergent_sections(
                 reason=(
                     f"Section '{s_sec.label}' added in '{secondary.id}' is absent from governing '{primary.id}'."
                 ),
+                primary_span=None,
+                secondary_span=(s_sec.start, s_sec.end),
             )
         )
 

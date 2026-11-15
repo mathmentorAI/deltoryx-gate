@@ -326,8 +326,164 @@ def test_07_omitted_assumptions_and_damages_rejected_then_accepted_with_escalate
     assert "OMITTED_DERIVATION_ASSUMPTIONS" in bad_codes
     assert "UNQUALIFIED_DAMAGES_OR_CASHFLOW_CLAIM" in bad_codes
 
-    # Repaired candidate explicitly qualifies assumptions -> ACCEPT report, ESCALATE execution auth!
-    good_candidate = _make_valid_synthetic_candidate()
+    # Repaired candidate explicitly qualifies assumptions + full graph -> ACCEPT report, ESCALATE execution auth!
+    ind_id = "cart-2024-2-indenture.docx"
+    om_id = "cart-2024-2-offering-memorandum.docx"
+    eml_id = "associate-review-email.eml"
+    ind_txt = corpus.v4_sources[ind_id].text
+    om_txt = corpus.v4_sources[om_id].text
+    eml_txt = corpus.v4_sources[eml_id].text
+    q_a = "The Class A Notes bear interest at 5.10% per annum"
+    q_b = "Class B Notes at 5.95% per annum"
+    q_prin = "Class C Notes ($50,000,000 principal)"
+    q_spread = "Class C 25 bps coupon gap ($125,000/yr)"
+    q_c_ind = "Class C Notes ($50,000,000 principal) bear interest at 6.75% per annum"
+    q_c_om = "Class C Notes ($50,000,000 principal) 6.50% per annum"
+    q_wf = "Step 13 Reserve Account Replenishment (junior to Class B and Class C principal)"
+    q_wf_om = "Step 6/10 Reserve Account Replenishment (placed senior/ahead of Class B and Class C principal)"
+    q_gp = "Failure to pay interest continuing for 5 business days constitutes an Event of Default."
+    q_gp_om = "5 calendar days (or 3 business days) cure period variant."
+    q_cc = "Servicer may redeem Notes when Pool Balance falls to 10% of Initial Pool Balance."
+    q_cc_om = "Servicer may redeem Notes when Pool Balance falls to 15% of Initial Pool Balance."
+    full_graph = JustificationGraph(
+        claims={
+            "c_a": ClaimNode(
+                "c_a",
+                "extraction",
+                "Class A Notes",
+                "coupon_rate",
+                5.10,
+                "percent_per_annum",
+                evidence=({"document_id": ind_id, "start": ind_txt.index(q_a), "end": ind_txt.index(q_a) + len(q_a), "quote": q_a},),
+            ),
+            "c_b": ClaimNode(
+                "c_b",
+                "extraction",
+                "Class B Notes",
+                "coupon_rate",
+                5.95,
+                "percent_per_annum",
+                evidence=({"document_id": ind_id, "start": ind_txt.index(q_b), "end": ind_txt.index(q_b) + len(q_b) + 0, "quote": q_b},),
+            ),
+            "c_prin": ClaimNode(
+                "c_prin",
+                "extraction",
+                "Class C Notes",
+                "note_principal",
+                50000000,
+                "USD",
+                evidence=({"document_id": ind_id, "start": ind_txt.index(q_prin), "end": ind_txt.index(q_prin) + len(q_prin), "quote": q_prin},),
+            ),
+            "c_spread": ClaimNode(
+                "c_spread",
+                "extraction",
+                "Class C Notes",
+                "coupon_gap",
+                25,
+                "basis_point",
+                evidence=({"document_id": eml_id, "start": eml_txt.index(q_spread), "end": eml_txt.index(q_spread) + len(q_spread), "quote": q_spread},),
+            ),
+            "c_impact": ClaimNode(
+                "c_impact",
+                "derivation",
+                "Class C Notes",
+                "annual_interest_impact",
+                125000,
+                "USD_per_year",
+                assumptions=("constant_principal", "simple_annual_calculation"),
+            ),
+            "c_coup_ind": ClaimNode(
+                "c_coup_ind",
+                "extraction",
+                "Class C Notes",
+                "coupon_rate",
+                6.75,
+                "percent_per_annum",
+                evidence=({"document_id": ind_id, "start": ind_txt.index(q_c_ind), "end": ind_txt.index(q_c_ind) + len(q_c_ind), "quote": q_c_ind},),
+            ),
+            "c_coup_om": ClaimNode(
+                "c_coup_om",
+                "extraction",
+                "Class C Notes",
+                "coupon_rate",
+                6.50,
+                "percent_per_annum",
+                evidence=({"document_id": om_id, "start": om_txt.index(q_c_om), "end": om_txt.index(q_c_om) + len(q_c_om), "quote": q_c_om},),
+            ),
+            "c_wf": ClaimNode(
+                "c_wf",
+                "extraction",
+                "Waterfall",
+                "waterfall_step",
+                "Step 13",
+                evidence=({"document_id": ind_id, "start": ind_txt.index(q_wf), "end": ind_txt.index(q_wf) + len(q_wf), "quote": q_wf},),
+            ),
+            "c_wf_om": ClaimNode(
+                "c_wf_om",
+                "extraction",
+                "Waterfall",
+                "waterfall_step",
+                "Step 6/10",
+                evidence=({"document_id": om_id, "start": om_txt.index(q_wf_om), "end": om_txt.index(q_wf_om) + len(q_wf_om), "quote": q_wf_om},),
+            ),
+            "c_gp": ClaimNode(
+                "c_gp",
+                "extraction",
+                "Grace Period",
+                "grace_period",
+                5,
+                "business_days",
+                evidence=({"document_id": ind_id, "start": ind_txt.index(q_gp), "end": ind_txt.index(q_gp) + len(q_gp), "quote": q_gp},),
+            ),
+            "c_gp_om_cal": ClaimNode(
+                "c_gp_om_cal",
+                "extraction",
+                "Grace Period",
+                "grace_period",
+                5,
+                "calendar_days",
+                evidence=({"document_id": om_id, "start": om_txt.index(q_gp_om), "end": om_txt.index(q_gp_om) + len(q_gp_om), "quote": q_gp_om},),
+            ),
+            "c_gp_om_bd": ClaimNode(
+                "c_gp_om_bd",
+                "extraction",
+                "Grace Period",
+                "grace_period",
+                3,
+                "business_days",
+                evidence=({"document_id": om_id, "start": om_txt.index(q_gp_om), "end": om_txt.index(q_gp_om) + len(q_gp_om), "quote": q_gp_om},),
+            ),
+            "c_cc": ClaimNode(
+                "c_cc",
+                "extraction",
+                "Clean-Up Call",
+                "cleanup_call_threshold",
+                10,
+                "percent",
+                evidence=({"document_id": ind_id, "start": ind_txt.index(q_cc), "end": ind_txt.index(q_cc) + len(q_cc), "quote": q_cc},),
+            ),
+            "c_cc_om": ClaimNode(
+                "c_cc_om",
+                "extraction",
+                "Clean-Up Call",
+                "cleanup_call_threshold",
+                15,
+                "percent",
+                evidence=({"document_id": om_id, "start": om_txt.index(q_cc_om), "end": om_txt.index(q_cc_om) + len(q_cc_om), "quote": q_cc_om},),
+            ),
+        },
+        steps=(
+            InferenceStep(
+                step_id="s1",
+                premises=("c_prin", "c_spread"),
+                conclusion_id="c_impact",
+                operation="multiply",
+                assumptions=("constant_principal", "simple_annual_calculation"),
+            ),
+        ),
+        conclusion_id="c_impact",
+    )
+    good_candidate = _make_valid_synthetic_candidate(graph=full_graph)
     good_res = evaluate_securitization_candidate(good_candidate, corpus, gate_mode="v3_v4")
     assert good_res.report_disposition == "ACCEPT"
     assert good_res.accepted is True

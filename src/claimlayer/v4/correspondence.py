@@ -231,10 +231,14 @@ _ATTRIB_SOURCE_NOUN = (
     r"(?:(?:el|la|los|las|este|esta|dicho|dicha|lo|the|supplied|provided|given|present)\s+)*"
     r"(?:textos?|pasajes?|documentos?|extractos?|fragmentos?|fuentes?|evidencias?|"
     r"facturas?|datos|informaci[oó]n|relatos?|aportad[oa]s?|facilitad[oa]s?|"
-    r"proporcionad[oa]s?|suministrad[oa]s?|passages?|texts?|documents?|excerpts?|sources?|evidence)"
+    r"proporcionad[oa]s?|suministrad[oa]s?|passages?|texts?|documents?|excerpts?|sources?|evidence|"
+    r"indenture|memorandum|offering\s+memorandum|agreement|contract|deed|filing|section|record|"
+    r"draft|email|schedule|escritura|contrato|memorando|anexo|secci[oó]n)"
 )
 _SOURCE_ATTRIBUTION_RE = re.compile(
     rf"\b(?:{_ATTRIB_PREP}\s+{_ATTRIB_SOURCE_NOUN}|"
+    r"in\s+(?:the\s+|draft\s+)?(?:indenture|offering\s+memorandum|om|memorandum|associate\s+email|email|section|excerpt|document|source)|"
+    r"(?:indenture|offering\s+memorandum|om|document|source)\s+(?:states?|indicates?|provides?|governs?)|"
     r"no\s+se\s+ha\s+comprobado.*externamente)\b",
     re.IGNORECASE,
 )
@@ -451,6 +455,9 @@ _EPISTEMIC_META_TOKENS = frozenset({
     "birth", "birthday", "granularity", "partial", "partially", "day", "days", "month", "months",
     "year", "years", "missing", "lacking", "calculation", "formula", "equation", "result",
     "value", "figure", "single", "unique", "possible", "impossible", "necessarily", "subtotal",
+    "govern", "governs", "governing", "rank", "executed", "states", "versus", "correcting",
+    "erroneously", "understatement", "overstatement", "comprehensive", "report", "puts",
+    "non", "existent", "part", "over",
     "total", "sum", "items", "listed", "included", "population", "condition", "exception",
     "subject", "conditional", "contingent", "conflict", "contradiction", "discrepancy",
     "divergent", "unresolved", "inconclusive", "combined", "answer", "question", "today", "now", "currently",
@@ -562,7 +569,7 @@ def _to_dec(raw: Any) -> Decimal | None:
 def _split_clauses(text: str) -> list[str]:
     norm = _UNICODE_MINUS_RE.sub("-", text or "")
     parts = re.split(
-        r"(?:[.;!?\n]+|,\s*(?=(?:por tanto|por lo tanto|as[ií] que|pero|sin embargo|no obstante|therefore|hence|thus|so|however|but)\b))",
+        r"(?:(?:(?<!\d)\.(?!\d)|[;!?\n]+)+|,\s*(?=(?:por tanto|por lo tanto|as[ií] que|pero|sin embargo|no obstante|therefore|hence|thus|so|however|but)\b))",
         norm,
     )
     return [p.strip() for p in parts if p and p.strip()]
@@ -687,7 +694,7 @@ _EQUATION_UNIT_RE = re.compile(
     re.IGNORECASE,
 )
 _EQUATION_PROSE_LEAD_SPLIT_RE = re.compile(
-    r"(?:\b(?:es|son|da|resulta|equivale\s+a|ser[ií]a|is|equals|gives|como|where|donde)\b|[:;,])",
+    r"(?:\b(?:es|son|da|resulta|equivale\s+a|ser[ií]a|is|equals|gives|como|where|donde)\b|[:;]|,(?!\d))",
     re.IGNORECASE,
 )
 _EQUATION_RHS_EXPR_RE = re.compile(
@@ -1251,6 +1258,10 @@ def _build_grounding_lexicon(
 
     for doc in (documents or {}).values():
         _add_words(doc.text, from_doc_or_q=True)
+        _add_words(getattr(doc, "document_id", None), from_doc_or_q=True)
+        rank = getattr(doc, "authority_rank", None)
+        if rank is not None:
+            _add_words(str(rank), from_doc_or_q=True)
     if q_text:
         _add_words(q_text, from_doc_or_q=True)
 
@@ -1270,7 +1281,7 @@ def _build_grounding_lexicon(
         "revenue": ("ingreso", "ingresos", "revenue"),
         "combined_revenue": ("ingreso", "ingresos", "combinado", "revenue"),
     }
-    for nid in [conc_id, *sorted(anc_ids)]:
+    for nid in list(dict.fromkeys([conc_id, *sorted(anc_ids), *sorted(graph.claims.keys())])):
         if nid not in graph.claims:
             continue
         node = graph.claims[nid]
@@ -1460,10 +1471,13 @@ def build_supported_graph_relations(
             cand = graph.claims[nid]
             if cand.structural_reliability is not None and cand.structural_reliability < 0.5:
                 continue
-            if cand.evidence and all(
-                docs_map.get(ev.document_id) is None
-                or getattr(docs_map.get(ev.document_id), "attribution", None) == "source_statement"
-                for ev in cand.evidence
+            if cand.evidence and (
+                cand.kind == "extraction"
+                or all(
+                    docs_map.get(ev.document_id) is None
+                    or getattr(docs_map.get(ev.document_id), "attribution", None) == "source_statement"
+                    for ev in cand.evidence
+                )
             ):
                 node_ids.append(nid)
                 seen_ids.add(nid)
@@ -1621,6 +1635,13 @@ def _units_compatible(obs_unit: str | None, graph_unit: str | None, unit_registr
         return True
     # Allow annualized currency presentation vs currency (e.g. USD_per_year vs USD)
     if {o_canon, g_canon} == {"USD", "USD_per_year"}:
+        return True
+    # Allow annualized percent presentation vs percent (e.g. "5.80%" vs percent_per_annum),
+    # while keeping percentage_point vs percent strictly incompatible.
+    if {o_canon, g_canon} in (
+        {"percent", "percent_per_annum"},
+        {"basis_point", "basis_points_per_annum"},
+    ):
         return True
     # Explicitly forbid equating calendar days and business days
     if {o_canon, g_canon} == {"calendar_days", "business_days"}:
@@ -1852,6 +1873,13 @@ def _verify_subclause_relations(
 
     for seg in segments:
         seg_spans = _find_entity_spans(seg, partition_targets)
+        # If the first recognized entity span sits after a comma-separated numeric clause (e.g., an unrecognized sibling entity),
+        # do not backward-bind the earlier clause's number to this later entity.
+        if len(seg_spans) == 1 and seg_spans[0][0] > 0:
+            before_ent = seg[: seg_spans[0][0]]
+            if "," in before_ent and _NUMBER_TOKEN_RE.search(before_ent):
+                seg = seg[seg_spans[0][0] :].strip()
+                seg_spans = _find_entity_spans(seg, partition_targets)
         seg_matched_ents = list(dict.fromkeys(ent for _, _, ent in seg_spans))
         specific_matched = [e for e in seg_matched_ents if e in specific_subjects]
         if len(specific_matched) == 1:
@@ -1893,6 +1921,13 @@ def _verify_subclause_relations(
         num_entries: list[tuple[int, int, Decimal, str, str | None]] = []
         for m_n in _NUMBER_TOKEN_RE.finditer(seg):
             if any(rs <= m_n.start() and m_n.end() <= re_ for rs, re_, *_ in range_entries):
+                continue
+            prefix_ctx = seg[max(0, m_n.start() - 28):m_n.start()]
+            if re.search(
+                r"(?:\b(?:section|sec\.?|article|art\.?|clause|step|steps|rank|secci[oó]n|art[ií]culo|cl[aá]usula|paso|pasos|rango)\s*$|\b(?:steps?|pasos?)\s+\d+\s*(?:,|and|y)\s*$)",
+                prefix_ctx,
+                re.IGNORECASE,
+            ):
                 continue
             d_val = _to_dec(m_n.group(1))
             if d_val is None:
@@ -2308,11 +2343,20 @@ def _clause_binds_to_graph_claim(
     *,
     role: str,
     has_material_conflict: bool,
+    doc_q_exact: set[str] | frozenset[str] = (),
 ) -> tuple[bool, str | None]:
     """Verify every non-formula/non-disclaimer clause binds to a verified graph claim or marked opinion."""
     if role in ("formula", "disclaimer"):
         return True, None
     if role == "conflict_disclosure" and has_material_conflict:
+        return True, None
+    if not cl_nums and all(
+        _norm_token(tok) in _FUNCTION_WORDS
+        or _norm_token(tok) in _EPISTEMIC_META_TOKENS
+        or _norm_token(tok) in doc_q_exact
+        or len(_norm_token(tok)) < 3
+        for tok in re.findall(r"[A-Za-zÀ-ÿ]+", sub_cl)
+    ):
         return True, None
 
     low = sub_cl.lower()
@@ -2512,6 +2556,7 @@ def _decompose_and_verify_clauses(
                     graph,
                     role=role,
                     has_material_conflict=has_material_conflict,
+                    doc_q_exact=exact_lex,
                 )
                 if not bound_ok:
                     is_grounded = False
@@ -2613,6 +2658,13 @@ def verify_response_graph_correspondence(
     known_doc_nums: set[Decimal] = set()
     for doc in (documents or {}).values():
         known_doc_nums.update(_extract_clause_numbers(doc.text))
+        if getattr(doc, "authority_rank", None) is not None:
+            known_doc_nums.add(Decimal(doc.authority_rank))
+        for m_rng in re.finditer(r"\b(\d{1,2})\s*[-–]\s*(\d{1,2})\b", doc.text):
+            lo_i, hi_i = int(m_rng.group(1)), int(m_rng.group(2))
+            if 1 <= lo_i < hi_i <= 50 and (hi_i - lo_i) <= 10:
+                for step_n in range(lo_i, hi_i + 1):
+                    known_doc_nums.add(Decimal(step_n))
     if q_text:
         known_doc_nums.update(_extract_clause_numbers(q_text))
     for node in anc_nodes + [conc]:
@@ -2731,10 +2783,20 @@ def verify_response_graph_correspondence(
             for doc in (documents or {}).values():
                 doc_words = re.findall(r"[A-Za-zÀ-ÿ]{3,}", doc.text)
                 allowed_cap_words.update(w.lower() for w in doc_words)
+                doc_id_words = re.findall(r"[A-Za-zÀ-ÿ]{3,}", str(getattr(doc, "document_id", "") or ""))
+                allowed_cap_words.update(w.lower() for w in doc_id_words)
                 for m_d in re.finditer(r"\b([A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,})\b", doc.text):
                     w_low = m_d.group(1).lower()
                     if w_low not in _COMMON_STOPWORDS and w_low not in subj_tokens and w_low not in unit_words_low:
                         other_doc_entities.add(w_low)
+            for gnode in graph.claims.values():
+                for src_txt in (
+                    str(getattr(gnode, "subject", "") or ""),
+                    str(getattr(gnode, "predicate", "") or "").replace("_", " "),
+                    *(str(getattr(ev, "quote", "") or "") for ev in (getattr(gnode, "evidence", ()) or ())),
+                ):
+                    allowed_cap_words.update(w.lower() for w in re.findall(r"[A-Za-zÀ-ÿ]{3,}", src_txt))
+            allowed_cap_words.update(_EPISTEMIC_META_TOKENS)
             if q_text:
                 allowed_cap_words.update(w.lower() for w in re.findall(r"[A-Za-zÀ-ÿ]{3,}", q_text))
             allowed_cap_words.update(_COMMON_STOPWORDS)
@@ -2797,6 +2859,16 @@ def verify_response_graph_correspondence(
             if any(abs(an - tv) <= Decimal("0.01") for an in asserted_nums):
                 matched_graph_val = True
                 break
+        if not matched_graph_val and equation_checks:
+            for tv in target_vals_to_match:
+                if any(
+                    ec.status == "verified"
+                    and ec.rhs_value is not None
+                    and abs(ec.rhs_value - tv) <= Decimal("0.01")
+                    for ec in equation_checks
+                ):
+                    matched_graph_val = True
+                    break
         if conc_interval is not None and ranges_in_text:
             for r_lo, r_hi in ranges_in_text:
                 if abs(r_lo - conc_interval[0]) <= Decimal("0.01") and abs(r_hi - conc_interval[1]) <= Decimal("0.01"):
@@ -2950,7 +3022,11 @@ def verify_response_graph_correspondence(
             existing_issue_keys.add(k)
             issues.append(ci)
 
-    doc_and_q_text = " ".join([d.text for d in (documents or {}).values()] + ([q_text] if q_text else []))
+    doc_and_q_text = " ".join(
+        [d.text for d in (documents or {}).values()]
+        + [str(getattr(d, "document_id", "") or "") for d in (documents or {}).values()]
+        + ([q_text] if q_text else [])
+    )
     doc_dates = set(_YEAR_OR_DATE_TOKEN_RE.findall(doc_and_q_text))
     resp_dates = set(_YEAR_OR_DATE_TOKEN_RE.findall(text))
     invented_dates = sorted(

@@ -1292,6 +1292,26 @@ def _check_clause_proximity_binding(
     )
     comp_e_spans = decl_comp_e if decl_comp_e else (heur_comp_e if not e_spans else [])
 
+    val_unit = val.get("unit") if isinstance(val, Mapping) else None
+    val_dim: str | None = None
+    if isinstance(val_unit, str) and val_unit.strip():
+        try:
+            val_dim = units.dimension_of(val_unit)
+        except Exception:
+            val_dim = None
+    if cp_spans and vocabulary is not None and val_dim is not None:
+        filtered_cp: list[tuple[str, int, int]] = []
+        for cp_name, cs, ce in cp_spans:
+            try:
+                cp_spec = vocabulary.predicate(cp_name).value
+            except Exception:
+                cp_spec = None
+            if cp_spec is not None and cp_spec.type in {"quantity", "bound"} and cp_spec.dimensions:
+                if val_dim not in cp_spec.dimensions:
+                    continue
+            filtered_cp.append((cp_name, cs, ce))
+        cp_spans = filtered_cp
+
     for vs, ve in val_spans:
         pred_ok_here = True
         if cp_spans:
@@ -1480,7 +1500,7 @@ def _verify_text_relational_association(
         if has_other_clause_with_prop_pred and not cp_spans:
             # Elliptical continuation (e.g., "Acme cure period is 30 days and 15 days for IP breaches")
             return []
-        if not cp_spans and header_predicate_ok:
+        if not cp_spans and (header_predicate_ok or clause_ent_ok):
             return []
 
     return [
@@ -1703,8 +1723,9 @@ def verify_extraction_fidelity(
         except (TypeError, ValueError):
             num_val = None
         if num_val is not None:
-            has_dec = bool(_DECREASE_MARKER_RE.search(combined_sentence))
-            has_inc = bool(_INCREASE_MARKER_RE.search(combined_sentence))
+            sentence_for_dir = re.sub(r"\b(?:lower|less)\s+than\b", " ", combined_sentence, flags=re.IGNORECASE)
+            has_dec = bool(_DECREASE_MARKER_RE.search(sentence_for_dir))
+            has_inc = bool(_INCREASE_MARKER_RE.search(sentence_for_dir))
             if has_dec and not has_inc and num_val > 0 and "decrease" not in prop.get("predicate", "").lower():
                 findings.append(
                     FidelityFinding(

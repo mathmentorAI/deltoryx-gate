@@ -1028,6 +1028,24 @@ def evaluate_response(
                             step_results.append(registry.verify_obligation(ob, det_ctx))
 
                     for ob in sem_obs:
+                        if getattr(node, "kind", "") == "opinion" and len(step.premises) > 0:
+                            step_results.append(
+                                VerifierResult(
+                                    obligation_id=ob.obligation_id,
+                                    step_id=step.step_id,
+                                    family=ob.family,
+                                    status="verified",
+                                    guarantee_kind=(
+                                        "probabilistic_model"
+                                        if ob.family == "open_semantics"
+                                        else "deterministic_formal"
+                                    ),
+                                    reasons=("OPINION_WITH_PREMISES",),
+                                    verifier_id="opinion_premise_guard",
+                                    verifier_version="1.0.0",
+                                )
+                            )
+                            continue
                         can_call_sem = (
                             semantic_calls_used < active_budget.max_semantic_calls
                             and not _budget_time_exceeded()

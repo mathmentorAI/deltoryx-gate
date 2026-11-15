@@ -220,14 +220,12 @@ def build_corpus_reference_register(
                     continue
                 r1 = _unit_authority_rank(evidence, u1)
                 r2 = _unit_authority_rank(evidence, u2)
-                if r1 == r2:
-                    # (ii) Material conflict at equal authority rank
-                    has_conflicts = True
-                    pair_sorted = sorted([u1, u2], key=lambda u: str(u.unit_id))
-                    a_u, b_u = pair_sorted[0], pair_sorted[1]
-                    ob_id = f"corpus::conflict::{pred}::{digest([a_u.unit_id, b_u.unit_id])[:12]}"
-                    if ob_id in seen_ids:
-                        continue
+                # (ii) Material conflict for every incompatible pair on the same context_key
+                has_conflicts = True
+                pair_sorted = sorted([u1, u2], key=lambda u: str(u.unit_id))
+                a_u, b_u = pair_sorted[0], pair_sorted[1]
+                ob_id = f"corpus::conflict::{pred}::{digest([a_u.unit_id, b_u.unit_id])[:12]}"
+                if ob_id not in seen_ids:
                     seen_ids.add(ob_id)
                     obligations.append(
                         VerificationObligation(
@@ -263,7 +261,7 @@ def build_corpus_reference_register(
                             },
                         )
                     )
-                else:
+                if r1 != r2:
                     # (iii) Higher authority_rank overrides lower authority_rank
                     has_overrides = True
                     winner, loser = (u1, u2) if r1 > r2 else (u2, u1)

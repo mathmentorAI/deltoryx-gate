@@ -228,7 +228,8 @@ _ATTRIB_PREP = (
     r"|according\s+to|based\s+on|from|per|in\s+light\s+of|as\s+(?:stated|noted|indicated)\s+in)"
 )
 _ATTRIB_SOURCE_NOUN = (
-    r"(?:(?:el|la|los|las|este|esta|dicho|dicha|lo|the|supplied|provided|given|present)\s+)*"
+    r"(?:(?:el|la|los|las|este|esta|dicho|dicha|lo|the|supplied|provided|given|present|"
+    r"master|governing|executed|draft|primary|secondary|underlying)\s+)*"
     r"(?:textos?|pasajes?|documentos?|extractos?|fragmentos?|fuentes?|evidencias?|"
     r"facturas?|datos|informaci[oó]n|relatos?|aportad[oa]s?|facilitad[oa]s?|"
     r"proporcionad[oa]s?|suministrad[oa]s?|passages?|texts?|documents?|excerpts?|sources?|evidence|"
@@ -264,7 +265,8 @@ _UNQUALIFIED_TOTAL_RE = re.compile(
 _CONFLICT_DISCLOSURE_RE = re.compile(
     r"\b(conflicto|contradicci[oó]n|contradictorio|discrepancia|fuentes divergentes|"
     r"sin resolver|conflict|contradict|discrepancy|disagree|conflicting sources|"
-    r"divergent|inconclusive)\b",
+    r"divergent|inconclusive|governs?\s+over|whereas\b[^.;\n]{1,120}\b(?:states?|governs?)|"
+    r"mientras\s+que\b[^.;\n]{1,120}\b(?:indica|establece|prevalece))\b",
     re.IGNORECASE,
 )
 
@@ -1462,25 +1464,27 @@ def build_supported_graph_relations(
     conc_id = graph.conclusion_id
     anc_ids = graph.ancestor_claims(conc_id)
     node_ids = [conc_id, *sorted(aid for aid in anc_ids if aid != conc_id)]
-    if include_conflict_alternatives:
-        seen_ids = set(node_ids)
-        docs_map = documents or {}
-        for nid in sorted(graph.claims):
-            if nid in seen_ids:
-                continue
-            cand = graph.claims[nid]
-            if cand.structural_reliability is not None and cand.structural_reliability < 0.5:
-                continue
-            if cand.evidence and (
-                cand.kind == "extraction"
-                or all(
+    seen_ids = set(node_ids)
+    docs_map = documents or {}
+    for nid in sorted(graph.claims):
+        if nid in seen_ids:
+            continue
+        cand = graph.claims[nid]
+        if cand.structural_reliability is not None and cand.structural_reliability < 0.5:
+            continue
+        if cand.evidence and (
+            cand.kind == "extraction"
+            or (
+                include_conflict_alternatives
+                and all(
                     docs_map.get(ev.document_id) is None
                     or getattr(docs_map.get(ev.document_id), "attribution", None) == "source_statement"
                     for ev in cand.evidence
                 )
-            ):
-                node_ids.append(nid)
-                seen_ids.add(nid)
+            )
+        ):
+            node_ids.append(nid)
+            seen_ids.add(nid)
 
     # First pass: inspect temporal inference steps for anchor/reference years
     node_anchors: dict[str, int] = {}
@@ -2502,8 +2506,22 @@ def _decompose_and_verify_clauses(
             dedup_ungrounded = tuple(dict.fromkeys(ungrounded))
             is_grounded = len(dedup_ungrounded) == 0
 
+            # Marked interpretive opinions bound to a kind='opinion' claim with premises
+            # are explicitly permitted and do not require factual lexical grounding.
+            is_bound_opinion = False
+            if _OPINION_MARKER_RE.search(sub_cl):
+                op_ok, _ = _clause_binds_to_graph_claim(
+                    sub_cl,
+                    cl_nums,
+                    graph,
+                    role=role,
+                    has_material_conflict=has_material_conflict,
+                    doc_q_exact=exact_lex,
+                )
+                is_bound_opinion = op_ok
+
             # Flag ungrounded substantive non-numeric assertions (avoid noise on pure formulas/evasion)
-            if dedup_ungrounded and role != "formula":
+            if dedup_ungrounded and role != "formula" and not is_bound_opinion:
                 sem_verdict = "refuted"
                 if (
                     semantic_evaluator is not None

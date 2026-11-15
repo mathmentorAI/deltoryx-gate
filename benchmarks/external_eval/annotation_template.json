@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Blind human annotation template for external SEC EDGAR / corporate credit document pairs. Keep completed annotations OUTSIDE the repository.",
+  "annotator_id": "",
+  "annotated_at_utc": "",
+  "blind_to_model_outputs": true,
+  "corpora": {
+    "example_corpus_id_replace_me": {
+      "domain": "securitization | banking_finance",
+      "manifest_sha256": "",
+      "primary_source_id": "",
+      "secondary_source_id": "",
+      "conflicts": [
+        {
+          "conflict_id": "",
+          "conflict_kind": "numeric | priority_order | textual_scope | condition | ambiguity",
+          "predicate_hint": "",
+          "entity": "",
+          "primary_quote": "",
+          "primary_span": [0, 0],
+          "secondary_quote": "",
+          "secondary_span": [0, 0],
+          "primary_value": "",
+          "secondary_value": "",
+          "is_genuine_conflict": true,
+          "annotator_notes": ""
+        }
+      ],
+      "clean_controls": [
+        {
+          "control_id": "",
+          "primary_quote": "",
+          "secondary_quote": "",
+          "notes": "Confirmed equivalent / non-conflicting aligned clause (formatting or doc-id only differences allowed)."
+        }
+      ]
+    }
+  }
+}

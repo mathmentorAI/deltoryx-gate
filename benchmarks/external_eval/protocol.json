@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0.0",
+  "protocol_id": "claimlayer-v4-external-public-eval-v1",
+  "frozen_at": "2026-11-15T18:15:00Z",
+  "status": "frozen_before_external_evaluation",
+  "sources": {
+    "provider": "SEC EDGAR (data.sec.gov / www.sec.gov/Archives)",
+    "securitization_pairs": {
+      "description": "ABS/structured-finance Form 424B* prospectus supplement vs operative indenture/pooling-and-servicing agreement (EX-4.* / EX-99.*) filed in the same SEC submission or linked CIK shelf.",
+      "form_types": ["424B2", "424B5"],
+      "operative_exhibit_prefixes": ["EX-4.", "EX-10.", "EX-99."]
+    },
+    "corporate_credit_pairs": {
+      "description": "Public company Credit Agreement vs subsequent Amendment / Restated Credit Agreement filed under Form 8-K (Item 1.01) or Form 10-K/10-Q EX-10.* exhibits.",
+      "form_types": ["8-K", "10-K", "10-Q"],
+      "exhibit_prefixes": ["EX-10.", "EX-4."]
+    },
+    "provenance_requirements": {
+      "require_manifest_sha256": true,
+      "require_source_url": true,
+      "require_downloaded_utc": true,
+      "require_user_agent_header": true,
+      "no_repo_annotations": true
+    }
+  },
+  "corpus_selection_rules": {
+    "minimum_pairs_securitization": 2,
+    "minimum_pairs_credit": 2,
+    "max_excerpt_chars_per_doc": 24000,
+    "exclude_comparison_roles": [
+      "quantitative_financial_model",
+      "client_instructions_scope"
+    ],
+    "deterministic_tiebreak": "lexicographical_accession_number"
+  },
+  "reader_configuration": {
+    "strict_prompt_version": "v4-proposals-4",
+    "reread_prompt_version": "v4-reread-1",
+    "reread_config": {
+      "enabled": true,
+      "max_attempts_per_document": 3,
+      "max_total_attempts": 12
+    }
+  },
+  "metrics_and_thresholds": {
+    "confidence_interval_method": "wilson_score_two_sided_95",
+    "z_value": 1.959963984540054,
+    "primary_metrics": [
+      "reader_conflict_recall",
+      "leave_one_out_ablation_detection_rate",
+      "clean_corpus_false_gap_rate_per_sentence_check",
+      "clean_candidate_escalation_rate",
+      "textual_gap_rate_per_sentence_check"
+    ],
+    "acceptance_gates": {
+      "min_leave_one_out_ablation_point_estimate": 0.95,
+      "min_reader_conflict_recall_point_estimate": 0.85,
+      "max_clean_candidate_escalation_rate": 0.25
+    }
+  }
+}

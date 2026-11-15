@@ -8,12 +8,13 @@ automatically generating completeness predicates for Policy.required_predicates.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Any
 
 from claimlayer.models import Policy, Source, normalize_key
 from claimlayer.verifiers.quote_quantity import (
-    _normalize_pdf_ocr_with_map,
+    _normalize_pair_with_maps,
     extract_dates,
     extract_quantities,
 )
@@ -70,6 +71,30 @@ class SectionDivergence:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class SectionComparisonReport:
+    """Full comparison output including per-document character coverage and stripped PDF furniture."""
+
+    divergences: tuple[SectionDivergence, ...]
+    primary_coverage: float
+    secondary_coverage: float
+    primary_uncovered_spans: tuple[tuple[int, int], ...] = ()
+    secondary_uncovered_spans: tuple[tuple[int, int], ...] = ()
+    primary_excluded_furniture: tuple[dict[str, Any], ...] = ()
+    secondary_excluded_furniture: tuple[dict[str, Any], ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "divergences": [d.to_dict() for d in self.divergences],
+            "primary_coverage": self.primary_coverage,
+            "secondary_coverage": self.secondary_coverage,
+            "primary_uncovered_spans": [list(sp) for sp in self.primary_uncovered_spans],
+            "secondary_uncovered_spans": [list(sp) for sp in self.secondary_uncovered_spans],
+            "primary_excluded_furniture": [dict(x) for x in self.primary_excluded_furniture],
+            "secondary_excluded_furniture": [dict(x) for x in self.secondary_excluded_furniture],
+        }
 
 
 @dataclass(frozen=True)
@@ -170,34 +195,113 @@ def _split_into_sections(text: str) -> dict[str, _ParsedSection]:
         return {}
 
     candidates.sort(key=lambda item: item[0])
-    sections: dict[str, _ParsedSection] = {}
+    # Deduplicate overlapping start offsets while preserving section order.
+    dedup_candidates: list[tuple[int, int, str, str]] = []
+    for cand in candidates:
+        if dedup_candidates and cand[0] <= dedup_candidates[-1][0]:
+            continue
+        dedup_candidates.append(cand)
 
-    for idx, (start, _hdr_end, sec_id, raw_title) in enumerate(candidates):
-        end = candidates[idx + 1][0] if idx + 1 < len(candidates) else len(text)
+    sections: dict[str, _ParsedSection] = {}
+    occ_counts: dict[str, int] = {}
+
+    first_start = dedup_candidates[0][0]
+    if first_start > 0 and text[:first_start].strip():
+        pre_body = text[:first_start].strip()
+        sections["unsegmented_remainder"] = _ParsedSection(
+            key="unsegmented_remainder",
+            label="UNSEGMENTED_REMAINDER: Pre-Header Remainder",
+            title_key="unsegmented_remainder",
+            body=pre_body,
+            body_without_header=pre_body,
+            start=0,
+            end=first_start,
+        )
+
+    for idx, (start, _hdr_end, sec_id, raw_title) in enumerate(dedup_candidates):
+        cov_start = 0 if (idx == 0 and "unsegmented_remainder" not in sections) else start
+        end = dedup_candidates[idx + 1][0] if idx + 1 < len(dedup_candidates) else len(text)
         clean_id = re.sub(r"\s+", " ", sec_id.strip())
-        # Extract short title (up to first period if body follows on same line)
         short_title = raw_title.split(".")[0].strip() if "." in raw_title else raw_title.rstrip(".")
         label = f"{clean_id}: {short_title}" if short_title else clean_id
-        key = normalize_key(clean_id)
+        base_key = normalize_key(clean_id)
+        occ = occ_counts.get(base_key, 0) + 1
+        occ_counts[base_key] = occ
+        key = base_key if occ == 1 else f"{base_key}__occ{occ}"
         body = text[start:end].strip()
         body_no_hdr = _strip_leading_header_id(body, clean_id)
         title_key = normalize_key(short_title)
 
         parsed = _ParsedSection(
             key=key,
-            label=label,
+            label=label if occ == 1 else f"{label} (occurrence {occ})",
             title_key=title_key,
             body=body,
             body_without_header=body_no_hdr,
-            start=start,
+            start=cov_start,
             end=end,
         )
-        # If duplicate key appears, keep the longer substantive section (never overwrite with short reference)
-        existing = sections.get(key)
-        if existing is None or len(parsed.body) > len(existing.body):
-            sections[key] = parsed
+        sections[key] = parsed
 
     return sections
+
+
+def _compute_char_coverage(
+    text_len: int,
+    segments: Mapping[str, _ParsedSection],
+) -> tuple[float, tuple[tuple[int, int], ...]]:
+    """Compute fraction of `[0, text_len)` covered by *segments* and return any uncovered gaps."""
+    if text_len <= 0:
+        return 1.0, ()
+    if not segments:
+        return 0.0, ((0, text_len),)
+    intervals = sorted((max(0, min(text_len, seg.start)), max(0, min(text_len, seg.end))) for seg in segments.values())
+    merged: list[tuple[int, int]] = []
+    for s, e in intervals:
+        if e <= s:
+            continue
+        if not merged or s > merged[-1][1]:
+            merged.append((s, e))
+        else:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], e))
+    uncovered: list[tuple[int, int]] = []
+    cursor = 0
+    covered_len = 0
+    for s, e in merged:
+        if s > cursor:
+            uncovered.append((cursor, s))
+        covered_len += e - s
+        cursor = e
+    if cursor < text_len:
+        uncovered.append((cursor, text_len))
+    return covered_len / text_len, tuple(uncovered)
+
+
+def _partition_document_segments(
+    text: str,
+    *,
+    unsegmented_key: str = "document_body",
+    unsegmented_label: str = "Document Body (Unsegmented)",
+) -> tuple[dict[str, _ParsedSection], float, tuple[tuple[int, int], ...]]:
+    """Partition *text* so 100% of characters fall into a named section or residual block."""
+    if not text:
+        return {}, 1.0, ()
+    sections = _split_into_sections(text)
+    if not sections:
+        body = text.strip()
+        sections = {
+            unsegmented_key: _ParsedSection(
+                key=unsegmented_key,
+                label=unsegmented_label,
+                title_key=unsegmented_key,
+                body=body,
+                body_without_header=body,
+                start=0,
+                end=len(text),
+            )
+        }
+    cov, uncovered = _compute_char_coverage(len(text), sections)
+    return sections, cov, uncovered
 
 
 def _quantity_tokens(body: str) -> set[str]:
@@ -230,28 +334,93 @@ def _map_norm_span(
     return (mapped_s, max(mapped_s, mapped_e))
 
 
-def extract_divergent_sections(
+def extract_divergent_sections_with_coverage(
     primary: Source,
     secondary: Source,
-) -> list[SectionDivergence]:
-    """Identify sections where *secondary* diverges quantitatively, structurally, or adds/omits provisions."""
-    p_norm, p_starts, p_ends = _normalize_pdf_ocr_with_map(primary.text, base_offset=0)
-    s_norm, s_starts, s_ends = _normalize_pdf_ocr_with_map(secondary.text, base_offset=0)
+    *,
+    fail_on_incomplete_coverage: bool = True,
+) -> SectionComparisonReport:
+    """Compare *primary* and *secondary* guaranteeing 100% character coverage and recording stripped furniture."""
+    (p_norm, p_starts, p_ends, p_furn), (s_norm, s_starts, s_ends, s_furn) = _normalize_pair_with_maps(
+        primary.text,
+        secondary.text,
+        apply_furniture_filter=True,
+    )
+
+    p_has_headers = bool(_split_into_sections(p_norm))
+    s_has_headers = bool(_split_into_sections(s_norm))
+
+    prim_secs, p_cov, p_uncov = _partition_document_segments(
+        p_norm,
+        unsegmented_key="document_body" if (not p_has_headers and not s_has_headers) else "unsegmented_remainder",
+        unsegmented_label="Document Body (Unsegmented)"
+        if (not p_has_headers and not s_has_headers)
+        else "UNSEGMENTED_REMAINDER: Unsegmented Document",
+    )
+    sec_secs, s_cov, s_uncov = _partition_document_segments(
+        s_norm,
+        unsegmented_key="document_body" if (not p_has_headers and not s_has_headers) else "unsegmented_remainder",
+        unsegmented_label="Document Body (Unsegmented)"
+        if (not p_has_headers and not s_has_headers)
+        else "UNSEGMENTED_REMAINDER: Unsegmented Document",
+    )
+
+    divergences: list[SectionDivergence] = []
+
+    if fail_on_incomplete_coverage:
+        for us, ue in p_uncov:
+            seg = p_norm[us:ue].strip()
+            if seg:
+                divergences.append(
+                    SectionDivergence(
+                        section_key="unsegmented_remainder",
+                        section_label="UNSEGMENTED_REMAINDER: Uncovered Primary Span",
+                        primary_source_id=primary.id,
+                        secondary_source_id=secondary.id,
+                        primary_quantities=tuple(sorted(_quantity_tokens(seg))),
+                        secondary_quantities=(),
+                        reason=f"Fail-closed uncovered primary span [{us}, {ue}] in '{primary.id}'.",
+                        primary_span=_map_norm_span(p_starts, p_ends, (us, ue), len(primary.text)),
+                        secondary_span=None,
+                    )
+                )
+        for us, ue in s_uncov:
+            seg = s_norm[us:ue].strip()
+            if seg:
+                divergences.append(
+                    SectionDivergence(
+                        section_key="unsegmented_remainder",
+                        section_label="UNSEGMENTED_REMAINDER: Uncovered Secondary Span",
+                        primary_source_id=primary.id,
+                        secondary_source_id=secondary.id,
+                        primary_quantities=(),
+                        secondary_quantities=tuple(sorted(_quantity_tokens(seg))),
+                        reason=f"Fail-closed uncovered secondary span [{us}, {ue}] in '{secondary.id}'.",
+                        primary_span=None,
+                        secondary_span=_map_norm_span(s_starts, s_ends, (us, ue), len(secondary.text)),
+                    )
+                )
 
     p_norm_all_key = normalize_key(p_norm)
     s_norm_all_key = normalize_key(s_norm)
     if (
-        p_norm_all_key == s_norm_all_key
+        not p_uncov
+        and not s_uncov
+        and p_norm_all_key == s_norm_all_key
         and _quantity_tokens(p_norm) == _quantity_tokens(s_norm)
     ):
-        return []
+        return SectionComparisonReport(
+            divergences=tuple(divergences),
+            primary_coverage=p_cov,
+            secondary_coverage=s_cov,
+            primary_uncovered_spans=p_uncov,
+            secondary_uncovered_spans=s_uncov,
+            primary_excluded_furniture=p_furn,
+            secondary_excluded_furniture=s_furn,
+        )
 
-    prim_secs = _split_into_sections(p_norm)
-    sec_secs = _split_into_sections(s_norm)
-    divergences: list[SectionDivergence] = []
-
-    # Fail-closed when documents have no structured headers
-    if not prim_secs and not sec_secs:
+    # Unsegmented pair (both lack headers)
+    if not p_has_headers and not s_has_headers:
         p_quants = _quantity_tokens(p_norm)
         s_quants = _quantity_tokens(s_norm)
         if p_quants != s_quants or p_norm_all_key != s_norm_all_key:
@@ -270,11 +439,25 @@ def extract_divergent_sections(
                     secondary_span=(0, len(secondary.text)),
                 )
             )
-        return divergences
+        return SectionComparisonReport(
+            divergences=tuple(divergences),
+            primary_coverage=p_cov,
+            secondary_coverage=s_cov,
+            primary_uncovered_spans=p_uncov,
+            secondary_uncovered_spans=s_uncov,
+            primary_excluded_furniture=p_furn,
+            secondary_excluded_furniture=s_furn,
+        )
 
     matched_sec_keys: set[str] = set()
+    p_remainder_only = not p_has_headers
+    s_remainder_only = not s_has_headers
 
     for key in sorted(prim_secs.keys()):
+        if key == "unsegmented_remainder" and p_remainder_only:
+            # Handled after section alignment as fail-closed fallback only if no divergences
+            # were emitted while whole-document text/quantities still differ.
+            continue
         p_sec = prim_secs[key]
         p_quants = _quantity_tokens(p_sec.body)
 
@@ -282,10 +465,10 @@ def extract_divergent_sections(
         if key in sec_secs:
             s_sec = sec_secs[key]
             matched_sec_keys.add(key)
-        else:
+        elif key != "unsegmented_remainder":
             # Check for renumbered section with identical title or identical body content
             for cand_key, cand_sec in sec_secs.items():
-                if cand_key in matched_sec_keys or cand_key in prim_secs:
+                if cand_key in matched_sec_keys or cand_key in prim_secs or cand_key == "unsegmented_remainder":
                     continue
                 same_body = normalize_key(p_sec.body_without_header) == normalize_key(
                     cand_sec.body_without_header
@@ -298,7 +481,19 @@ def extract_divergent_sections(
 
         if s_sec is None:
             p_sec_full_key = normalize_key(p_sec.body)
-            if p_sec_full_key and len(p_sec_full_key) >= 16 and p_sec_full_key in s_norm_all_key:
+            # When secondary has NO headers at all (unsegmented prose summary / OM), an
+            # exact normalized section match in s_norm means that section wasn't omitted
+            # (we still check below that any leftover unsegmented prose cannot fail open).
+            # When secondary HAS headers, only allow substring match if secondary has no
+            # unsegmented remainder hiding uncompared edits.
+            s_has_internal_unseg = s_has_headers and ("unsegmented_remainder" in sec_secs)
+            if (
+                not s_has_internal_unseg
+                and p_sec_full_key
+                and len(p_sec_full_key) >= 16
+                and p_sec_full_key in s_norm_all_key
+                and _quantity_tokens(p_sec.body).issubset(_quantity_tokens(s_norm))
+            ):
                 continue
             divergences.append(
                 SectionDivergence(
@@ -348,13 +543,22 @@ def extract_divergent_sections(
                 )
             )
 
-    # Also detect sections added only in the secondary document
+    # Also detect sections or residual blocks present in the secondary document
+    p_has_internal_unseg = p_has_headers and ("unsegmented_remainder" in prim_secs)
     for sec_key in sorted(sec_secs.keys()):
         if sec_key in matched_sec_keys:
             continue
+        if sec_key == "unsegmented_remainder" and s_remainder_only:
+            continue
         s_sec = sec_secs[sec_key]
         s_sec_full_key = normalize_key(s_sec.body)
-        if s_sec_full_key and len(s_sec_full_key) >= 16 and s_sec_full_key in p_norm_all_key:
+        if (
+            not p_has_internal_unseg
+            and s_sec_full_key
+            and len(s_sec_full_key) >= 16
+            and s_sec_full_key in p_norm_all_key
+            and _quantity_tokens(s_sec.body).issubset(_quantity_tokens(p_norm))
+        ):
             continue
         s_quants = _quantity_tokens(s_sec.body)
         divergences.append(
@@ -373,7 +577,47 @@ def extract_divergent_sections(
             )
         )
 
-    return divergences
+    # Fail-closed guard for asymmetric pairs (one doc has headers, counterpart is all-prose):
+    # if all recognized sections matched via substring so no divergence was emitted yet,
+    # yet the unsegmented counterpart actually differs textually or quantitatively, emit
+    # UNSEGMENTED_REMAINDER so extra/mutated unsegmented prose cannot fail open.
+    if (p_remainder_only or s_remainder_only) and not divergences:
+        p_all_quants = _quantity_tokens(p_norm)
+        s_all_quants = _quantity_tokens(s_norm)
+        if p_all_quants != s_all_quants or p_norm_all_key != s_norm_all_key:
+            divergences.append(
+                SectionDivergence(
+                    section_key="unsegmented_remainder",
+                    section_label="UNSEGMENTED_REMAINDER: Asymmetric Unsegmented Divergence",
+                    primary_source_id=primary.id,
+                    secondary_source_id=secondary.id,
+                    primary_quantities=tuple(sorted(p_all_quants)),
+                    secondary_quantities=tuple(sorted(s_all_quants)),
+                    reason=(
+                        f"Asymmetric unsegmented document divergence between '{primary.id}' and '{secondary.id}'."
+                    ),
+                    primary_span=(0, len(primary.text)),
+                    secondary_span=(0, len(secondary.text)),
+                )
+            )
+
+    return SectionComparisonReport(
+        divergences=tuple(divergences),
+        primary_coverage=p_cov,
+        secondary_coverage=s_cov,
+        primary_uncovered_spans=p_uncov,
+        secondary_uncovered_spans=s_uncov,
+        primary_excluded_furniture=p_furn,
+        secondary_excluded_furniture=s_furn,
+    )
+
+
+def extract_divergent_sections(
+    primary: Source,
+    secondary: Source,
+) -> list[SectionDivergence]:
+    """Identify sections where *secondary* diverges quantitatively, structurally, or adds/omits provisions."""
+    return list(extract_divergent_sections_with_coverage(primary, secondary).divergences)
 
 
 def build_comparison_policy(

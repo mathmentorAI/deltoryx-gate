@@ -17,10 +17,11 @@ from typing import Any, Mapping, Sequence
 
 from ..models import Source
 from ..semantic.models import SourceDocument, canonical, digest
-from ..verifiers.diff import build_comparison_policy
+from ..verifiers.diff import build_comparison_policy, extract_divergent_sections_with_coverage
 from ..verifiers.quote_quantity import (
     _SECTION_HEADER_ONLY_RE,
     _STRUCTURAL_ID_RE,
+    _normalize_pair_with_maps,
     _normalize_pdf_ocr_with_map,
     extract_dates_with_spans,
     extract_quantities,
@@ -44,6 +45,8 @@ class ReferenceDivergenceCollection:
     domain_profile_fingerprint: str | None = None
     document_texts: Mapping[str, str] = field(default_factory=dict)
     document_metadata: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    comparison_coverage: Mapping[str, float] = field(default_factory=dict)
+    excluded_furniture: Mapping[str, tuple[Mapping[str, Any], ...]] = field(default_factory=dict)
 
 
 def _doc_attr(doc: Any, name: str, default: Any = "") -> Any:
@@ -138,6 +141,8 @@ def collect_reference_divergences(
 
     eff_min_rank = gov_rank if min_tier_rank is None else min_tier_rank
     all_divs: list[Any] = []
+    cov_by_doc: dict[str, float] = {}
+    furn_by_doc: dict[str, tuple[Mapping[str, Any], ...]] = {}
     for doc in comp_docs:
         sub_id = str(_doc_attr(doc, "filename", "") or _doc_attr(doc, "document_id", "") or _doc_attr(doc, "id", ""))
         if sub_id == gov_id:
@@ -152,13 +157,19 @@ def collect_reference_divergences(
             authority_rank=sub_rank,
             title=f"{sub_key}: {sub_id}",
         )
-        _, divs = build_comparison_policy(
+        _ = eff_min_rank
+        cmp_report = extract_divergent_sections_with_coverage(
             gov_source,
             sub_source,
-            policy_id=f"ref_cmp::{gov_id}::{sub_id}",
-            min_tier_rank=eff_min_rank,
+            fail_on_incomplete_coverage=True,
         )
-        all_divs.extend(divs)
+        all_divs.extend(cmp_report.divergences)
+        cov_by_doc[gov_id] = min(cov_by_doc.get(gov_id, 1.0), float(cmp_report.primary_coverage))
+        cov_by_doc[sub_id] = min(cov_by_doc.get(sub_id, 1.0), float(cmp_report.secondary_coverage))
+        if cmp_report.primary_excluded_furniture and gov_id not in furn_by_doc:
+            furn_by_doc[gov_id] = tuple(dict(x) for x in cmp_report.primary_excluded_furniture)
+        if cmp_report.secondary_excluded_furniture and sub_id not in furn_by_doc:
+            furn_by_doc[sub_id] = tuple(dict(x) for x in cmp_report.secondary_excluded_furniture)
 
     return ReferenceDivergenceCollection(
         divergences=tuple(all_divs),
@@ -168,6 +179,8 @@ def collect_reference_divergences(
         domain_profile_fingerprint=fp,
         document_texts=doc_texts,
         document_metadata=doc_meta,
+        comparison_coverage=cov_by_doc,
+        excluded_furniture=furn_by_doc,
     )
 
 
@@ -202,6 +215,8 @@ class CorpusReferenceRegister:
     excluded_documents: tuple[Mapping[str, Any], ...] = ()
     domain_profile_fingerprint: str | None = None
     reread_provenance: Mapping[str, Any] = field(default_factory=dict)
+    comparison_coverage: Mapping[str, float] = field(default_factory=dict)
+    excluded_furniture: Mapping[str, tuple[Mapping[str, Any], ...]] = field(default_factory=dict)
 
     @property
     def obligation_ids(self) -> tuple[str, ...]:
@@ -226,6 +241,8 @@ class CorpusReferenceRegister:
             "excluded_documents": [dict(e) for e in self.excluded_documents],
             "domain_profile_fingerprint": self.domain_profile_fingerprint,
             "reread_provenance": dict(self.reread_provenance),
+            "comparison_coverage": dict(self.comparison_coverage),
+            "excluded_furniture": {k: [dict(x) for x in v] for k, v in self.excluded_furniture.items()},
         }
 
 
@@ -786,7 +803,9 @@ _HEADING_CLAUSE_VERB_RE = re.compile(
     r"\b(?:shall|must|may|will|should|can|cannot|is|are|was|were|has|have|had|"
     r"not|never|no|unless|except|notwithstanding|subject\s+to|provided|other\s+than|"
     r"save\s+for|save\s+as|save\s+that|solely|exclusively|only\s+if|"
-    r"bear|bears|pay|pays|exceed|exceeds|"
+    r"bear|bears|pay|pays|exceed|exceeds|requires?|triggers?|accrues?|remains?|holds?|"
+    r"warrants?|notifies?|defends?|governs?|limits?|caps?|survives?|terminates?|"
+    r"binds?|grants?|transfers?|waives?|releases?|indemnifies?|provides?|receives?|retains?|"
     r"includes?|excludes?|excluding|applies|apply|constitutes?|guarantees?|prohibit(?:ed|s)?|forbid(?:den)?)\b",
     re.IGNORECASE,
 )
@@ -1176,19 +1195,151 @@ def _unit_matches_quantity_token(spec: Mapping[str, Any], q_token: str) -> bool:
     return False
 
 
+_COMPUTE_BASIS_MODIFIER_RE = re.compile(
+    r"\b(?:"
+    r"per\s+(?:annum|year|month|quarter|week|day)|"
+    r"business|working|banking|trading|calendar|fiscal|"
+    r"net|gross|simple|compound(?:ed)?|"
+    r"annual(?:ly)?|monthly|quarterly|weekly|daily|semiannual|semi-annual|"
+    r"inclusive|exclusive|pre-?tax|after-?tax|pro\s+rata|"
+    r"actual\s*/\s*(?:360|365)|30e?\s*/\s*360|"
+    r"h[aá]biles?|natural(?:es)?|net[oa]s?|brut[oa]s?|anual(?:es)?|mensual(?:es)?|trimestral(?:es)?"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _extract_compute_basis_tokens(text: str) -> set[str]:
+    """Extract canonical compute-unit/basis modifiers from *text*."""
+    out: set[str] = set()
+    for m in _COMPUTE_BASIS_MODIFIER_RE.finditer(text or ""):
+        norm = re.sub(r"[\s/-]+", "_", m.group(0).strip().lower())
+        if norm in {"annually", "annual"}:
+            norm = "per_annum"
+        elif norm == "compounded":
+            norm = "compound"
+        elif norm == "semi_annual":
+            norm = "semiannual"
+        elif norm in {"hábiles", "hábil", "habiles", "habil"}:
+            norm = "business"
+        elif norm in {"natural", "naturales"}:
+            norm = "calendar"
+        elif norm in {"neto", "neta", "netos", "netas"}:
+            norm = "net"
+        elif norm in {"bruto", "bruta", "brutos", "brutas"}:
+            norm = "gross"
+        out.add(norm)
+    return out
+
+
+_BASIS_CONTRAST_FAMILIES: tuple[frozenset[str], ...] = (
+    frozenset({"business", "working", "banking", "trading", "calendar", "fiscal"}),
+    frozenset({"net", "gross"}),
+    frozenset({"simple", "compound"}),
+    frozenset({"inclusive", "exclusive"}),
+    frozenset({"pre_tax", "after_tax"}),
+    frozenset({"per_annum", "per_year", "per_month", "monthly", "per_quarter", "quarterly", "semiannual", "per_week", "weekly", "per_day", "daily"}),
+    frozenset({"actual_360", "actual_365", "30_360", "30e_360"}),
+)
+
+
+def _has_contrasting_basis_diff(
+    sent_text: str,
+    other_sent_text: str,
+    *,
+    hunk_tokens: Sequence[tuple[str, int, int, str]] = (),
+) -> bool:
+    """Return True iff *sent_text* and *other_sent_text* differ on a contrasting compute-basis modifier
+    (or add/remove a basis qualifier attached to a word shared with *other_sent_text*)."""
+    b1 = _extract_compute_basis_tokens(sent_text)
+    b2 = _extract_compute_basis_tokens(other_sent_text)
+    delta = b1 ^ b2
+    if not delta:
+        return False
+    # 1. Explicit opposing basis terms from the same dimension family (e.g., net vs gross, per_annum vs per_month)
+    for fam in _BASIS_CONTRAST_FAMILIES:
+        if (b1 & fam) and (b2 & fam) and ((b1 & fam) != (b2 & fam)):
+            return True
+    # 2. One-sided basis qualifier (e.g., "30 calendar days" vs "30 days", "net sales" vs "sales", "6% per annum" vs "6%")
+    other_words = {
+        w.lower()
+        for w in re.findall(r"[A-Za-z0-9]+", other_sent_text or "")
+        if len(w) >= 2 and w.lower() not in _GAP_FRAMING_STOPWORDS
+    }
+    if hunk_tokens:
+        hunk_text = " ".join(t[3] for t in hunk_tokens)
+        hb = _extract_compute_basis_tokens(hunk_text)
+        basis_subwords = {w for b in hb for w in b.split("_")}
+        hunk_non_basis = {
+            t[0]
+            for t in hunk_tokens
+            if len(t[0]) >= 3
+            and not re.fullmatch(r"[\d.,]+", t[0])
+            and t[0] not in _GAP_FRAMING_STOPWORDS
+            and t[0] not in basis_subwords
+        }
+        if hb:
+            if not hunk_non_basis:
+                # Hunk is purely the basis modifier itself (e.g. "calendar" inserted before shared "days", or "net" before "sales")
+                return bool(other_words)
+            if hunk_non_basis & other_words:
+                return True
+            # Also check adjacent word right after/before the basis match in sent_text
+            for m in _COMPUTE_BASIS_MODIFIER_RE.finditer(sent_text or ""):
+                after = re.findall(r"[A-Za-z]+", (sent_text or "")[m.end() : m.end() + 30])[:2]
+                before = re.findall(r"[A-Za-z]+", (sent_text or "")[max(0, m.start() - 30) : m.start()])[-2:]
+                adj = {w.lower() for w in after + before if len(w) >= 3 and w.lower() not in _GAP_FRAMING_STOPWORDS}
+                if adj & other_words:
+                    return True
+            return False
+    # Sentence-level fallback when no hunk_tokens provided: check adjacent words around differing basis tokens
+    for txt, opp in ((sent_text, b1 - b2), (other_sent_text, b2 - b1)):
+        opp_words = {
+            w.lower()
+            for w in re.findall(r"[A-Za-z0-9]+", (other_sent_text if txt is sent_text else sent_text) or "")
+            if len(w) >= 2 and w.lower() not in _GAP_FRAMING_STOPWORDS
+        }
+        for m in _COMPUTE_BASIS_MODIFIER_RE.finditer(txt or ""):
+            norm = re.sub(r"[\s/-]+", "_", m.group(0).strip().lower())
+            if norm not in opp and not (opp & {norm, "per_annum", "compound", "business", "calendar", "net", "gross"}):
+                continue
+            after = re.findall(r"[A-Za-z]+", (txt or "")[m.end() : m.end() + 30])[:2]
+            before = re.findall(r"[A-Za-z]+", (txt or "")[max(0, m.start() - 30) : m.start()])[-2:]
+            adj = {w.lower() for w in after + before if len(w) >= 3 and w.lower() not in _GAP_FRAMING_STOPWORDS}
+            if adj & opp_words:
+                return True
+    return False
+
+
 def _span_quantity_covered(
     cov_index: Mapping[str, tuple[list[int], list[Any]]],
     doc_id: str,
     q_token: str,
     q_span: tuple[int, int],
     sent_text: str,
+    *,
+    require_conflict: bool = False,
+    other_preds: set[str] | frozenset[str] = frozenset(),
+    other_diff_tokens: set[str] | frozenset[str] = frozenset(),
 ) -> bool:
     """Cover *q_token* only if an overlapping unit actually represents *q_token* and matches sentence polarity."""
     specs = _query_overlapping_unit_specs(cov_index, doc_id, q_span)
     if not specs:
         return False
     sent_pol = _extract_clause_polarity_tokens(sent_text)
+    p0, p1 = (q_token.split(":", 1) + [""])[:2]
+    same_mag_diff_unit = False
+    if p1 and not p0.isalpha():
+        for t in other_diff_tokens:
+            if t == q_token or ":" not in t:
+                continue
+            o0, o1 = t.split(":", 1)
+            if o0 == p0 and o1 != p1:
+                same_mag_diff_unit = True
+                break
     for spec in specs:
+        if (require_conflict or same_mag_diff_unit) and not spec.get("is_conflict"):
+            continue
         if not _unit_matches_quantity_token(spec, q_token):
             continue
         # Do not let a non-negated unit mask a negated obligation/prohibition clause unless part of a polarity-aware conflict
@@ -1257,6 +1408,24 @@ def _conflict_covers_text_hunk(
                 return True
         return False
 
+    hunk_basis = _extract_compute_basis_tokens(" ".join(t[3] for t in hunk_tokens))
+    other_basis = _extract_compute_basis_tokens(" ".join(t[3] for t in other_hunk_tokens))
+    sent_basis = _extract_compute_basis_tokens(sent_text)
+    other_sent_basis = _extract_compute_basis_tokens(counterpart_sent_text)
+    needed_basis_diff = (hunk_basis ^ other_basis) | (sent_basis ^ other_sent_basis)
+    if (
+        needed_basis_diff
+        and ((hunk_basis | other_basis) & needed_basis_diff)
+        and _has_contrasting_basis_diff(sent_text, counterpart_sent_text, hunk_tokens=hunk_tokens)
+    ):
+        # Compute-unit/basis diffs (e.g. net vs gross, per annum vs per month, business vs calendar)
+        # cannot be swallowed by an unrelated conflict unit unless contrasting basis words appear explicitly.
+        for sp in specs:
+            sp_words = sp["val_words"] | sp["conflict_val_words"]
+            if all(set(bt.split("_")) <= sp_words for bt in needed_basis_diff):
+                return True
+        return False
+
     own_doc_words = set(
         _doc_stem_words(
             doc_id,
@@ -1310,10 +1479,14 @@ def _unit_covers_unmatched_clause(
     cov_index: Mapping[str, tuple[list[int], list[Any]]],
     doc_id: str,
     sent: tuple[int, int, str],
+    *,
+    require_conflict: bool = False,
 ) -> bool:
     """Return True iff admitted unit(s) on *doc_id* cleanly cover both quantities, text, and polarity of *sent*."""
     s_start, s_end, s_text = int(sent[0]), int(sent[1]), sent[2]
     specs = _query_overlapping_unit_specs(cov_index, doc_id, (s_start, s_end))
+    if require_conflict:
+        specs = [sp for sp in specs if sp.get("is_conflict")]
     if not specs:
         return False
 
@@ -1443,8 +1616,15 @@ def _divergence_gaps_for_item(
     pri_chunk = pri_full[int(pri_span[0]) : int(pri_span[1])] if (pri_full and pri_span is not None) else pri_full
     sec_chunk = sec_full[int(sec_span[0]) : int(sec_span[1])] if (sec_full and sec_span is not None) else sec_full
 
-    pri_norm_chunk, pri_char_s, pri_char_e = _normalize_pdf_ocr_with_map(pri_chunk, base_offset=pri_base)
-    sec_norm_chunk, sec_char_s, sec_char_e = _normalize_pdf_ocr_with_map(sec_chunk, base_offset=sec_base)
+    (pri_norm_chunk, pri_char_s, pri_char_e, _), (sec_norm_chunk, sec_char_s, sec_char_e, _) = (
+        _normalize_pair_with_maps(
+            pri_chunk,
+            sec_chunk,
+            primary_base_offset=pri_base,
+            secondary_base_offset=sec_base,
+            apply_furniture_filter=True,
+        )
+    )
 
     def _map_norm_span(char_s: Sequence[int], char_e: Sequence[int], ns: int, ne: int, default_base: int) -> tuple[int, int]:
         if not char_s or ns >= ne or ns < 0 or ns >= len(char_s):
@@ -1574,6 +1754,9 @@ def _divergence_gaps_for_item(
         other_preds: set[str],
         hunk_tokens: Sequence[tuple[str, int, int, str]],
         sent_text: str,
+        other_sent_text: str = "",
+        tag: str = "",
+        other_hunk_tokens: Sequence[tuple[str, int, int, str]] = (),
     ) -> bool:
         if not hunk_tokens:
             return False
@@ -1587,7 +1770,6 @@ def _divergence_gaps_for_item(
             return False
         hunk_text = " ".join(t[3] for t in hunk_tokens)
         hunk_pol = _extract_clause_polarity_tokens(hunk_text)
-        hunk_quants = {q["token"] for q in _extract_sentence_quantity_tokens(hunk_text, 0)}
         content_words = {
             t[0]
             for t in hunk_tokens
@@ -1595,6 +1777,10 @@ def _divergence_gaps_for_item(
             and not re.fullmatch(r"[\d.,]+", t[0])
             and t[0] not in _GAP_FRAMING_STOPWORDS
         }
+        hunk_basis = _extract_compute_basis_tokens(hunk_text)
+        if hunk_basis and _has_contrasting_basis_diff(sent_text, other_sent_text, hunk_tokens=hunk_tokens):
+            return False
+        hunk_quants = {q["token"] for q in _extract_sentence_quantity_tokens(hunk_text, 0)}
         for sp in specs:
             if hunk_pol and not sp["is_negated"]:
                 continue
@@ -1625,14 +1811,45 @@ def _divergence_gaps_for_item(
 
         p_diff_q_spans = [(int(q["span"][0]), int(q["span"][1])) for q in p_diff]
         s_diff_q_spans = [(int(q["span"][0]), int(q["span"][1])) for q in s_diff]
+        p_diff_toks = {str(q["token"]) for q in p_diff}
+        s_diff_toks = {str(q["token"]) for q in s_diff}
+        basis_diverges = _has_contrasting_basis_diff(p_sent[2], s_sent[2]) and (
+            any(
+                (_extract_compute_basis_tokens(p_sent[2]) & fam)
+                and (_extract_compute_basis_tokens(s_sent[2]) & fam)
+                for fam in _BASIS_CONTRAST_FAMILIES
+            )
+            or (
+                {t.split(":")[-1] for t in p_keys if not t.startswith("STEP:")}
+                & {t.split(":")[-1] for t in s_keys if not t.startswith("STEP:")}
+            )
+        )
 
         for q in p_diff:
             q_span = (int(q["span"][0]), int(q["span"][1]))
-            if not _span_quantity_covered(eff_cov_idx, pri_id, str(q["token"]), q_span, p_sent[2]):
+            if not _span_quantity_covered(
+                eff_cov_idx,
+                pri_id,
+                str(q["token"]),
+                q_span,
+                p_sent[2],
+                require_conflict=basis_diverges,
+                other_preds=sec_preds,
+                other_diff_tokens=s_diff_toks,
+            ):
                 _emit_quantity_gap(pri_id, q, p_sent, sec_id, s_sent)
         for q in s_diff:
             q_span = (int(q["span"][0]), int(q["span"][1]))
-            if not _span_quantity_covered(eff_cov_idx, sec_id, str(q["token"]), q_span, s_sent[2]):
+            if not _span_quantity_covered(
+                eff_cov_idx,
+                sec_id,
+                str(q["token"]),
+                q_span,
+                s_sent[2],
+                require_conflict=basis_diverges,
+                other_preds=pri_preds,
+                other_diff_tokens=p_diff_toks,
+            ):
                 _emit_quantity_gap(sec_id, q, s_sent, pri_id, p_sent)
 
         # Token-level diff check on ALL differing aligned sentence pairs (even when quantities differ).
@@ -1737,10 +1954,14 @@ def _divergence_gaps_for_item(
 
             # One-sided extra clause already admitted cleanly on a disjoint predicate absent from counterpart doc
             if p_uncov and not s_uncov and (tag == "delete" or s_had_doc_ref or not s_non_qty):
-                if _disjoint_unit_covers_hunk(pri_id, sec_preds, p_uncov, p_sent[2]):
+                if _disjoint_unit_covers_hunk(
+                    pri_id, sec_preds, p_uncov, p_sent[2], s_sent[2], tag=tag, other_hunk_tokens=s_non_qty
+                ):
                     p_uncov = []
             if s_uncov and not p_uncov and (tag == "insert" or p_had_doc_ref or not p_non_qty):
-                if _disjoint_unit_covers_hunk(sec_id, pri_preds, s_uncov, s_sent[2]):
+                if _disjoint_unit_covers_hunk(
+                    sec_id, pri_preds, s_uncov, s_sent[2], p_sent[2], tag=tag, other_hunk_tokens=p_non_qty
+                ):
                     s_uncov = []
 
             # 1-token structural clause join (e.g. "; " vs " and ") strictly bridging two differing spans
@@ -1829,7 +2050,8 @@ def _divergence_gaps_for_item(
                 if not _span_quantity_covered(eff_cov_idx, pri_id, str(q["token"]), q_span, p_sent[2]):
                     _emit_quantity_gap(pri_id, q, p_sent, sec_id, None)
 
-            # Deleted substantive clause check (P3 #10): non-header, non-doc-title clauses absent from sec_id
+            # Deleted substantive clause check (P2 #4 / P3 #10): non-header, non-doc-title clauses absent from sec_id.
+            # Enunciating the governing clause alone on pri_id (without a conflict/override obligation) MUST NOT mask deletion.
             if not _is_pure_section_heading(p_sent[2]):
                 p_toks = [
                     (norm_t, *_orig_sent_span(pri_id, p_sent, ts, te, int(p_sent[0])), raw_t)
@@ -1847,11 +2069,17 @@ def _divergence_gaps_for_item(
                     not _HEADING_CLAUSE_VERB_RE.search(p_sent[2])
                     and not p_quants
                     and len(_sentence_content_words(p_sent[2])) <= 6
+                    and not p_sent[2].rstrip().endswith((".", "!", "?"))
                 )
-                has_substance = len(_sentence_content_words(p_sent[2]) - _GAP_FRAMING_STOPWORDS) >= 2 or bool(
+                pri_struct_words = set(_doc_stem_words(pri_id, str(pri_meta.get("title", "") or ""), str(pri_meta.get("role", "") or ""))) | _DOC_STRUCT_HDR_WORDS
+                has_substance = len(_sentence_content_words(p_sent[2]) - _GAP_FRAMING_STOPWORDS - pri_struct_words) >= 2 or bool(
                     _extract_clause_polarity_tokens(p_sent[2])
                 )
-                if not is_doc_title and has_substance and not _unit_covers_unmatched_clause(eff_cov_idx, pri_id, p_sent):
+                if (
+                    not is_doc_title
+                    and has_substance
+                    and not _unit_covers_unmatched_clause(eff_cov_idx, pri_id, p_sent, require_conflict=True)
+                ):
                     gaps.append({
                         "kind": "textual",
                         "document_id": pri_id,
@@ -1898,9 +2126,11 @@ def _divergence_gaps_for_item(
                     not _HEADING_CLAUSE_VERB_RE.search(s_sent[2])
                     and not s_quants
                     and len(_sentence_content_words(s_sent[2])) <= 6
+                    and not s_sent[2].rstrip().endswith((".", "!", "?"))
                 )
+                sec_struct_words = set(_doc_stem_words(sec_id, str(sec_meta.get("title", "") or ""), str(sec_meta.get("role", "") or ""))) | _DOC_STRUCT_HDR_WORDS
                 has_pol_or_exc = bool(_extract_clause_polarity_tokens(s_sent[2]))
-                has_substance = len(_sentence_content_words(s_sent[2]) - _GAP_FRAMING_STOPWORDS) >= 2 and bool(
+                has_substance = len(_sentence_content_words(s_sent[2]) - _GAP_FRAMING_STOPWORDS - sec_struct_words) >= 2 and bool(
                     _HEADING_CLAUSE_VERB_RE.search(s_sent[2])
                 )
                 if (
@@ -2842,6 +3072,17 @@ def build_corpus_reference_register(
         else comparison_divergences
     )
 
+    eff_coverage = (
+        dict(divergence_collection.comparison_coverage)
+        if divergence_collection is not None
+        else {}
+    )
+    eff_furniture = (
+        dict(divergence_collection.excluded_furniture)
+        if divergence_collection is not None
+        else {}
+    )
+
     if not isinstance(evidence, EvidenceLayer):
         return CorpusReferenceRegister(
             available=False,
@@ -2849,6 +3090,8 @@ def build_corpus_reference_register(
             reason="REFERENCE_REGISTER_MISSING: no EvidenceLayer available.",
             excluded_documents=eff_excluded,
             domain_profile_fingerprint=eff_profile_fp,
+            comparison_coverage=eff_coverage,
+            excluded_furniture=eff_furniture,
         )
 
     doc_statuses = {k: dict(v) for k, v in (getattr(evidence, "document_read_statuses", {}) or {}).items()}
@@ -2914,6 +3157,8 @@ def build_corpus_reference_register(
             document_statuses=doc_statuses,
             excluded_documents=eff_excluded,
             domain_profile_fingerprint=eff_profile_fp,
+            comparison_coverage=eff_coverage,
+            excluded_furniture=eff_furniture,
         )
 
     eff_config = reread_config if reread_config is not None else TargetedRereadConfig()
@@ -2976,6 +3221,10 @@ def build_corpus_reference_register(
             ],
         }
 
+    incomplete_cov_docs = tuple(
+        sorted(doc_id for doc_id, cov in eff_coverage.items() if float(cov) < 0.999999)
+    )
+    eff_incomplete_docs = tuple(sorted(set(relevant_incomplete) | set(incomplete_cov_docs)))
     return CorpusReferenceRegister(
         available=True,
         entity=state["entity"],
@@ -2986,8 +3235,8 @@ def build_corpus_reference_register(
         has_material_conflicts=state["has_material_conflicts"],
         has_authority_overrides=state["has_authority_overrides"],
         reason="Corpus reference register built deterministically from EvidenceLayer.",
-        incomplete=bool(relevant_incomplete),
-        incomplete_documents=relevant_incomplete,
+        incomplete=bool(eff_incomplete_docs),
+        incomplete_documents=eff_incomplete_docs,
         document_statuses=doc_statuses,
         gap_divergences=state["gap_divergences"],
         section_divergences=state["section_divergences"],
@@ -2995,6 +3244,8 @@ def build_corpus_reference_register(
         excluded_documents=eff_excluded,
         domain_profile_fingerprint=eff_profile_fp,
         reread_provenance=reread_prov,
+        comparison_coverage=eff_coverage,
+        excluded_furniture=eff_furniture,
     )
 
 

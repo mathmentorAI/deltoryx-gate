@@ -119,7 +119,8 @@ def test_p3_10_deleted_clauses_sentence_numeric_and_exception():
     assert any(g.get("kind") == "quantity" and "5000000" in str(g.get("token")) for g in reg_num.gap_divergences)
     assert any(g.get("token") == "DELETED_CLAUSE" for g in reg_num.gap_divergences)
 
-    # 4. Negative / clean control: when a deleted clause IS validly covered by a matching unit on pri, 0 gaps fire
+    # 4. P2 #4: enunciation of a single-doc clause on pri alone MUST NOT mask deletion from draft;
+    # clean control (0 gaps) only when both documents state and ground the clause cleanly.
     def _matching_unit(pri: SourceDocument, pri_txt: str):
         sub = "Guarantor unconditionally guarantees all payment obligations."
         s_s, s_e = _span_of(pri_txt, sub)
@@ -136,9 +137,16 @@ def test_p3_10_deleted_clauses_sentence_numeric_and_exception():
             }
         ]
 
-    reg_clean = _run_pair(
+    reg_deleted_masked = _run_pair(
         "Interest accrues quarterly. Guarantor unconditionally guarantees all payment obligations.",
         "Interest accrues quarterly.",
+        _matching_unit,
+    )
+    assert any(g.get("token") == "DELETED_CLAUSE" for g in reg_deleted_masked.gap_divergences)
+
+    reg_clean = _run_pair(
+        "Interest accrues quarterly. Guarantor unconditionally guarantees all payment obligations.",
+        "Interest accrues quarterly. Guarantor unconditionally guarantees all payment obligations.",
         _matching_unit,
     )
     assert reg_clean.gap_divergences == ()

@@ -207,6 +207,36 @@ This separation lets teams scale adaptive agents in regulated workflows (e.g., *
 | **`G8`** | **Automated Divergence Coverage** | `build_comparison_policy()` auto-extracts divergent clauses (including Roman numerals, numbered clauses, Spanish headers, and secondary-only sections) into `required_predicates`. |
 
 > **Scope & Verification Boundary:** `PASS` certifies deterministic conformance with the declared domain contract, source hierarchy, and policy over the supplied documents, extracted proposals, and policy settings (including exact verbatim quotes, quantities/units/dates, polarity, and local quantifier/restrictor scope such as `only`/`solely`/`all`/`none`/`at least`/`at most`). It performs **deterministic structural and lexical grounding — not full semantic entailment** or open-world logical inference over arbitrary paraphrases or unextracted prose outside the submitted claims or contract. `claimlayer.verify()` checks structured `Assertion(subject, predicate, value, source_id, quote)` tuples against registered `Source` texts and `Policy` constraints; use `claimlayer.v4` (`EvidenceLayer`, `Vocabulary`, `verify_extraction_fidelity()`, `authorize_operation()`) for bounded-domain extraction fidelity and execution-payload binding.
+>
+> #### Explicit v3 Verification Boundaries (`verify()`)
+>
+> What `claimlayer.verify()` **does NOT verify** (and would either reject via `VALUE_NOT_IN_QUOTE` or require bounded structured contracts):
+>
+> 1. **Semantic entailment & open-world paraphrases:** `verify()` checks deterministic lexical, polarity, quantifier, and unit grounding between `Assertion` and the cited `quote`, not arbitrary semantic equivalence or implicit world-knowledge inference.
+>    - *Example (not verified by lexical overlap alone):* Source states `"Lessee shall surrender possession at expiration"` and an assertion claims `"Tenant obtains permanent title"` — without shared numeric/polarity contradiction or domain vocabulary conflict rules, arbitrary lexical paraphrases require a bounded `claimlayer.v4` vocabulary contract or downstream review.
+> 2. **Derived / computed values absent verbatim from source text:** `verify()` normalizes equivalent representations of a single stated quantity (`150 bps == 1.50%`, `$1,250` under `($ in thousands) == $1,250,000`), **not** multi-operand arithmetic derived by the agent across separate figures (`sums`, `differences`, `ratios`, `margins`, `YoY % change`).
+>    - *Example (rejected by v3 `VALUE_NOT_IN_QUOTE`):* A 10-K states `"Total Debt: $850 million"` and `"Consolidated EBITDA: $200 million"`. An un-derived claim stating `value="4.25x"` against either quote alone fails `verify()` because `"4.25x"` does not appear verbatim in the source.
+>
+> #### Proposed Structured Schema for Deterministic Derived Values
+>
+> To verify derived metrics (`ratios`, `sums`, `differences`, `pct_change`) without weakening verbatim grounding, each computed claim must carry an explicit `derivation` contract alongside its operand citations:
+>
+> ```python
+> class DerivedOperand(TypedDict):
+>     role: Literal["lhs", "rhs", "numerator", "denominator", "base", "current", "term"]
+>     source_id: str
+>     quote: str          # Independently verified against Source.text (G2/G3)
+>     extracted_value: str  # Exact Decimal + unit after table-scale normalization
+>
+> class DerivationSpec(TypedDict):
+>     operation: Literal["add", "subtract", "multiply", "divide", "ratio", "pct_change"]
+>     operands: list[DerivedOperand]
+>     expected_unit: Literal["USD", "PERCENT", "MULTIPLIER", "BPS", "RATIO"]
+>     rounding: Literal["exact", "half_up_2dp", "half_up_4dp"]
+>     tolerance_abs: str | None  # Optional bounded Decimal tolerance (e.g. "0.01")
+> ```
+>
+> Under this contract, `verify()` would: (1) validate every operand's `quote` and scale/precedence independently using `G2`–`G4` (rejecting stale/superseded/wrong-tier operands), (2) require dimensional compatibility (e.g., aligning `in millions` with `in thousands`), (3) evaluate `operation(operands)` in exact `Decimal` arithmetic, and (4) emit `DERIVED_VALUE_MISMATCH` (`RETRY`) or `DERIVED_OPERAND_CONFLICT` (`ESCALATE`) if the asserted result diverges from the computed value beyond `tolerance_abs`.
 
 ---
 

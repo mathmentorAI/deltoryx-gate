@@ -22,9 +22,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-_ROOT = Path(__file__).resolve().parents[2]
-_SRC_DIR = _ROOT / "claim-layer" / "src"
-_HARNESS_DIR = _ROOT / "claim-layer" / "examples" / "harness2_securitization"
+_ROOT = Path(__file__).resolve().parents[1]
+_SRC_DIR = _ROOT / "src"
+_HARNESS_DIR = _ROOT / "examples" / "harness2_securitization"
 for _p in (str(_SRC_DIR), str(_HARNESS_DIR)):
     if _p not in sys.path:
         sys.path.insert(0, _p)

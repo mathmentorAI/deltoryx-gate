@@ -275,7 +275,8 @@ def load_case_documents(
     if case_id not in cases:
         raise KeyError(f"Unknown case_id '{case_id}' in {mpath}")
     entry = cases[case_id]
-    source_dir = Path(entry["source_dir"])
+    raw_source_dir = Path(entry["source_dir"])
+    source_dir = raw_source_dir if raw_source_dir.is_absolute() else (mpath.parent / raw_source_dir)
     assert_no_evaluator_only_access(source_dir)
     common_path = source_dir / entry["common_evidence_file"]
     raw_bytes = common_path.read_bytes()

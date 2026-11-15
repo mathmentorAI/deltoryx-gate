@@ -29,13 +29,15 @@ from pathlib import Path
 from typing import Any
 
 # Locate claimlayer package from bundled scripts/claimlayer, repo checkout, or CLAIMLAYER_ROOT
-for candidate in [
+_root_env = os.environ.get("CLAIMLAYER_ROOT", "").strip()
+_candidate_src_paths = [
     Path(__file__).resolve().parent,
+    Path(__file__).resolve().parents[4] / "src",
     Path(__file__).resolve().parents[3] / "src",
-    Path(__file__).resolve().parents[4] / "claim-layer" / "src",
-    Path(os.environ.get("CLAIMLAYER_ROOT", "")) / "src",
-    Path(os.environ.get("CLAIMLAYER_ROOT", "")) / "claim-layer" / "src",
-]:
+]
+if _root_env:
+    _candidate_src_paths.append(Path(_root_env) / "src")
+for candidate in _candidate_src_paths:
     if candidate.is_dir() and str(candidate) not in sys.path:
         sys.path.insert(0, str(candidate))
 

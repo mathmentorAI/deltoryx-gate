@@ -22,17 +22,19 @@ CLAIM_KINDS: tuple[str, ...] = (
     "hypothesis",
     "prediction",
     "recommendation",
+    "opinion",
 )
 
 # Epistemic strength order: higher value = stronger epistemic claim class.
 # Invariant: derived claims can NEVER be promoted above their weakest premise,
-# and hypothesis / prediction / recommendation can NEVER become extraction / derivation.
+# and hypothesis / prediction / recommendation / opinion can NEVER become extraction / derivation.
 EPISTEMIC_KIND_RANK: dict[str, int] = {
     "extraction": 5,
     "derivation": 4,
     "prediction": 3,
     "hypothesis": 2,
     "recommendation": 1,
+    "opinion": 0,
 }
 _RANK_TO_CLAIM_KIND: dict[int, str] = {v: k for k, v in EPISTEMIC_KIND_RANK.items()}
 

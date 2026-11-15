@@ -1302,7 +1302,7 @@ def evaluate_securitization_candidate(
     budget: VerificationBudget | None = None,
     domain_profile: DomainProfile | None = None,
     operation_id: str = "release_investor_report",
-    require_graph: bool = False,
+    require_graph: bool = True,
     require_assertions: bool = False,
 ) -> PipelineVerificationResult:
     """Run v3-only or combined v3+v4 verification on a candidate report, strictly separating report quality from op auth."""
@@ -1561,14 +1561,9 @@ def evaluate_securitization_candidate(
                     authority_ranks={d.filename: d.authority_rank for d in corpus.documents.values()},
                 ),
             )
-            scoped_report = (
-                _scope_report_text_for_graph(parsed.report_text, parsed.graph)
-                if len(parsed.report_text) > 1200 and len(parsed.assertions) >= 3
-                else parsed.report_text
-            )
             v4_review = review_response(
                 parsed.question,
-                scoped_report,
+                parsed.report_text,
                 corpus.v4_sources,
                 parsed.graph,
                 prof,

@@ -2294,6 +2294,92 @@ def _is_graph_conclusion_negative(graph: JustificationGraph) -> bool:
     return False
 
 
+_OPINION_MARKER_RE = re.compile(
+    r"\b(?:opinion|interpretive|interpretation|in\s+our\s+view|we\s+believe|"
+    r"en\s+nuestra\s+opini[oó]n|interpretaci[oó]n|nota\s+interpretativa)\b",
+    re.IGNORECASE,
+)
+
+
+def _clause_binds_to_graph_claim(
+    sub_cl: str,
+    cl_nums: tuple[Decimal, ...],
+    graph: JustificationGraph,
+    *,
+    role: str,
+    has_material_conflict: bool,
+) -> tuple[bool, str | None]:
+    """Verify every non-formula/non-disclaimer clause binds to a verified graph claim or marked opinion."""
+    if role in ("formula", "disclaimer"):
+        return True, None
+    if role == "conflict_disclosure" and has_material_conflict:
+        return True, None
+
+    low = sub_cl.lower()
+    is_opinion_marked = bool(_OPINION_MARKER_RE.search(sub_cl))
+
+    if is_opinion_marked:
+        for cid, node in graph.claims.items():
+            if getattr(node, "kind", "") != "opinion":
+                continue
+            has_premises = any(s.conclusion_id == cid and len(s.premises) > 0 for s in graph.steps)
+            if not has_premises:
+                continue
+            node_subj = str(getattr(node, "subject", "") or "").strip().lower()
+            node_text = str(getattr(node, "text", "") or "").strip().lower()
+            node_val = str(getattr(node, "value", "") or "").strip().lower()
+            if (
+                (node_subj and node_subj in low)
+                or (node_val and node_val in low)
+                or (node_text and any(w in low for w in re.findall(r"[a-z]{4,}", node_text)))
+            ):
+                return True, None
+        return False, "Opinion/interpretive clause has no matching kind='opinion' claim with premises in the graph."
+
+    for cid, node in graph.claims.items():
+        if getattr(node, "kind", "") == "opinion":
+            continue
+        has_grounding = bool(
+            getattr(node, "evidence", ())
+            or getattr(node, "evidence_unit_ids", ())
+            or cid == graph.conclusion_id
+        )
+        if not has_grounding:
+            continue
+        node_subj = str(getattr(node, "subject", "") or "").strip().lower()
+        if node_subj and node_subj in low:
+            return True, None
+        node_pred = str(getattr(node, "predicate", "") or "").strip().lower().replace("_", " ")
+        if node_pred and len(node_pred) >= 4 and node_pred in low:
+            return True, None
+        node_conds = getattr(node, "conditions", ()) or ()
+        if node_conds:
+            for cond in node_conds:
+                if isinstance(cond, Mapping):
+                    for ck in ("field", "value", "expression", "label"):
+                        cv = str(cond.get(ck) or "").strip().lower().replace("_", " ")
+                        if cv and len(cv) >= 3 and (cv in low or any(w in low for w in re.findall(r"[a-z]{4,}", cv))):
+                            return True, None
+                elif isinstance(cond, str):
+                    cv = cond.strip().lower().replace("_", " ")
+                    if cv and any(w in low for w in re.findall(r"[a-z]{4,}", cv)):
+                        return True, None
+        raw_val = getattr(node, "value", None)
+        if isinstance(raw_val, Mapping) and "value" in raw_val:
+            raw_val = raw_val["value"]
+        if raw_val is not None:
+            val_dec = _to_dec(raw_val)
+            if val_dec is not None and any(abs(cn - val_dec) <= Decimal("0.0001") for cn in cl_nums):
+                return True, None
+            val_str = str(raw_val).strip().lower()
+            if val_str and len(val_str) >= 3 and val_str in low:
+                return True, None
+
+    return False, (
+        f"Clause '{sub_cl}' does not link to any verified factual leaf or marked opinion claim in the graph."
+    )
+
+
 def _decompose_and_verify_clauses(
     clauses: list[str],
     graph: JustificationGraph,
@@ -2417,6 +2503,24 @@ def _decompose_and_verify_clauses(
                         "severity": "error",
                         "clause": sub_cl,
                         "ungrounded_tokens": list(dedup_ungrounded),
+                    })
+
+            if not any(i.get("code") == "UNSUPPORTED_FACTUAL_ADDITION" and i.get("clause") == sub_cl for i in issues):
+                bound_ok, bind_reason = _clause_binds_to_graph_claim(
+                    sub_cl,
+                    cl_nums,
+                    graph,
+                    role=role,
+                    has_material_conflict=has_material_conflict,
+                )
+                if not bound_ok:
+                    is_grounded = False
+                    issues.append({
+                        "code": "UNSUPPORTED_FACTUAL_ADDITION",
+                        "status": "refuted",
+                        "reason": bind_reason or f"Clause '{sub_cl}' is not linked to any verified graph leaf.",
+                        "severity": "error",
+                        "clause": sub_cl,
                     })
 
             sub_rels: list[ResponseRelationTuple] = []

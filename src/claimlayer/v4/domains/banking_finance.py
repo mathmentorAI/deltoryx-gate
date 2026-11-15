@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+from ..domain_profile import DomainProfile, PolicyConfiguration
 from ..models import AcceptancePolicy
 from ..vocabulary import FieldSpec, PredicateSpec, Vocabulary
+
+BANKING_EXCLUDED_COMPARISON_ROLES: dict[str, str] = {
+    "quantitative_financial_model": "Quantitative financial model spreadsheet excluded from legal/term-sheet prose comparison.",
+    "client_instructions_scope": "Client instruction scope memo excluded from legal/term-sheet prose comparison.",
+}
 
 BANKING_CONTEXT_AUTHORITY_MAP: dict[str, tuple[str, ...]] = {
     "financial_metrics": ("quantitative_financial_model",),
@@ -135,6 +141,17 @@ BANKING_FINANCE_ACCEPTANCE_POLICY = AcceptancePolicy(
     delta=0.20,
     allowed_assertion_kinds=("fact", "definition", "requirement", "proposal"),
     version="banking-finance-v1.1",
+)
+
+BANKING_FINANCE_DOMAIN_PROFILE = DomainProfile(
+    profile_id="banking_finance_default",
+    version="1.2.0",
+    vocabulary=BANKING_FINANCE_VOCABULARY,
+    policy=PolicyConfiguration(
+        tau=BANKING_FINANCE_ACCEPTANCE_POLICY.tau,
+        delta=BANKING_FINANCE_ACCEPTANCE_POLICY.delta,
+        excluded_comparison_roles=dict(BANKING_EXCLUDED_COMPARISON_ROLES),
+    ),
 )
 
 

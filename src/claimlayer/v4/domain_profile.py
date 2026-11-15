@@ -130,6 +130,7 @@ class PolicyConfiguration:
         "unverified_user",
     )
     known_source_dependencies: dict[str, str] = field(default_factory=dict)
+    excluded_comparison_roles: dict[str, str] = field(default_factory=dict)
     min_verification_coverage: float = 1.0
     block_critical_unverified_in_authorization: bool = True
     require_deterministic_critical_steps: bool = True
@@ -159,6 +160,15 @@ class PolicyConfiguration:
 
         ranks = {str(k): int(v) for k, v in (self.authority_ranks or _default_authority_ranks()).items()}
         deps = {str(k): str(v) for k, v in (self.known_source_dependencies or {}).items()}
+        excluded_roles: dict[str, str] = {}
+        for k, v in (self.excluded_comparison_roles or {}).items():
+            role_key = str(k).strip()
+            reason = str(v).strip()
+            if not role_key:
+                raise ValueError("excluded_comparison_roles keys must be non-empty role names.")
+            if not reason:
+                raise ValueError(f"excluded_comparison_roles[{role_key!r}] must specify a non-empty rule/rationale.")
+            excluded_roles[role_key] = reason
         unverified = tuple(str(r) for r in self.unverified_attestor_roles)
 
         for name, lo, hi in (
@@ -178,6 +188,7 @@ class PolicyConfiguration:
         object.__setattr__(self, "authority_ranks", ranks)
         object.__setattr__(self, "unverified_attestor_roles", unverified)
         object.__setattr__(self, "known_source_dependencies", deps)
+        object.__setattr__(self, "excluded_comparison_roles", excluded_roles)
 
     def describe(self) -> dict[str, Any]:
         return {
@@ -187,6 +198,7 @@ class PolicyConfiguration:
             "authority_ranks": dict(sorted(self.authority_ranks.items())),
             "unverified_attestor_roles": list(self.unverified_attestor_roles),
             "known_source_dependencies": dict(sorted(self.known_source_dependencies.items())),
+            "excluded_comparison_roles": dict(sorted(self.excluded_comparison_roles.items())),
             "min_verification_coverage": self.min_verification_coverage,
             "block_critical_unverified_in_authorization": self.block_critical_unverified_in_authorization,
             "require_deterministic_critical_steps": self.require_deterministic_critical_steps,

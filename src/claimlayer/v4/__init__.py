@@ -30,7 +30,12 @@ from .correspondence import (
     verify_response_equations,
     verify_response_graph_correspondence,
 )
-from .corpus_obligations import CorpusReferenceRegister, build_corpus_reference_register
+from .corpus_obligations import (
+    CorpusReferenceRegister,
+    ReferenceDivergenceCollection,
+    build_corpus_reference_register,
+    collect_reference_divergences,
+)
 from .domain_profile import (
     DeclaredRule,
     DomainProfile,
@@ -156,4 +161,5 @@ __all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'UnitEvaluation', 'evaluate_unit_a
            'RepairCycleResult', 'RepairOrchestrator', 'RequiredRepair', 'ReviewIssue',
            'ReviewResult', 'RuleGuidedRepairAdapter', 'ScriptedRepairAgent',
            'review_response', 'verify_review_freshness',
-           'CorpusReferenceRegister', 'build_corpus_reference_register']
+           'CorpusReferenceRegister', 'ReferenceDivergenceCollection',
+           'build_corpus_reference_register', 'collect_reference_divergences']

@@ -902,11 +902,13 @@ def evaluate_response(
                 layer,
                 profile.vocabulary,
                 question=question,
+                domain_profile_fingerprint=profile_fp,
             )
         else:
             eff_corpus_register = CorpusReferenceRegister(
                 available=False,
                 reason="REFERENCE_REGISTER_MISSING: no Vocabulary available to build reference register.",
+                domain_profile_fingerprint=profile_fp,
             )
 
     semantic_domain_info = infer_conclusion_semantic_domain(
@@ -1590,6 +1592,8 @@ def evaluate_response(
             "incomplete": eff_corpus_register.incomplete,
             "incomplete_documents": list(eff_corpus_register.incomplete_documents),
             "document_statuses": {k: dict(v) for k, v in eff_corpus_register.document_statuses.items()},
+            "excluded_documents": [dict(e) for e in eff_corpus_register.excluded_documents],
+            "domain_profile_fingerprint": eff_corpus_register.domain_profile_fingerprint or profile_fp,
             "gap_divergences": [dict(g) for g in eff_corpus_register.gap_divergences],
             "register_status_claim": ClaimNode(
                 claim_id="__engine__:register_status",

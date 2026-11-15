@@ -11,10 +11,145 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
+from ..models import Source
 from ..semantic.models import canonical, digest
+from ..verifiers.diff import build_comparison_policy
+from .domain_profile import DomainProfile
 from .engine import EvidenceLayer
 from .justification import VerificationObligation
 from .vocabulary import Vocabulary, label_key, value_relation
+
+
+@dataclass(frozen=True)
+class ReferenceDivergenceCollection:
+    """Single deterministic divergence computation shared across production and measurement."""
+
+    divergences: tuple[Any, ...] = ()
+    compared_document_ids: tuple[str, ...] = ()
+    governing_document_id: str | None = None
+    excluded_documents: tuple[Mapping[str, Any], ...] = ()
+    domain_profile_fingerprint: str | None = None
+    document_texts: Mapping[str, str] = field(default_factory=dict)
+
+
+def _doc_attr(doc: Any, name: str, default: Any = "") -> Any:
+    if isinstance(doc, Mapping):
+        return doc.get(name, default)
+    return getattr(doc, name, default)
+
+
+def collect_reference_divergences(
+    corpus_documents: Sequence[Any] | Mapping[str, Any],
+    domain_profile: DomainProfile | None = None,
+    *,
+    min_tier_rank: int | None = None,
+) -> ReferenceDivergenceCollection:
+    """Collect cross-document divergences under explicit DomainProfile comparison exclusions.
+
+    Both ``evaluate_securitization_candidate`` (production) and
+    ``benchmarks/measure_reader_recall.py`` (measurement) MUST call this helper so
+    production and offline recall measure the exact same document comparison set.
+    """
+    raw_docs = list(corpus_documents.values()) if isinstance(corpus_documents, Mapping) else list(corpus_documents or ())
+    if not raw_docs:
+        fp = domain_profile.fingerprint() if domain_profile is not None else None
+        return ReferenceDivergenceCollection(domain_profile_fingerprint=fp)
+
+    fp = domain_profile.fingerprint() if domain_profile is not None else None
+    profile_id = domain_profile.profile_id if domain_profile is not None else None
+    excluded_roles = dict(getattr(getattr(domain_profile, "policy", None), "excluded_comparison_roles", None) or {})
+
+    doc_texts: dict[str, str] = {}
+    included_docs: list[Any] = []
+    candidate_excluded: list[dict[str, Any]] = []
+    for doc in raw_docs:
+        did = str(
+            _doc_attr(doc, "filename", "")
+            or _doc_attr(doc, "document_id", "")
+            or _doc_attr(doc, "id", "")
+        )
+        text = str(_doc_attr(doc, "text", "") or "")
+        if did:
+            doc_texts[did] = text
+        role = str(_doc_attr(doc, "role", "") or "").strip()
+        if role and role in excluded_roles:
+            candidate_excluded.append({
+                "document_id": did,
+                "role": role,
+                "authority_rank": int(_doc_attr(doc, "authority_rank", 50) or 50),
+                "excluding_rule": f"PolicyConfiguration.excluded_comparison_roles[{role!r}]: {excluded_roles[role]}",
+                "domain_profile_id": profile_id,
+                "domain_profile_fingerprint": fp,
+            })
+        else:
+            included_docs.append(doc)
+
+    # Preserve comparison safety if exclusions would leave fewer than two docs.
+    if len(included_docs) >= 2:
+        comp_docs = included_docs
+        excluded_records = tuple(candidate_excluded)
+    else:
+        comp_docs = raw_docs
+        excluded_records = ()
+
+    compared_ids = tuple(
+        str(_doc_attr(d, "filename", "") or _doc_attr(d, "document_id", "") or _doc_attr(d, "id", ""))
+        for d in comp_docs
+    )
+    if len(comp_docs) < 2:
+        return ReferenceDivergenceCollection(
+            compared_document_ids=compared_ids,
+            governing_document_id=compared_ids[0] if compared_ids else None,
+            excluded_documents=excluded_records,
+            domain_profile_fingerprint=fp,
+            document_texts=doc_texts,
+        )
+
+    gov = max(comp_docs, key=lambda d: int(_doc_attr(d, "authority_rank", 50) or 50))
+    gov_id = str(_doc_attr(gov, "filename", "") or _doc_attr(gov, "document_id", "") or _doc_attr(gov, "id", ""))
+    gov_rank = int(_doc_attr(gov, "authority_rank", 50) or 50)
+    gov_tier = str(_doc_attr(gov, "authority_tier", "") or _doc_attr(gov, "tier", "") or "authoritative")
+    gov_key = str(_doc_attr(gov, "doc_key", "") or gov_id)
+    gov_source = Source(
+        id=gov_id,
+        text=str(_doc_attr(gov, "text", "") or ""),
+        tier=gov_tier,
+        authority_rank=gov_rank,
+        title=f"{gov_key}: {gov_id}",
+    )
+
+    eff_min_rank = gov_rank if min_tier_rank is None else min_tier_rank
+    all_divs: list[Any] = []
+    for doc in comp_docs:
+        sub_id = str(_doc_attr(doc, "filename", "") or _doc_attr(doc, "document_id", "") or _doc_attr(doc, "id", ""))
+        if sub_id == gov_id:
+            continue
+        sub_rank = int(_doc_attr(doc, "authority_rank", 50) or 50)
+        sub_tier = str(_doc_attr(doc, "authority_tier", "") or _doc_attr(doc, "tier", "") or "supplementary")
+        sub_key = str(_doc_attr(doc, "doc_key", "") or sub_id)
+        sub_source = Source(
+            id=sub_id,
+            text=str(_doc_attr(doc, "text", "") or ""),
+            tier=sub_tier,
+            authority_rank=sub_rank,
+            title=f"{sub_key}: {sub_id}",
+        )
+        _, divs = build_comparison_policy(
+            gov_source,
+            sub_source,
+            policy_id=f"ref_cmp::{gov_id}::{sub_id}",
+            min_tier_rank=eff_min_rank,
+        )
+        all_divs.extend(divs)
+
+    return ReferenceDivergenceCollection(
+        divergences=tuple(all_divs),
+        compared_document_ids=compared_ids,
+        governing_document_id=gov_id,
+        excluded_documents=excluded_records,
+        domain_profile_fingerprint=fp,
+        document_texts=doc_texts,
+    )
 
 
 @dataclass(frozen=True)
@@ -36,6 +171,8 @@ class CorpusReferenceRegister:
     gap_divergences: tuple[Mapping[str, Any], ...] = ()
     section_divergences: tuple[Mapping[str, Any], ...] = ()
     admitted_unit_refs: tuple[Mapping[str, Any], ...] = ()
+    excluded_documents: tuple[Mapping[str, Any], ...] = ()
+    domain_profile_fingerprint: str | None = None
 
     @property
     def obligation_ids(self) -> tuple[str, ...]:
@@ -57,6 +194,8 @@ class CorpusReferenceRegister:
             "document_statuses": {k: dict(v) for k, v in self.document_statuses.items()},
             "gap_divergences": [dict(g) for g in self.gap_divergences],
             "section_divergences": [dict(s) for s in self.section_divergences],
+            "excluded_documents": [dict(e) for e in self.excluded_documents],
+            "domain_profile_fingerprint": self.domain_profile_fingerprint,
         }
 
 
@@ -180,19 +319,44 @@ def build_corpus_reference_register(
     entity: str | None = None,
     required_predicates: Sequence[str] | None = None,
     comparison_divergences: Sequence[Any] = (),
+    divergence_collection: ReferenceDivergenceCollection | None = None,
     min_relevant_authority_rank: int = 1,
     expected_documents: Mapping[str, Any] | Sequence[str] | None = None,
+    excluded_documents: Sequence[Mapping[str, Any]] = (),
+    domain_profile_fingerprint: str | None = None,
 ) -> CorpusReferenceRegister:
     """Build a deterministic reference register and ``origin='corpus'`` obligations.
 
     Does not inspect the candidate response, justification graph, assertions, or
     any agent-supplied metadata flags.
     """
+    if isinstance(comparison_divergences, ReferenceDivergenceCollection):
+        divergence_collection = comparison_divergences
+        comparison_divergences = ()
+    eff_excluded = tuple(
+        dict(e)
+        for e in (
+            excluded_documents
+            or (divergence_collection.excluded_documents if divergence_collection is not None else ())
+        )
+    )
+    eff_profile_fp = (
+        domain_profile_fingerprint
+        or (divergence_collection.domain_profile_fingerprint if divergence_collection is not None else None)
+    )
+    eff_divergences = (
+        divergence_collection.divergences
+        if divergence_collection is not None and not comparison_divergences
+        else comparison_divergences
+    )
+
     if not isinstance(evidence, EvidenceLayer):
         return CorpusReferenceRegister(
             available=False,
             entity=entity,
             reason="REFERENCE_REGISTER_MISSING: no EvidenceLayer available.",
+            excluded_documents=eff_excluded,
+            domain_profile_fingerprint=eff_profile_fp,
         )
 
     doc_statuses = {k: dict(v) for k, v in (getattr(evidence, "document_read_statuses", {}) or {}).items()}
@@ -247,6 +411,8 @@ def build_corpus_reference_register(
             incomplete=has_reader_incomplete,
             incomplete_documents=relevant_incomplete if has_reader_incomplete else (),
             document_statuses=doc_statuses,
+            excluded_documents=eff_excluded,
+            domain_profile_fingerprint=eff_profile_fp,
         )
 
     target_entity = entity
@@ -501,7 +667,7 @@ def build_corpus_reference_register(
     reader_obligations = list(obligations)
     gap_divergences: list[dict[str, Any]] = []
     sec_div_records: list[dict[str, Any]] = []
-    for div in comparison_divergences or ():
+    for div in eff_divergences or ():
         pri_id = str(getattr(div, "primary_source_id", "") or "")
         sec_id = str(getattr(div, "secondary_source_id", "") or "")
         sec_key = str(getattr(div, "section_key", "") or "")
@@ -611,6 +777,8 @@ def build_corpus_reference_register(
         gap_divergences=tuple(gap_divergences),
         section_divergences=tuple(sec_div_records),
         admitted_unit_refs=admitted_refs,
+        excluded_documents=eff_excluded,
+        domain_profile_fingerprint=eff_profile_fp,
     )
 
 

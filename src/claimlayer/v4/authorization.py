@@ -1132,6 +1132,8 @@ def authorize(
         "corpus_obligations_covered": int(cov_snap.get("covered_count", 0)),
         "corpus_obligations_rejected": int(cov_snap.get("rejected_count", 0)),
         "corpus_obligation_ids": list(cov_snap.get("obligation_ids") or ()),
+        "excluded_documents": list(cov_snap.get("excluded_documents") or ()),
+        "corpus_domain_profile_fingerprint": cov_snap.get("domain_profile_fingerprint"),
     }
 
     if state is not None:

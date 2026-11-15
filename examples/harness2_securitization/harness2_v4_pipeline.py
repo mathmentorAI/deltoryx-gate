@@ -59,18 +59,21 @@ from claimlayer.v4 import (
     VerificationBudget,
     VerificationCache,
     build_corpus_reference_register,
+    collect_reference_divergences,
     review_response,
 )
 from claimlayer.v4.corpus_obligations import _value_in_text
 from claimlayer.v4.correspondence import compute_response_digest
 from claimlayer.v4.domain_profile import PolicyConfiguration
 from claimlayer.v4.domains.banking_finance import (
+    BANKING_EXCLUDED_COMPARISON_ROLES,
     BANKING_FINANCE_ACCEPTANCE_POLICY,
     BANKING_FINANCE_VOCABULARY,
     BANKING_SUBORDINATE_ROLES,
     resolve_banking_governing_role,
 )
 from claimlayer.v4.domains.securitization import (
+    SECURITIZATION_EXCLUDED_COMPARISON_ROLES,
     WaterfallComparisonResult,
     WaterfallStepSpec,
     verify_waterfall_steps,
@@ -1093,6 +1096,7 @@ class DomainAdapter:
     authority_check_fn: Callable[[ExtractedReportStructure, LoadedCaseCorpus], list[dict[str, Any]]]
     v4_prose_check_fn: Callable[[ExtractedReportStructure, LoadedCaseCorpus], list[dict[str, Any]]]
     resolve_governing_doc_fn: Callable[[LoadedCaseCorpus, str | None], LoadedDocument]
+    excluded_comparison_roles: Mapping[str, str] = field(default_factory=dict)
 
 
 def _check_securitization_v4_prose(
@@ -1201,6 +1205,7 @@ def get_domain_adapter(
             authority_check_fn=_check_banking_authority_and_markup_fidelity,
             v4_prose_check_fn=_check_banking_v4_prose,
             resolve_governing_doc_fn=_resolve_banking_governing_doc,
+            excluded_comparison_roles=dict(BANKING_EXCLUDED_COMPARISON_ROLES),
         )
     return DomainAdapter(
         domain_id="securitization",
@@ -1210,6 +1215,7 @@ def get_domain_adapter(
         authority_check_fn=_check_authority_and_section_fidelity,
         v4_prose_check_fn=_check_securitization_v4_prose,
         resolve_governing_doc_fn=lambda c, _cat=None: _find_governing_doc(c),
+        excluded_comparison_roles=dict(SECURITIZATION_EXCLUDED_COMPARISON_ROLES),
     )
 
 
@@ -1563,6 +1569,7 @@ def evaluate_securitization_candidate(
     assessment_digest = None
     cache_metrics: dict[str, int] = {}
     corpus_register: CorpusReferenceRegister | None = None
+    prof: DomainProfile | None = None
     if gate_mode == "v3_v4":
         # Compute corpus reference register & origin="corpus" obligations independently of agent output.
         layer = corpus.evidence_layer
@@ -1574,49 +1581,22 @@ def evaluate_securitization_candidate(
             # Populate EvidenceLayer once through the configured reader (errors stay in read_statuses; never swallowed).
             layer.ingest(list(corpus.v4_sources.values()))
 
-        # Deterministic v3 comparison divergences cross-check reader coverage.
-        docs = list(corpus.documents.values())
-        if adapter.domain_id == "banking_finance":
-            term_docs = [
-                d
-                for d in docs
-                if d.role not in ("quantitative_financial_model", "client_instructions_scope")
-            ]
-            comp_docs = term_docs if len(term_docs) >= 2 else docs
-        else:
-            comp_docs = docs
-        comp_divs: list[Any] = []
-        if len(comp_docs) >= 2:
-            gov_cmp = max(comp_docs, key=lambda d: int(d.authority_rank))
-            pri_src = Source(
-                id=gov_cmp.filename,
-                text=gov_cmp.text,
-                tier=gov_cmp.authority_tier,
-                authority_rank=gov_cmp.authority_rank,
-                title=f"{gov_cmp.doc_key}: {gov_cmp.filename}",
-            )
-            for d in comp_docs:
-                if d.filename == gov_cmp.filename:
-                    continue
-                sec_src = Source(
-                    id=d.filename,
-                    text=d.text,
-                    tier=d.authority_tier,
-                    authority_rank=d.authority_rank,
-                    title=f"{d.doc_key}: {d.filename}",
-                )
-                _, d_divs = build_comparison_policy(
-                    pri_src,
-                    sec_src,
-                    policy_id=f"ref_cmp::{gov_cmp.filename}::{d.filename}",
-                )
-                comp_divs.extend(d_divs)
-
+        prof = domain_profile or DomainProfile(
+            profile_id=f"{adapter.domain_id}_harness2",
+            vocabulary=adapter.vocabulary,
+            policy=PolicyConfiguration(
+                tau=adapter.acceptance_policy.tau,
+                delta=adapter.acceptance_policy.delta,
+                authority_ranks={d.filename: d.authority_rank for d in corpus.documents.values()},
+                excluded_comparison_roles=dict(adapter.excluded_comparison_roles),
+            ),
+        )
+        div_collection = collect_reference_divergences(corpus.documents, prof)
         corpus_register = build_corpus_reference_register(
             layer,
             adapter.vocabulary,
             question=parsed.question,
-            comparison_divergences=comp_divs,
+            divergence_collection=div_collection,
             expected_documents=corpus.v4_sources,
         )
         if not corpus_register.available:
@@ -1670,15 +1650,7 @@ def evaluate_securitization_candidate(
         issues.extend(adapter.v4_prose_check_fn(parsed, corpus))
 
         if parsed.graph is not None:
-            prof = domain_profile or DomainProfile(
-                profile_id=f"{adapter.domain_id}_harness2",
-                vocabulary=adapter.vocabulary,
-                policy=PolicyConfiguration(
-                    tau=adapter.acceptance_policy.tau,
-                    delta=adapter.acceptance_policy.delta,
-                    authority_ranks={d.filename: d.authority_rank for d in corpus.documents.values()},
-                ),
-            )
+            assert prof is not None
             v4_review = review_response(
                 parsed.question,
                 parsed.report_text,
@@ -1785,6 +1757,12 @@ def evaluate_securitization_candidate(
         corpus_register is not None
         and (corpus_register.has_material_conflicts or corpus_register.has_authority_overrides)
     )
+    excluded_docs = list(corpus_register.excluded_documents) if corpus_register is not None else []
+    profile_fp = (
+        corpus_register.domain_profile_fingerprint
+        if corpus_register is not None and corpus_register.domain_profile_fingerprint
+        else (prof.fingerprint() if prof is not None else None)
+    )
     receipt_payload: dict[str, Any] = (
         v3_verdict.receipt.to_dict()
         if v3_verdict is not None and getattr(v3_verdict, "receipt", None) is not None
@@ -1799,6 +1777,8 @@ def evaluate_securitization_candidate(
     receipt_payload["corpus_obligations_covered"] = covered_obs
     receipt_payload["corpus_obligations_rejected"] = rejected_obs
     receipt_payload["corpus_obligation_ids"] = list(ob_ids)
+    receipt_payload["excluded_documents"] = excluded_docs
+    receipt_payload["domain_profile_fingerprint"] = profile_fp
     receipt_payload["corpus_coverage_digest"] = hashlib.sha256(
         json.dumps(
             {
@@ -1810,6 +1790,8 @@ def evaluate_securitization_candidate(
                 "corpus_obligations_covered": covered_obs,
                 "corpus_obligations_rejected": rejected_obs,
                 "corpus_obligation_ids": list(ob_ids),
+                "excluded_documents": excluded_docs,
+                "domain_profile_fingerprint": profile_fp,
             },
             sort_keys=True,
         ).encode("utf-8")
@@ -1829,6 +1811,8 @@ def evaluate_securitization_candidate(
             "corpus_obligations_covered": covered_obs,
             "corpus_obligations_rejected": rejected_obs,
             "corpus_obligation_ids": list(ob_ids),
+            "excluded_documents": excluded_docs,
+            "domain_profile_fingerprint": profile_fp,
             "receipt": receipt_payload,
         }
     elif has_material_discrepancies:
@@ -1843,6 +1827,8 @@ def evaluate_securitization_candidate(
             "corpus_obligations_covered": covered_obs,
             "corpus_obligations_rejected": rejected_obs,
             "corpus_obligation_ids": list(ob_ids),
+            "excluded_documents": excluded_docs,
+            "domain_profile_fingerprint": profile_fp,
             "receipt": receipt_payload,
         }
     else:
@@ -1857,6 +1843,8 @@ def evaluate_securitization_candidate(
             "corpus_obligations_covered": covered_obs,
             "corpus_obligations_rejected": rejected_obs,
             "corpus_obligation_ids": list(ob_ids),
+            "excluded_documents": excluded_docs,
+            "domain_profile_fingerprint": profile_fp,
             "receipt": receipt_payload,
         }
 

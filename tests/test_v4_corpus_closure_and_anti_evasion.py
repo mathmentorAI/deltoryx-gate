@@ -702,20 +702,60 @@ def test_ac9_reader_incomplete_document_escalates_without_silencing_errors():
 
 
 def test_ac10_recorded_reader_gap_detected_on_meridian_and_apex():
-    """Real NIM recording on apex (and incomplete reader slice on meridian) triggers REFERENCE_REGISTER_GAP."""
+    """Production exclusions eliminate Apex spreadsheet gap while genuine misses trigger REFERENCE_REGISTER_GAP."""
     from pathlib import Path
     from benchmarks.heldout_multidomain_eval import (
         _build_apex_banking_corpus,
         _build_meridian_securitization_corpus,
     )
     from benchmarks.measure_reader_recall import _collect_comparison_divergences
-    from claimlayer.v4 import RecordedProposalReader
-    from claimlayer.v4.domains.banking_finance import BANKING_FINANCE_VOCABULARY
-    from claimlayer.v4.domains.securitization import SECURITIZATION_VOCABULARY
+    from claimlayer.v4 import RecordedProposalReader, collect_reference_divergences
+    from claimlayer.v4.domains.banking_finance import (
+        BANKING_FINANCE_DOMAIN_PROFILE,
+        BANKING_FINANCE_VOCABULARY,
+    )
+    from claimlayer.v4.domains.securitization import (
+        SECURITIZATION_DOMAIN_PROFILE,
+        SECURITIZATION_VOCABULARY,
+    )
 
     rec_dir = Path(__file__).resolve().parent.parent / "examples" / "harness2_securitization" / "recorded_reads"
     apex_corpus = _build_apex_banking_corpus()
-    apex_reader = RecordedProposalReader.from_file(rec_dir / "apex.json")
+    apex_full_reader = RecordedProposalReader.from_file(rec_dir / "apex.json")
+
+    # Full Apex recording under BANKING_FINANCE_DOMAIN_PROFILE has explicit role exclusions and 0 gaps.
+    apex_full_layer = EvidenceLayer(vocabulary=BANKING_FINANCE_VOCABULARY, reader=apex_full_reader)
+    apex_full_layer.ingest(list(apex_corpus.v4_sources.values()))
+    apex_div_coll = collect_reference_divergences(apex_corpus.documents, BANKING_FINANCE_DOMAIN_PROFILE)
+    apex_full_reg = build_corpus_reference_register(
+        apex_full_layer,
+        BANKING_FINANCE_VOCABULARY,
+        divergence_collection=apex_div_coll,
+    )
+    excluded_roles = {e["role"] for e in apex_full_reg.excluded_documents}
+    assert {"quantitative_financial_model", "client_instructions_scope"}.issubset(excluded_roles)
+    assert apex_full_reg.domain_profile_fingerprint == BANKING_FINANCE_DOMAIN_PROFILE.fingerprint()
+    assert not apex_full_reg.gap_divergences
+
+    # Simulate a recorded miss on apex's leverage_ratio / interest_margin proposals while keeping reader_status ok
+    filtered_apex_docs = {
+        did: {
+            **entry,
+            "raw_proposals": [
+                p
+                for p in (entry.get("raw_proposals") or ())
+                if p.get("predicate") not in ("leverage_ratio", "interest_margin")
+            ],
+        }
+        for did, entry in apex_full_reader.documents.items()
+    }
+    apex_miss_reader = RecordedProposalReader(
+        model_name=apex_full_reader.model_name,
+        prompt_version=apex_full_reader.prompt_version,
+        prompt_digest=apex_full_reader.prompt_digest,
+        recorded_at=apex_full_reader.recorded_at,
+        documents=filtered_apex_docs,
+    )
 
     meridian_corpus = _build_meridian_securitization_corpus()
     meridian_full_reader = RecordedProposalReader.from_file(rec_dir / "meridian.json")
@@ -735,13 +775,13 @@ def test_ac10_recorded_reader_gap_detected_on_meridian_and_apex():
         documents=filtered_meridian_docs,
     )
 
-    for case_name, corpus, reader, vocab in (
-        ("apex", apex_corpus, apex_reader, BANKING_FINANCE_VOCABULARY),
-        ("meridian", meridian_corpus, meridian_miss_reader, SECURITIZATION_VOCABULARY),
+    for case_name, corpus, reader, vocab, base_profile in (
+        ("apex", apex_corpus, apex_miss_reader, BANKING_FINANCE_VOCABULARY, BANKING_FINANCE_DOMAIN_PROFILE),
+        ("meridian", meridian_corpus, meridian_miss_reader, SECURITIZATION_VOCABULARY, SECURITIZATION_DOMAIN_PROFILE),
     ):
         layer = EvidenceLayer(vocabulary=vocab, reader=reader)
         layer.ingest(list(corpus.v4_sources.values()))
-        divs = _collect_comparison_divergences(corpus)
+        divs = _collect_comparison_divergences(corpus, domain_profile=base_profile)
         reg = build_corpus_reference_register(
             layer,
             vocab,

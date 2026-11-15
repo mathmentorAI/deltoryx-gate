@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass, field
 import re
 from typing import Any, Mapping, Sequence
 
+from ..domain_profile import DomainProfile, PolicyConfiguration
 from ..models import AcceptancePolicy
 from ..vocabulary import FieldSpec, PredicateSpec, Vocabulary, label_key
 
@@ -696,9 +697,24 @@ SECURITIZATION_ACCEPTANCE_POLICY = AcceptancePolicy(
     version="securitization-v1",
 )
 
+SECURITIZATION_EXCLUDED_COMPARISON_ROLES: dict[str, str] = {}
+
+SECURITIZATION_DOMAIN_PROFILE = DomainProfile(
+    profile_id="securitization_default",
+    version="1.0.0",
+    vocabulary=SECURITIZATION_VOCABULARY,
+    policy=PolicyConfiguration(
+        tau=SECURITIZATION_ACCEPTANCE_POLICY.tau,
+        delta=SECURITIZATION_ACCEPTANCE_POLICY.delta,
+        excluded_comparison_roles=dict(SECURITIZATION_EXCLUDED_COMPARISON_ROLES),
+    ),
+)
+
 __all__ = [
     "SECURITIZATION_VOCABULARY",
     "SECURITIZATION_ACCEPTANCE_POLICY",
+    "SECURITIZATION_EXCLUDED_COMPARISON_ROLES",
+    "SECURITIZATION_DOMAIN_PROFILE",
     "VALID_WATERFALL_PAYMENT_TYPES",
     "WaterfallStepSpec",
     "WaterfallComparisonResult",

@@ -20,7 +20,6 @@ for _p in (_SRC_DIR, _HARNESS_DIR, _BENCH_DIR, _TESTS_DIR):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from claimlayer import Source, build_comparison_policy  # noqa: E402
 from claimlayer.semantic.adapters import OpenAICompatibleModel  # noqa: E402
 from claimlayer.semantic.models import digest  # noqa: E402
 from claimlayer.v4 import (  # noqa: E402
@@ -29,17 +28,20 @@ from claimlayer.v4 import (  # noqa: E402
     RecordedProposalReader,
     STRICT_READER_PROMPT,
     build_corpus_reference_register,
+    collect_reference_divergences,
 )
 from claimlayer.v4.domains.banking_finance import (  # noqa: E402
     BANKING_FINANCE_ACCEPTANCE_POLICY,
+    BANKING_FINANCE_DOMAIN_PROFILE,
     BANKING_FINANCE_VOCABULARY,
 )
 from claimlayer.v4.domains.securitization import (  # noqa: E402
     SECURITIZATION_ACCEPTANCE_POLICY,
+    SECURITIZATION_DOMAIN_PROFILE,
     SECURITIZATION_VOCABULARY,
 )
 from claimlayer.v4.engine import CONTRACT  # noqa: E402
-from harness2_v4_pipeline import build_synthetic_securitization_corpus  # noqa: E402
+from harness2_v4_pipeline import build_synthetic_securitization_corpus, get_domain_adapter  # noqa: E402
 from heldout_multidomain_eval import (  # noqa: E402
     _build_apex_banking_corpus,
     _build_meridian_securitization_corpus,
@@ -47,65 +49,66 @@ from heldout_multidomain_eval import (  # noqa: E402
 from test_banking_finance_domain import _build_synthetic_banking_corpus  # noqa: E402
 
 
-_CORPUS_SPECS: dict[str, tuple[str, Callable[[], Any], Any, Any]] = {
+_CORPUS_SPECS: dict[str, tuple[str, Callable[[], Any], Any, Any, Any]] = {
     "cart_2024_2_synthetic_replay": (
         "cart_synth",
         build_synthetic_securitization_corpus,
         SECURITIZATION_VOCABULARY,
         SECURITIZATION_ACCEPTANCE_POLICY,
+        SECURITIZATION_DOMAIN_PROFILE,
     ),
     "heldout_sec_meridian_2026": (
         "meridian",
         _build_meridian_securitization_corpus,
         SECURITIZATION_VOCABULARY,
         SECURITIZATION_ACCEPTANCE_POLICY,
+        SECURITIZATION_DOMAIN_PROFILE,
     ),
     "heldout_bank_apex_2026": (
         "apex",
         _build_apex_banking_corpus,
         BANKING_FINANCE_VOCABULARY,
         BANKING_FINANCE_ACCEPTANCE_POLICY,
+        BANKING_FINANCE_DOMAIN_PROFILE,
     ),
     "banking_finance_synthetic": (
         "ridgeline",
         _build_synthetic_banking_corpus,
         BANKING_FINANCE_VOCABULARY,
         BANKING_FINANCE_ACCEPTANCE_POLICY,
+        BANKING_FINANCE_DOMAIN_PROFILE,
     ),
 }
 
 
-def _collect_comparison_divergences(corpus: Any, min_tier_rank: int | None = None) -> list[Any]:
-    docs = list(corpus.documents.values())
-    if not docs:
-        return []
-    gov = max(docs, key=lambda d: int(d.authority_rank))
-    gov_source = Source(
-        id=gov.filename,
-        text=gov.text,
-        tier=gov.authority_tier,
-        authority_rank=gov.authority_rank,
-        title=f"{gov.doc_key}: {gov.filename}",
+def _collect_comparison_divergences(
+    corpus: Any,
+    domain_profile: Any = None,
+    min_tier_rank: int | None = None,
+) -> list[Any]:
+    return list(
+        _collect_reference_divergence_collection(
+            corpus,
+            domain_profile=domain_profile,
+            min_tier_rank=min_tier_rank,
+        ).divergences
     )
-    all_divs: list[Any] = []
-    for doc in docs:
-        if doc.filename == gov.filename:
-            continue
-        sub_source = Source(
-            id=doc.filename,
-            text=doc.text,
-            tier=doc.authority_tier,
-            authority_rank=doc.authority_rank,
-            title=f"{doc.doc_key}: {doc.filename}",
+
+
+def _collect_reference_divergence_collection(
+    corpus: Any,
+    domain_profile: Any = None,
+    min_tier_rank: int | None = None,
+) -> Any:
+    prof = domain_profile
+    if prof is None:
+        adapter = get_domain_adapter(corpus)
+        prof = (
+            BANKING_FINANCE_DOMAIN_PROFILE
+            if adapter.domain_id == "banking_finance"
+            else SECURITIZATION_DOMAIN_PROFILE
         )
-        _, divs = build_comparison_policy(
-            gov_source,
-            sub_source,
-            policy_id=f"cmp_{corpus.case_id}_{doc.filename}",
-            min_tier_rank=min_tier_rank if min_tier_rank is not None else gov.authority_rank,
-        )
-        all_divs.extend(divs)
-    return all_divs
+    return collect_reference_divergences(corpus.documents, prof, min_tier_rank=min_tier_rank)
 
 
 def _quote_span(doc_text: str, quote: str) -> tuple[int, int] | None:
@@ -211,7 +214,7 @@ def measure_recall(
     tot_gaps = 0
 
     for case_id, spec in _CORPUS_SPECS.items():
-        short_name, builder, vocab, pol = spec
+        short_name, builder, vocab, pol, dprof = spec
         ann = corpora_ann[case_id]
         corpus = builder()
 
@@ -275,11 +278,13 @@ def measure_recall(
                 }
             (save_recordings_dir / f"{short_name}.json").write_text(json.dumps(rec_payload, indent=2))
 
-        divs = _collect_comparison_divergences(corpus)
+        div_coll = _collect_reference_divergence_collection(corpus, domain_profile=dprof)
+        divs = list(div_coll.divergences)
         register = build_corpus_reference_register(
             layer,
             vocab,
-            comparison_divergences=divs,
+            divergence_collection=div_coll,
+            expected_documents=corpus.v4_sources,
         )
         conflicts = list(ann.get("conflicts") or ())
         default_pri = str(ann.get("primary_source_id") or "")

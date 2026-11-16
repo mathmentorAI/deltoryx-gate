@@ -21,6 +21,9 @@ from ..verifiers.diff import build_comparison_policy, extract_divergent_sections
 from ..verifiers.quote_quantity import (
     _SECTION_HEADER_ONLY_RE,
     _STRUCTURAL_ID_RE,
+    _canonicalize_bullets,
+    _canonicalize_layout_text,
+    _canonicalize_punctuation_and_numbers,
     _normalize_pair_with_maps,
     _normalize_pdf_ocr_with_map,
     extract_dates_with_spans,
@@ -47,6 +50,8 @@ class ReferenceDivergenceCollection:
     document_metadata: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     comparison_coverage: Mapping[str, float] = field(default_factory=dict)
     excluded_furniture: Mapping[str, tuple[Mapping[str, Any], ...]] = field(default_factory=dict)
+    exclusion_asymmetry: bool = False
+    exclusion_symmetry_checks: tuple[Mapping[str, Any], ...] = ()
 
 
 def _doc_attr(doc: Any, name: str, default: Any = "") -> Any:
@@ -143,6 +148,8 @@ def collect_reference_divergences(
     all_divs: list[Any] = []
     cov_by_doc: dict[str, float] = {}
     furn_by_doc: dict[str, tuple[Mapping[str, Any], ...]] = {}
+    sym_checks: list[dict[str, Any]] = []
+    any_asymmetry = False
     for doc in comp_docs:
         sub_id = str(_doc_attr(doc, "filename", "") or _doc_attr(doc, "document_id", "") or _doc_attr(doc, "id", ""))
         if sub_id == gov_id:
@@ -170,6 +177,13 @@ def collect_reference_divergences(
             furn_by_doc[gov_id] = tuple(dict(x) for x in cmp_report.primary_excluded_furniture)
         if cmp_report.secondary_excluded_furniture and sub_id not in furn_by_doc:
             furn_by_doc[sub_id] = tuple(dict(x) for x in cmp_report.secondary_excluded_furniture)
+        if cmp_report.exclusion_asymmetry:
+            any_asymmetry = True
+        sym_checks.append({
+            "primary_document_id": gov_id,
+            "secondary_document_id": sub_id,
+            **dict(cmp_report.exclusion_symmetry_check),
+        })
 
     return ReferenceDivergenceCollection(
         divergences=tuple(all_divs),
@@ -181,6 +195,8 @@ def collect_reference_divergences(
         document_metadata=doc_meta,
         comparison_coverage=cov_by_doc,
         excluded_furniture=furn_by_doc,
+        exclusion_asymmetry=any_asymmetry,
+        exclusion_symmetry_checks=tuple(sym_checks),
     )
 
 
@@ -217,6 +233,8 @@ class CorpusReferenceRegister:
     reread_provenance: Mapping[str, Any] = field(default_factory=dict)
     comparison_coverage: Mapping[str, float] = field(default_factory=dict)
     excluded_furniture: Mapping[str, tuple[Mapping[str, Any], ...]] = field(default_factory=dict)
+    exclusion_asymmetry: bool = False
+    exclusion_symmetry_checks: tuple[Mapping[str, Any], ...] = ()
 
     @property
     def obligation_ids(self) -> tuple[str, ...]:
@@ -243,6 +261,8 @@ class CorpusReferenceRegister:
             "reread_provenance": dict(self.reread_provenance),
             "comparison_coverage": dict(self.comparison_coverage),
             "excluded_furniture": {k: [dict(x) for x in v] for k, v in self.excluded_furniture.items()},
+            "exclusion_asymmetry": bool(self.exclusion_asymmetry),
+            "exclusion_symmetry_checks": [dict(x) for x in self.exclusion_symmetry_checks],
         }
 
 
@@ -452,7 +472,7 @@ def _extract_sentence_quantity_tokens(
 
 
 def _norm_sentence_eq(text: str) -> str:
-    cleaned = re.sub(r"\s+", " ", normalize_pdf_ocr_noise(text).strip().lower())
+    cleaned = _canonicalize_layout_text(normalize_pdf_ocr_noise(text)).lower()
     return cleaned.rstrip(" .;:")
 
 
@@ -504,8 +524,8 @@ def _align_sentences(
     used_pri: set[int] = set()
     used_sec: set[int] = set()
 
-    pri_raw_norms = [re.sub(r"\s+", " ", normalize_pdf_ocr_noise(p[2]).strip().lower()) for p in pri_sents]
-    sec_raw_norms = [re.sub(r"\s+", " ", normalize_pdf_ocr_noise(s[2]).strip().lower()) for s in sec_sents]
+    pri_raw_norms = [_canonicalize_layout_text(normalize_pdf_ocr_noise(p[2])).lower() for p in pri_sents]
+    sec_raw_norms = [_canonicalize_layout_text(normalize_pdf_ocr_noise(s[2])).lower() for s in sec_sents]
 
     sec_norms_map: dict[str, deque[int]] = {}
     for si, raw_s in enumerate(sec_raw_norms):
@@ -3082,6 +3102,16 @@ def build_corpus_reference_register(
         if divergence_collection is not None
         else {}
     )
+    eff_excl_asym = (
+        bool(divergence_collection.exclusion_asymmetry)
+        if divergence_collection is not None
+        else False
+    )
+    eff_excl_sym_checks = (
+        tuple(dict(x) for x in divergence_collection.exclusion_symmetry_checks)
+        if divergence_collection is not None
+        else ()
+    )
 
     if not isinstance(evidence, EvidenceLayer):
         return CorpusReferenceRegister(
@@ -3092,6 +3122,8 @@ def build_corpus_reference_register(
             domain_profile_fingerprint=eff_profile_fp,
             comparison_coverage=eff_coverage,
             excluded_furniture=eff_furniture,
+            exclusion_asymmetry=eff_excl_asym,
+            exclusion_symmetry_checks=eff_excl_sym_checks,
         )
 
     doc_statuses = {k: dict(v) for k, v in (getattr(evidence, "document_read_statuses", {}) or {}).items()}
@@ -3159,6 +3191,8 @@ def build_corpus_reference_register(
             domain_profile_fingerprint=eff_profile_fp,
             comparison_coverage=eff_coverage,
             excluded_furniture=eff_furniture,
+            exclusion_asymmetry=eff_excl_asym,
+            exclusion_symmetry_checks=eff_excl_sym_checks,
         )
 
     eff_config = reread_config if reread_config is not None else TargetedRereadConfig()
@@ -3246,6 +3280,8 @@ def build_corpus_reference_register(
         reread_provenance=reread_prov,
         comparison_coverage=eff_coverage,
         excluded_furniture=eff_furniture,
+        exclusion_asymmetry=eff_excl_asym,
+        exclusion_symmetry_checks=eff_excl_sym_checks,
     )
 
 

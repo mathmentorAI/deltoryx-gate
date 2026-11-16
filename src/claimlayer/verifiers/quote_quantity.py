@@ -15,9 +15,13 @@ _QUOTE_MAP = str.maketrans(
         "\u2018": "'",
         "\u2019": "'",
         "\u201a": "'",
+        "\u201b": "'",
         "\u201c": '"',
         "\u201d": '"',
         "\u201e": '"',
+        "\u201f": '"',
+        "\u00ab": '"',
+        "\u00bb": '"',
         "\u2010": "-",
         "\u2011": "-",
         "\u2012": "-",
@@ -34,6 +38,97 @@ _ZERO_WIDTH_RE = re.compile(r"[\u00ad\u200b\u200c\u200d\ufeff]")
 _LINEBREAK_HYPHEN_RE = re.compile(
     r"([a-zA-ZáéíóúñüÁÉÍÓÚÑÜ])-\s*\n\s*([a-zA-ZáéíóúñüÁÉÍÓÚÑÜ])"
 )
+
+_BULLET_BLOCKLIST_PREV_RE = re.compile(
+    r"(?:section|sec|article|art|clause|part|item|step|rule|paragraph|schedule|exhibit|annex|"
+    r"appendix|class|series|tranche|tier|no|vol|fig|pp?|cl[aá]usula|art[ií]culo|apartado|punto|"
+    r"page|january|february|march|april|may|june|july|august|september|october|november|december|"
+    r"jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec|u\.s|dr|mr|mrs|ms|jr|sr|co|inc|corp|ltd|st|v)$",
+    re.IGNORECASE,
+)
+
+_BULLET_MARKER_RE = re.compile(
+    r"(?P<tok>(?:x{1,2}(?:i{1,3}|iv|vi{0,3})?|i{1,3}|iv|vi{0,3}|ix|[a-zA-Z]|\d{1,2}))(?P<delim>[.)])(?=[ \t]+[A-Za-z0-9($€£\"'\[\*])"
+)
+
+
+def _canonicalize_punctuation_and_numbers(text: str) -> str:
+    """Normalize punctuation/number/currency spacing without altering values or dates."""
+    if not text:
+        return ""
+    s = text
+    # Number internal comma/decimal spacing ("5 , 000" -> "5,000", "$5, 000" -> "$5,000", "5 . 25" -> "5.25")
+    s = re.sub(r"(?<=\d)[ \t]+,[ \t]*(?=\d{3}(?!\d))", ",", s)
+    s = re.sub(r"(?<=[$€£])[ \t]*(\d{1,3}),[ \t]+(?=\d{3}(?!\d))", r"\1,", s)
+    s = re.sub(r"(?<=\d)[ \t]+\.[ \t]*(?=\d)", ".", s)
+    # Currency symbol spacing before digits ("$ 5,000" -> "$5,000")
+    s = re.sub(r"(US\$|\$|€|£)[ \t]+(?=\d)", r"\1", s)
+    # Spaces around delimiters: remove horizontal space before , ; : ) ] % and after ( [
+    s = re.sub(r"[ \t]+([,;:\)%\]])", r"\1", s)
+    s = re.sub(r"([(\[])[ \t]+", r"\1", s)
+    return s
+
+
+_LOWER_ROMAN_MARKERS = frozenset(
+    {"i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x", "xi", "xii", "xiii", "xiv", "xv", "xvi", "xvii", "xviii", "xix", "xx"}
+)
+
+
+def _canonicalize_bullets(text: str) -> str:
+    """Canonicalize enumeration markers '(a)' / 'a)' / 'a.', '(i)' / 'i)' / 'i.', '(1)' / '1)' / '1.' -> '(tok)'."""
+    if not text:
+        return ""
+    out: list[str] = []
+    last = 0
+    for m in _BULLET_MARKER_RE.finditer(text):
+        start, end = m.start(), m.end()
+        tok = m.group("tok")
+        delim = m.group("delim")
+        if start > 0 and (text[start - 1].isalnum() or text[start - 1] in ("(", ".", ",", "$", "€", "£", "-", "_")):
+            continue
+        prefix = text[:start]
+        stripped_prefix = prefix.rstrip(" \t\r\n")
+        if delim == ")":
+            # Ensure ')' does not close an earlier unmatched '(' on the same clause/line
+            clause_tail = prefix[max(prefix.rfind("\n"), prefix.rfind(";")) + 1 :]
+            if clause_tail.count("(") > clause_tail.count(")"):
+                continue
+        else:
+            # For `tok.`, reject decimals/dotted section ids
+            if start + len(tok) + 1 < len(text) and text[start + len(tok) + 1].isdigit():
+                continue
+            is_lower_roman = tok in _LOWER_ROMAN_MARKERS
+            # Require valid list boundary unless lowercase roman numeral bullet ("means i. the period")
+            if not is_lower_roman and stripped_prefix and stripped_prefix[-1] not in ("\n", ";", ":", "."):
+                if not re.search(r"(?:^|[\s,;:])(?:and|or)$", stripped_prefix, re.IGNORECASE):
+                    continue
+            if stripped_prefix and not is_lower_roman:
+                prev_word_m = re.search(r"([A-Za-z.]+)\.?$", stripped_prefix)
+                if prev_word_m and _BULLET_BLOCKLIST_PREV_RE.search(prev_word_m.group(1).rstrip(".")):
+                    continue
+                # Avoid converting uppercase initial after a personal/entity word ("John A. Smith")
+                if len(tok) == 1 and tok.isupper() and stripped_prefix[-1] not in ("\n", ";", ":"):
+                    continue
+        out.append(text[last:start])
+        out.append(f"({tok})")
+        last = end
+    out.append(text[last:])
+    return "".join(out)
+
+
+def _canonicalize_layout_text(text: str) -> str:
+    """Canonicalize typography, whitespace, punctuation/number spaces, and bullets to a layout-invariant form."""
+    if not text:
+        return ""
+    s = re.sub(r"\u00ad(?=[ \t]*\r?\n)", "-", text)
+    s = re.sub(r"(?<=[A-Za-z0-9])\u2014(?=[A-Za-z0-9])", " - ", s)
+    s = s.translate(_QUOTE_MAP)
+    s = _ZERO_WIDTH_RE.sub("", s)
+    s = unicodedata.normalize("NFKC", s).replace("\\$", "$")
+    s = re.sub(r"\s+", " ", s).strip()
+    s = _canonicalize_punctuation_and_numbers(s)
+    s = _canonicalize_bullets(s)
+    return re.sub(r"\s+", " ", s).strip()
 
 # English and Spanish compound number words
 _ONES_EN: dict[str, int] = {
@@ -321,7 +416,7 @@ _ISO_DATE_RE = re.compile(r"\b(?P<y>\d{4})-(?P<m>\d{2})-(?P<d>\d{2})\b")
 _MDY_DATE_RE = re.compile(
     r"\b(?P<month>January|February|March|April|May|June|July|August|September|October|November|December|"
     r"Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+"
-    r"(?P<day>\d{1,2})(?:st|nd|rd|th)?,?\s+(?P<year>\d{4})\b",
+    r"(?P<day>\d{1,2})(?:st|nd|rd|th)?(?:\s*,\s*|\s+)(?P<year>\d{4})\b",
     re.IGNORECASE,
 )
 _DMY_DATE_RE = re.compile(
@@ -399,7 +494,7 @@ _NUMERIC_QUANTITY_RE = re.compile(
     r"|\d+(?:\.\d+)?"
     r")\)?"
     r"(?:(?P<scale_space>\s*)(?P<scale>mil\s+millones|billions?|bn|millions?|millones|mill[oó]n|thousands?|miles|mil|mm|k|m|b)\b\)?)?"
-    r"(?:(?:\s*-\s*|\s*)(?:\([a-zA-Z0-9]+\)(?:\s*-\s*|\s*))?(?:(?:de|of)\s+)?(?P<suffix>" + _UNIT_PATTERN + r"))?",
+    r"(?:(?:\s*-\s*|\s*)(?:\([a-zA-Z0-9]+\)(?:\s*-\s*|\s*))?(?:(?:de|of)\s+)?(?!(?:us\$|\$|€|£)\s*\d)(?P<suffix>" + _UNIT_PATTERN + r"))?",
     re.IGNORECASE,
 )
 
@@ -415,6 +510,7 @@ class _TableScaleHeaderSpec:
     exclude_par_value: bool = False
     exclude_percentages: bool = False
     exclude_shares: bool = False
+    inherited_row_label: str = ""
 
 
 _SQUASHED_SCALE_WORDS: dict[str, Decimal] = {
@@ -448,19 +544,24 @@ _BANNER_SCALE_DECL_RE = re.compile(
 
 _PAREN_BLOCK_RE = re.compile(r"\(([^()\n]{2,180})\)")
 _ROW_PER_SHARE_OR_PAR_RE = re.compile(
-    r"\b(?:per\s+(?:basic\s+|diluted\s+|weighted[- ]average\s+)?(?:common\s+)?share|"
-    r"per\s+ads|per\s+unit|par\s+value|dollars?\s+per\s+share|in\s+dollars\s+per\s+share|"
-    r"(?:basic|diluted)\s+(?:net\s+)?(?:income|loss|earnings)\s+per\s+share)\b",
+    r"\b(?:per\b(?:\s+[a-z0-9\-]+){0,5}\s+(?:shares?|units?|ads|adss)|"
+    r"per[-\s]+(?:share|unit|ads)|"
+    r"(?:par|stated)\s+value|"
+    r"dollars?\s+per\s+share|in\s+dollars\s+per\s+share|"
+    r"(?:basic|diluted)\s+(?:eps|net\s+(?:income|loss|earnings)\s+per\s+share)|"
+    r"eps)\b",
     re.IGNORECASE,
 )
 _ROW_PERCENTAGE_RE = re.compile(
-    r"(?:%|\b(?:percentage\s+of|percent|pct|gross\s+margin|operating\s+margin|margin|pts|basis\s+points?|bps)\b)",
+    r"(?:%|\b(?:percentage\s+of|percent|pct|bps|basis\s+points?)\b)",
     re.IGNORECASE,
 )
 _ROW_SHARES_RE = re.compile(
-    r"\b(?:weighted[- ]average\s+(?:common\s+)?shares?|common\s+shares?|preferred\s+shares?|shares?\s+(?:outstanding|issued|used))\b",
+    r"\b(?:number\s+of\s+shares|weighted[- ]average(?:\s+[a-z0-9\-]+){0,4}\s+shares?|"
+    r"common\s+shares?|preferred\s+shares?|shares?\s+(?:outstanding|authorized|issued|used))\b",
     re.IGNORECASE,
 )
+_ROW_RATIO_RE = re.compile(r"\bratios?\b", re.IGNORECASE)
 _EXCEPT_SPLIT_RE = re.compile(r"[,;\s]*\bexcept\b|(?<=,)except", re.IGNORECASE)
 
 
@@ -881,48 +982,43 @@ def normalize_span(
     *,
     lexical_texts: tuple[str, ...] | None = None,
 ) -> str:
-    """Normalize punctuation, ligatures, soft hyphens, and line-break hyphens deterministically."""
+    """Normalize punctuation, ligatures, soft hyphens, spacing, and line-break hyphens deterministically."""
     if not text:
         return ""
-    vocab_inputs = lexical_texts if lexical_texts is not None else (text,)
+    pre_text = re.sub(r"\u00ad(?=[ \t]*\r?\n)", "-", text)
+    pre_text = pre_text.replace("\r\n", "\n").replace("\r", "\n").translate(_QUOTE_MAP)
+    vocab_inputs = (
+        tuple(re.sub(r"\u00ad(?=[ \t]*\r?\n)", "-", t).translate(_QUOTE_MAP) for t in lexical_texts)
+        if lexical_texts is not None
+        else (pre_text,)
+    )
     known_hyphenated, known_joined = _collect_hyphen_lexical_sets(vocab_inputs)
 
     def _replace_lb(m: re.Match[str]) -> str:
         # Expand to full adjacent ASCII word tokens around the hyphen for lexical check.
         start = m.start()
         end = m.end()
-        while start > 0 and text[start - 1].isalpha():
+        while start > 0 and pre_text[start - 1].isalpha():
             start -= 1
-        while end < len(text) and text[end].isalpha():
+        while end < len(pre_text) and pre_text[end].isalpha():
             end += 1
-        seg = text[start:end]
+        seg = pre_text[start:end]
         lm = re.match(r"([A-Za-z]+)", seg)
         rm = re.search(r"([A-Za-z]+)$", seg)
         if lm and rm and _should_preserve_linebreak_hyphen(lm.group(1), rm.group(1), known_hyphenated, known_joined):
             return f"{m.group(1)}-{m.group(2)}"
         return f"{m.group(1)}{m.group(2)}"
 
-    dehyphenated = _LINEBREAK_HYPHEN_RE.sub(_replace_lb, text)
+    dehyphenated = _LINEBREAK_HYPHEN_RE.sub(_replace_lb, pre_text)
     cleaned = _ZERO_WIDTH_RE.sub("", dehyphenated)
     nfkc = unicodedata.normalize("NFKC", cleaned)
     translated = nfkc.translate(_QUOTE_MAP).replace("\\$", "$")
-    return re.sub(r"\s+", " ", translated).strip()
+    collapsed = re.sub(r"\s+", " ", translated).strip()
+    return _canonicalize_punctuation_and_numbers(collapsed)
 
 
-def _strip_pdf_page_furniture_with_map(
-    text: str,
-    *,
-    base_offset: int = 0,
-) -> tuple[str, list[int], list[int], tuple[dict[str, object], ...]]:
-    """Structurally detect and exclude running PDF headers/footers and sequential pagination.
-
-    Never drops an isolated single-occurrence short clause or standalone figure (negative control).
-    Returns `(cleaned_text, clean_char_orig_starts, clean_char_orig_ends, excluded_records)`.
-    """
-    if not text:
-        return "", [], [], ()
-
-    # Split into line records over `\r\n`, `\n`, and `\f` while preserving exact offsets.
+def _split_raw_furniture_lines(text: str) -> list[dict[str, object]]:
+    """Split *text* into line records over CRLF, LF, and form-feed preserving exact byte/char offsets."""
     lines: list[dict[str, object]] = []
     n = len(text)
     pos = 0
@@ -952,8 +1048,14 @@ def _strip_pdf_page_furniture_with_map(
                 "is_blank": stripped == "",
             }
         )
+    return lines
 
+
+def _detect_candidate_furniture_indices(lines: list[dict[str, object]]) -> dict[int, str]:
+    """Identify candidate structural PDF running headers/footers and page numbers per line index."""
     num_lines = len(lines)
+    if num_lines == 0:
+        return {}
 
     def _is_boundary_gap(idx: int, direction: int) -> tuple[bool, bool]:
         """Return `(has_blank_or_doc_edge, adjacent_to_ff)`."""
@@ -995,6 +1097,8 @@ def _strip_pdf_page_furniture_with_map(
         if len(stripped) > 120 or len(stripped.split()) > 14:
             continue
         if _SECTION_HEADER_ONLY_RE.match(stripped) or _OUTLINE_ITEM_PREFIX_RE.match(stripped):
+            continue
+        if re.search(r"[A-Za-z]-$", stripped):
             continue
         if stripped.startswith("|") and re.search(r"\|\s*[$€£]?\d", stripped):
             continue
@@ -1078,6 +1182,18 @@ def _strip_pdf_page_furniture_with_map(
         for idx in in_seq:
             strip_reasons[idx] = "sequential_page_number"
 
+    return strip_reasons
+
+
+def _render_filtered_lines_with_map(
+    text: str,
+    lines: list[dict[str, object]],
+    strip_reasons: dict[int, str],
+    *,
+    base_offset: int = 0,
+) -> tuple[str, list[int], list[int], tuple[dict[str, object], ...]]:
+    n = len(text)
+    num_lines = len(lines)
     if not strip_reasons:
         if "\f" not in text:
             starts = [base_offset + k for k in range(n)]
@@ -1102,10 +1218,7 @@ def _strip_pdf_page_furniture_with_map(
                     "kind": strip_reasons[idx],
                 }
             )
-            # Trim blank lines immediately trailing a stripped banner so cross-page wrapped
-            # sentences see at most one line break (`\n`) and unwrap cleanly.
             while out_chars and out_chars[-1] == "\n":
-                # Keep one `\n` only if preceded by non-newline char and next content isn't BOF.
                 if len(out_chars) >= 2 and out_chars[-2] == "\n":
                     out_chars.pop()
                     out_starts.pop()
@@ -1126,11 +1239,9 @@ def _strip_pdf_page_furniture_with_map(
             out_ends.append(base_offset + off + 1)
         delim = str(rec["delim"])
         if delim:
-            # Map form-feed `\f` cleanly to a newline separator for downstream text matching.
             mapped_delim = "\n" if delim in ("\n", "\r", "\f", "\r\n") else delim
             d_start = base_offset + l_cend
             d_end = base_offset + int(rec["end"])
-            # Avoid accumulating >2 consecutive newlines after excluded furniture.
             if not (mapped_delim == "\n" and excluded and len(out_chars) >= 2 and out_chars[-1] == "\n" and out_chars[-2] == "\n"):
                 out_chars.append(mapped_delim)
                 out_starts.append(d_start)
@@ -1138,6 +1249,23 @@ def _strip_pdf_page_furniture_with_map(
         idx += 1
 
     return "".join(out_chars), out_starts, out_ends, tuple(excluded)
+
+
+def _strip_pdf_page_furniture_with_map(
+    text: str,
+    *,
+    base_offset: int = 0,
+) -> tuple[str, list[int], list[int], tuple[dict[str, object], ...]]:
+    """Structurally detect and exclude running PDF headers/footers and sequential pagination.
+
+    Never drops an isolated single-occurrence short clause or standalone figure (negative control).
+    Returns `(cleaned_text, clean_char_orig_starts, clean_char_orig_ends, excluded_records)`.
+    """
+    if not text:
+        return "", [], [], ()
+    lines = _split_raw_furniture_lines(text)
+    strip_reasons = _detect_candidate_furniture_indices(lines)
+    return _render_filtered_lines_with_map(text, lines, strip_reasons, base_offset=base_offset)
 
 
 _OCR_LIGATURE_MAP: dict[str, str] = {
@@ -1172,6 +1300,83 @@ _OCR_PUNCT_MAP: dict[str, str] = {
 _OCR_STRIP_CHARS = frozenset({"\u00ad", "\u200b", "\u200c", "\u200d", "\ufeff"})
 
 
+def _stage2_canonicalize_punct_with_map(
+    stage2: list[tuple[str, int, int]],
+) -> list[tuple[str, int, int]]:
+    """Normalize punctuation/number/currency spacing on char-mapped *stage2* preserving exact source spans."""
+    if not stage2:
+        return []
+    out: list[tuple[str, int, int]] = []
+    n = len(stage2)
+    i = 0
+    while i < n:
+        ch, os, oe = stage2[i]
+        if ch in (",", ";", ":", ")", "]", "%"):
+            while out and out[-1][0] in (" ", "\t"):
+                out.pop()
+            # Drop spaces after ',' inside comma thousands ("5, 000" -> "5,000" when preceding digits & currency or space before comma)
+            out.append((ch, os, oe))
+            if ch == "," and len(out) >= 2 and out[-2][0].isdigit():
+                # Check if previous char before comma was digit and next digits are exact 3-digit thousands group with space after ','
+                k = i + 1
+                sp_cnt = 0
+                while k < n and stage2[k][0] in (" ", "\t"):
+                    sp_cnt += 1
+                    k += 1
+                if sp_cnt > 0 and k + 2 < n and stage2[k][0].isdigit() and stage2[k + 1][0].isdigit() and stage2[k + 2][0].isdigit():
+                    if k + 3 >= n or not stage2[k + 3][0].isdigit():
+                        # Only collapse if there was a space BEFORE ',' in original or a currency symbol precedes the number
+                        prev_was_space = (i > 0 and stage2[i - 1][0] in (" ", "\t"))
+                        j_back = len(out) - 2
+                        while j_back >= 0 and (out[j_back][0].isdigit() or out[j_back][0] in (",", " ", "\t")):
+                            j_back -= 1
+                        has_cur_prefix = j_back >= 0 and out[j_back][0] in ("$", "€", "£")
+                        if prev_was_space or has_cur_prefix:
+                            i = k
+                            continue
+            if ch == "," and i + 1 < n and stage2[i + 1][0] in (" ", "\t"):
+                pass
+            i += 1
+            continue
+
+        if ch in ("(", "["):
+            out.append((ch, os, oe))
+            i += 1
+            while i < n and stage2[i][0] in (" ", "\t"):
+                i += 1
+            continue
+
+        if ch in ("$", "€", "£"):
+            out.append((ch, os, oe))
+            k = i + 1
+            while k < n and stage2[k][0] in (" ", "\t"):
+                k += 1
+            if k > i + 1 and k < n and stage2[k][0].isdigit():
+                i = k
+                continue
+            i += 1
+            continue
+
+        if ch == "." and len(stage2[i - 1 : i]) == 1 and i > 0 and stage2[i - 1][0] in (" ", "\t"):
+            # Collapse "5 . 25" -> "5.25" when digit precedes whitespace before dot AND digit follows optional space
+            j_prev = len(out) - 1
+            while j_prev >= 0 and out[j_prev][0] in (" ", "\t"):
+                j_prev -= 1
+            k_next = i + 1
+            while k_next < n and stage2[k_next][0] in (" ", "\t"):
+                k_next += 1
+            if j_prev >= 0 and out[j_prev][0].isdigit() and k_next < n and stage2[k_next][0].isdigit():
+                while out and out[-1][0] in (" ", "\t"):
+                    out.pop()
+                out.append((".", os, oe))
+                i = k_next
+                continue
+
+        out.append((ch, os, oe))
+        i += 1
+    return out
+
+
 def _normalize_pdf_ocr_with_map(
     text: str,
     *,
@@ -1180,6 +1385,7 @@ def _normalize_pdf_ocr_with_map(
     known_hyphenated: frozenset[tuple[str, str]] | None = None,
     known_joined: frozenset[str] | None = None,
     furniture_out: list[dict[str, object]] | None = None,
+    excluded_line_override: dict[int, str] | None = None,
 ) -> tuple[str, list[int], list[int]]:
     """Return `(normalized_text, norm_char_to_orig_start, norm_char_to_orig_end)`."""
     if not text:
@@ -1194,9 +1400,15 @@ def _normalize_pdf_ocr_with_map(
         eff_joined = known_joined
 
     if apply_furniture_filter:
-        cleaned_text, clean_starts, clean_ends, excluded_items = _strip_pdf_page_furniture_with_map(
-            text, base_offset=base_offset
-        )
+        if excluded_line_override is not None:
+            raw_lines = _split_raw_furniture_lines(text)
+            cleaned_text, clean_starts, clean_ends, excluded_items = _render_filtered_lines_with_map(
+                text, raw_lines, excluded_line_override, base_offset=base_offset
+            )
+        else:
+            cleaned_text, clean_starts, clean_ends, excluded_items = _strip_pdf_page_furniture_with_map(
+                text, base_offset=base_offset
+            )
         if furniture_out is not None and excluded_items:
             furniture_out.extend(excluded_items)
     else:
@@ -1236,6 +1448,15 @@ def _normalize_pdf_ocr_with_map(
         if ch in _OCR_LIGATURE_MAP:
             for rep_ch in _OCR_LIGATURE_MAP[ch]:
                 stage1.append((rep_ch, orig_s, orig_e))
+            continue
+        if ch == "\u2014":
+            prev_al = bool(stage1 and stage1[-1][0].isalnum())
+            next_al = bool(i < n and cleaned_text[i].isalnum())
+            if prev_al and next_al:
+                for rep_ch in (" ", "-", " "):
+                    stage1.append((rep_ch, orig_s, orig_e))
+            else:
+                stage1.append(("-", orig_s, orig_e))
             continue
         if ch in _OCR_PUNCT_MAP:
             stage1.append((_OCR_PUNCT_MAP[ch], orig_s, orig_e))
@@ -1314,8 +1535,15 @@ def _normalize_pdf_ocr_with_map(
                     idx_n += 1
                 next_prefix = "".join(next_line_chars).lstrip()
                 is_structural_next = bool(
-                    next_prefix.startswith(("|", "- ", "* ", "•"))
-                    or re.match(r"^(?:\(\d+\)|\(\w\)|\d+\.\s)", next_prefix)
+                    (
+                        next_prefix.startswith(("|", "- ", "* ", "•"))
+                        or re.match(r"^(?:\(\d+\)|\(\w\)|\d+\.\s)", next_prefix)
+                    )
+                    and not re.search(
+                        r"\b(?:section|sec\.?|article|art\.?|clause|part|item|schedule|exhibit|annex|cl[aá]usula|art[ií]culo|no\.?)$",
+                        prev_line,
+                        re.IGNORECASE,
+                    )
                 )
                 is_email_header_prev = bool(
                     prev_line.endswith(">")
@@ -1341,10 +1569,17 @@ def _normalize_pdf_ocr_with_map(
         stage2.append((ch, orig_s, orig_e))
         j += 1
 
-    norm_text = "".join(c for c, _, _ in stage2)
-    orig_starts = [s for _, s, _ in stage2]
-    orig_ends = [e for _, _, e in stage2]
+    stage3 = _stage2_canonicalize_punct_with_map(stage2)
+    norm_text = "".join(c for c, _, _ in stage3)
+    orig_starts = [s for _, s, _ in stage3]
+    orig_ends = [e for _, _, e in stage3]
     return norm_text, orig_starts, orig_ends
+
+
+def _count_phrase_in_norm_body(key_text: str, body_text: str) -> int:
+    if not key_text or not body_text:
+        return 0
+    return len(re.findall(r"(?<![a-z0-9])" + re.escape(key_text) + r"(?![a-z0-9])", body_text, re.IGNORECASE))
 
 
 def _normalize_pair_with_maps(
@@ -1358,8 +1593,49 @@ def _normalize_pair_with_maps(
     tuple[str, list[int], list[int], tuple[dict[str, object], ...]],
     tuple[str, list[int], list[int], tuple[dict[str, object], ...]],
 ]:
-    """Normalize a primary/secondary text pair sharing inline lexical hyphen vocabulary."""
+    """Normalize a primary/secondary text pair with symmetric furniture exclusion and shared hyphen vocab."""
     known_hyph, known_joined = _collect_hyphen_lexical_sets((primary_text, secondary_text))
+    p_override: dict[int, str] | None = None
+    s_override: dict[int, str] | None = None
+
+    if apply_furniture_filter and primary_text and secondary_text:
+        p_lines = _split_raw_furniture_lines(primary_text)
+        s_lines = _split_raw_furniture_lines(secondary_text)
+        p_strip = _detect_candidate_furniture_indices(p_lines)
+        s_strip = _detect_candidate_furniture_indices(s_lines)
+
+        if p_strip or s_strip:
+            for _ in range(3):
+                changed = False
+                p_ret = _canonicalize_layout_text(
+                    " ".join(str(r["content"]) for i, r in enumerate(p_lines) if i not in p_strip)
+                )
+                s_ret = _canonicalize_layout_text(
+                    " ".join(str(r["content"]) for i, r in enumerate(s_lines) if i not in s_strip)
+                )
+                for idx in sorted(list(p_strip)):
+                    cand = _canonicalize_layout_text(str(p_lines[idx]["stripped"]))
+                    if not cand:
+                        continue
+                    c_s = _count_phrase_in_norm_body(cand, s_ret)
+                    c_p = _count_phrase_in_norm_body(cand, p_ret)
+                    if c_s > c_p:
+                        del p_strip[idx]
+                        changed = True
+                for idx in sorted(list(s_strip)):
+                    cand = _canonicalize_layout_text(str(s_lines[idx]["stripped"]))
+                    if not cand:
+                        continue
+                    c_p = _count_phrase_in_norm_body(cand, p_ret)
+                    c_s = _count_phrase_in_norm_body(cand, s_ret)
+                    if c_p > c_s:
+                        del s_strip[idx]
+                        changed = True
+                if not changed:
+                    break
+            p_override = p_strip
+            s_override = s_strip
+
     p_furn: list[dict[str, object]] = []
     s_furn: list[dict[str, object]] = []
     p_norm, p_s, p_e = _normalize_pdf_ocr_with_map(
@@ -1369,6 +1645,7 @@ def _normalize_pair_with_maps(
         known_hyphenated=known_hyph,
         known_joined=known_joined,
         furniture_out=p_furn,
+        excluded_line_override=p_override,
     )
     s_norm, s_s, s_e = _normalize_pdf_ocr_with_map(
         secondary_text,
@@ -1377,6 +1654,7 @@ def _normalize_pair_with_maps(
         known_hyphenated=known_hyph,
         known_joined=known_joined,
         furniture_out=s_furn,
+        excluded_line_override=s_override,
     )
     return (p_norm, p_s, p_e, tuple(p_furn)), (s_norm, s_s, s_e, tuple(s_furn))
 
@@ -1677,11 +1955,13 @@ def _has_blocking_table_boundary(between: str) -> bool:
     # Allow 1-2 blank lines common in PDF table banners, but stop after >=3 blank lines.
     if re.search(r"\n\s*\n\s*\n\s*\n", between):
         return True
-    if ";" in between:
+    # Ignore semicolons/periods inside parenthetical equity/footnote descriptions (e.g. "(authorized ...; issued ...)").
+    scrubbed = re.sub(r"\([^()\n]{0,240}\)", " ", between)
+    if ";" in scrubbed:
         return True
-    for i, ch in enumerate(between):
-        if ch == "." and _is_sentence_boundary_dot(between, i):
-            nxt = between[i + 1 : i + 2]
+    for i, ch in enumerate(scrubbed):
+        if ch == "." and _is_sentence_boundary_dot(scrubbed, i):
+            nxt = scrubbed[i + 1 : i + 2]
             if not nxt or nxt.isspace():
                 return True
     return False
@@ -1778,6 +2058,18 @@ def _detect_contextual_table_spec(
             if not re.search(r"(?:€|£|\beur\b|\beuros?\b|\bgbp\b|\bpounds?\b|\bsterling\b)", normalized_source, re.IGNORECASE):
                 currency = "USD"
 
+    inherited_row_label = ""
+    if source and "\n" in source:
+        src_line_ctx = _build_norm_line_context(source, normalized_source.replace("\n", " "))
+        for s_off, e_off, ctx_lbl in src_line_ctx:
+            if s_off <= offset <= e_off:
+                inherited_row_label = ctx_lbl
+                break
+        if not inherited_row_label:
+            # Walk raw lines directly up to `offset` inside `normalized_source`
+            raw_prefix_lines = [normalize_span(ln) for ln in normalized_source[:offset].splitlines()]
+            _, inherited_row_label = _scan_row_group_state(raw_prefix_lines)
+
     return _TableScaleHeaderSpec(
         scale=spec.scale,
         currency=currency,
@@ -1789,6 +2081,7 @@ def _detect_contextual_table_spec(
         exclude_par_value=spec.exclude_par_value,
         exclude_percentages=spec.exclude_percentages,
         exclude_shares=spec.exclude_shares,
+        inherited_row_label=inherited_row_label,
     )
 
 
@@ -1812,63 +2105,194 @@ def _mask_preserving_len(match: re.Match[str]) -> str:
     return " " * (match.end() - match.start())
 
 
-def _build_norm_line_bounds(raw_text: str, norm_text: str) -> list[tuple[int, int]]:
-    """Approximate `(start, end)` bounds inside *norm_text* corresponding to each raw line."""
-    if "\n" not in raw_text:
-        return [(0, len(norm_text))]
-    bounds: list[tuple[int, int]] = []
-    pos = 0
-    for ln in raw_text.splitlines():
-        nln = normalize_span(ln)
-        if not nln:
+_SUBROW_CONTINUATION_RE = re.compile(
+    r"^\s*(?:basic|diluted|class\s+[a-z0-9]+|common|preferred|total\s+(?:basic|diluted))\b",
+    re.IGNORECASE,
+)
+
+_DATA_NUMBER_IN_LINE_RE = re.compile(
+    r"(?:[$€£]\s*[-−(]?\d|\b\d+(?:,\d{3})*(?:\.\d+)?\b)"
+)
+
+
+def _line_has_table_data_number(norm_line: str) -> bool:
+    """Return True if *norm_line* contains actual numeric cell values (ignoring footnote markers '(1)', '(a)', '(Note 4)')."""
+    cleaned = re.sub(r"\(\s*(?:\d{1,2}|[a-zA-Z]|note\s+\d+)\s*\)", " ", norm_line, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(?:19|20)\d{2}\b", " ", cleaned)
+    return bool(_DATA_NUMBER_IN_LINE_RE.search(cleaned))
+
+
+def _scan_row_group_state(lines: list[str]) -> tuple[str, str]:
+    """Return `(active_group_label, combined_group_and_pending_label)` after walking *lines*."""
+    group_label = ""
+    pending_labels: list[str] = []
+    for ln in lines:
+        s = ln.strip()
+        if not s:
+            pending_labels.clear()
+            group_label = ""
             continue
-        start = pos
-        end = min(len(norm_text), pos + len(nln))
-        bounds.append((start, end))
-        pos = end + 1
-    return bounds or [(0, len(norm_text))]
+        if s in {"$", "€", "£"}:
+            continue
+        if _find_table_scale_headers(s):
+            pending_labels.clear()
+            group_label = ""
+            continue
+        if not _line_has_table_data_number(s):
+            stripped_trail = s.rstrip()
+            if stripped_trail.endswith((":", "—", "-")) or _ROW_PER_SHARE_OR_PAR_RE.search(s) or _ROW_SHARES_RE.search(s):
+                if len(pending_labels) == 0 and stripped_trail.endswith((":", "—", "-")):
+                    group_label = s
+                elif _SUBROW_CONTINUATION_RE.match(s):
+                    pending_labels.append(s)
+                else:
+                    if group_label and not stripped_trail.endswith((":", "—", "-")):
+                        pending_labels.append(s)
+                    else:
+                        group_label = s
+                        pending_labels.clear()
+            else:
+                if group_label and not _SUBROW_CONTINUATION_RE.match(s) and len(s.split()) >= 2:
+                    group_label = ""
+                pending_labels.append(s)
+        else:
+            if group_label and not pending_labels and not _SUBROW_CONTINUATION_RE.match(s) and not re.match(r"^\s*[$€£]?\s*[\d.,()-]+\s*$", s):
+                if not (_ROW_PER_SHARE_OR_PAR_RE.search(s) or _ROW_SHARES_RE.search(s)):
+                    group_label = ""
+            pending_labels.clear()
+    combined = " ".join(x for x in [group_label, *pending_labels] if x).strip()
+    return group_label, combined
 
 
-def _line_slice_for_pos(norm_text: str, bounds: list[tuple[int, int]], pos: int) -> tuple[int, int]:
-    for s, e in bounds:
+def _build_norm_line_context(raw_text: str, norm_text: str) -> list[tuple[int, int, str]]:
+    """Return `[(norm_start, norm_end, inherited_group_or_wrapped_label), ...]` for lines in *raw_text*."""
+    if "\n" not in raw_text:
+        return [(0, len(norm_text), "")]
+    out: list[tuple[int, int, str]] = []
+    cursor = 0
+    group_label = ""
+    pending_labels: list[str] = []
+
+    for raw_ln in raw_text.splitlines():
+        nln = normalize_span(raw_ln)
+        if not nln:
+            pending_labels.clear()
+            continue
+        found = norm_text.find(nln, cursor)
+        if found >= 0:
+            start = found
+            end = found + len(nln)
+            cursor = end
+        else:
+            start = min(cursor, len(norm_text))
+            end = min(len(norm_text), start + len(nln))
+            cursor = end
+
+        if nln.strip() in {"$", "€", "£"}:
+            eff_ctx = " ".join(x for x in [group_label, *pending_labels] if x).strip()
+            out.append((start, end, eff_ctx))
+            continue
+
+        if _find_table_scale_headers(nln):
+            out.append((start, end, ""))
+            pending_labels.clear()
+            group_label = ""
+            continue
+
+        is_data = _line_has_table_data_number(nln)
+        if not is_data:
+            stripped_trail = nln.strip()
+            eff_ctx = " ".join(x for x in [group_label, *pending_labels] if x).strip()
+            out.append((start, end, eff_ctx))
+            if stripped_trail.endswith((":", "—", "-")) and not pending_labels:
+                group_label = nln
+            elif _SUBROW_CONTINUATION_RE.match(nln):
+                pending_labels.append(nln)
+            elif len(nln.split()) <= 5 and (_ROW_PER_SHARE_OR_PAR_RE.search(nln) or _ROW_SHARES_RE.search(nln)):
+                group_label = nln
+                pending_labels.clear()
+            else:
+                if group_label and not _SUBROW_CONTINUATION_RE.match(nln) and len(pending_labels) == 0:
+                    # Wait: only reset group_label if this standalone label is clearly a new top-level section
+                    if stripped_trail.endswith(":"):
+                        group_label = nln
+                pending_labels.append(nln)
+        else:
+            if (
+                group_label
+                and not pending_labels
+                and not _SUBROW_CONTINUATION_RE.match(nln)
+                and not re.match(r"^\s*[$€£]?\s*[-−(]?[\d.,]+(?:\s*[$€£]?\s*[-−(]?[\d.,]+)*\s*$", nln)
+                and not (_ROW_PER_SHARE_OR_PAR_RE.search(nln) or _ROW_SHARES_RE.search(nln))
+            ):
+                group_label = ""
+            eff_ctx = " ".join(x for x in [group_label, *pending_labels] if x).strip()
+            out.append((start, end, eff_ctx))
+            pending_labels.clear()
+
+    return out or [(0, len(norm_text), "")]
+
+
+def _line_context_for_pos(norm_text: str, line_ctx: list[tuple[int, int, str]], pos: int) -> tuple[int, int, str]:
+    for s, e, ctx in line_ctx:
         if s <= pos <= e:
-            return s, e
-    return 0, len(norm_text)
+            return s, e, ctx
+    return 0, len(norm_text), ""
 
 
 def _is_scale_excluded_for_match(
     norm_text: str,
-    line_bounds: list[tuple[int, int]],
+    line_bounds: list[tuple[int, int, str]] | list[tuple[int, int]],
     m_start: int,
     m_end: int,
     raw_num: str,
     unit: str,
     table_scale_spec: _TableScaleHeaderSpec | None,
 ) -> bool:
-    """Return True if *m_start..m_end* falls under an excluded row/exception clause (per share, par value, pct, shares)."""
+    """Return True if *m_start..m_end* falls under an excluded row type (per share/unit, par value, %, shares, ratio)."""
     if unit not in _CURRENCY_UNITS and unit != "NONE":
         return True
     if unit == "NONE" and re.fullmatch(r"(?:19|20)\d{2}", raw_num.strip()):
         return True
-    ls, le = _line_slice_for_pos(norm_text, line_bounds, m_start)
-    # Narrow within single-line semi-colon / sentence separated clauses too.
+
+    # Support both legacy 2-tuple bounds and rich 3-tuple (start, end, inherited_ctx) entries
+    if line_bounds and len(line_bounds[0]) == 3:  # type: ignore[index]
+        ls, le, row_group_ctx = _line_context_for_pos(norm_text, line_bounds, m_start)  # type: ignore[arg-type]
+    else:
+        ls, le, row_group_ctx = 0, len(norm_text), ""
+        for sp in line_bounds:
+            if sp[0] <= m_start <= sp[1]:
+                ls, le = sp[0], sp[1]
+                break
+
     seg_s = max(ls, norm_text.rfind(";", ls, m_start) + 1)
     seg_s = max(seg_s, norm_text.rfind("|", ls, m_start) + 1)
     before = norm_text[seg_s:m_start]
     full_seg = norm_text[seg_s:le]
 
-    # Per-share, EPS, and par-value rows are never expressed in millions/thousands of dollars per share.
-    if _ROW_PER_SHARE_OR_PAR_RE.search(before):
-        return True
-    # Also check same segment after number in case "(in dollars per share)" immediately precedes or follows label.
-    if re.search(r"\(\s*(?:in\s+)?dollars?\s+per\s+share\s*\)", full_seg, re.IGNORECASE):
-        return True
+    inherited = (table_scale_spec.inherited_row_label if table_scale_spec is not None else "") or ""
+    combined_before = " ".join(x for x in (inherited, row_group_ctx, before) if x).strip()
+    combined_seg = " ".join(x for x in (inherited, row_group_ctx, full_seg) if x).strip()
 
-    if table_scale_spec is not None:
-        if table_scale_spec.exclude_percentages and unit == "NONE" and _ROW_PERCENTAGE_RE.search(full_seg):
+    # Handle balance-sheet capital lines where par value appears inside label BEFORE an equity column total:
+    # e.g. "Common stock — par value $1.00 per share (authorized 4.3B shares; issued 3.1B shares)  3,120"
+    post_share_paren_equity = bool(re.search(r"\([^)]*\bshares?\b[^)]*\)\s*(?:[$€£]\s*)?$", before, re.IGNORECASE))
+
+    # Row-type exclusion: always enforced by row label/group type regardless of header exception wording
+    if not post_share_paren_equity:
+        if _ROW_PER_SHARE_OR_PAR_RE.search(combined_before):
             return True
-        if table_scale_spec.exclude_shares and unit == "NONE" and _ROW_SHARES_RE.search(before):
+        if re.search(r"\(\s*(?:in\s+)?dollars?\s+per\s+share\s*\)", combined_seg, re.IGNORECASE):
             return True
+
+    if unit == "NONE":
+        if _ROW_PERCENTAGE_RE.search(combined_seg):
+            return True
+        if _ROW_SHARES_RE.search(combined_before):
+            return True
+        if _ROW_RATIO_RE.search(combined_before):
+            return True
+
     return False
 
 
@@ -1892,7 +2316,7 @@ def extract_quantities(
         table_scale_spec = _detect_contextual_table_spec(norm)
         table_scale = table_scale_spec.scale if table_scale_spec is not None else None
     is_es = bool(_SPANISH_CONTEXT_RE.search(norm)) if es_context is None else es_context
-    line_bounds = _build_norm_line_bounds(text, norm) if table_scale is not None else [(0, len(norm))]
+    line_bounds = _build_norm_line_context(text, norm) if table_scale is not None else [(0, len(norm), "")]
 
     # Mask ISO dates, natural dates, slash dates, and structural identifiers while preserving character offsets
     scrubbed = _DOT_DATE_RE.sub(_mask_preserving_len, norm)
@@ -2091,7 +2515,7 @@ def canonicalize_value(value: str, explicit_unit: str | None = None) -> str:
 
 
 def _is_sentence_boundary_dot(text: str, pos: int) -> bool:
-    """Return True if `text[pos]` ('.') is a sentence boundary rather than a decimal/section dot or abbreviation."""
+    """Return True if `text[pos]` ('.') is a sentence boundary rather than a decimal/section dot, abbreviation, or list bullet."""
     if pos < 0 or pos >= len(text) or text[pos] != ".":
         return False
     # Decimal or section number like "4.01" or "6.75"
@@ -2101,6 +2525,15 @@ def _is_sentence_boundary_dot(text: str, pos: int) -> bool:
     window_before = text[max(0, pos - 8) : pos + 1]
     if _ABBREV_BEFORE_DOT_RE.search(window_before):
         return False
+    # List enumeration marker ("a. Item", "i. Item", "1. Item") at clause/line start or inline roman marker
+    win_bul = text[max(0, pos - 16) : pos + 1]
+    m_bul = re.search(r"(?:^|[\n;:]\s*|(?<=\.\s))\s*([a-z]|x{1,2}(?:i{1,3}|iv|vi{0,3})?|i{1,3}|iv|vi{0,3}|ix|\d{1,2})\.$", win_bul)
+    if not m_bul:
+        m_bul = re.search(r"(?:^|\s)(x{1,2}(?:i{1,3}|iv|vi{0,3})?|i{1,3}|iv|vi{0,3}|ix)\.$", win_bul)
+    if m_bul:
+        tail_after = text[pos + 1 : pos + 12]
+        if re.match(r"^[ \t]+[A-Za-z0-9($€£\"'\[\*]", tail_after):
+            return False
     return True
 
 
@@ -2816,7 +3249,7 @@ def verify_quote_and_quantities(
             # Allow bare tabular cells under an explicit currency table header (e.g. "($ in millions)")
             # to also match assertions specifying that currency, while keeping exception rows unscaled/unpromoted.
             norm_ref_for_bounds = normalize_span(reference_text)
-            ref_line_bounds = _build_norm_line_bounds(reference_text, norm_ref_for_bounds)
+            ref_line_bounds = _build_norm_line_context(reference_text, norm_ref_for_bounds)
             for qq in raw_quote_quantities:
                 if qq.unit == "NONE":
                     raw_slice = norm_ref_for_bounds[qq.span[0] : qq.span[1]].strip()

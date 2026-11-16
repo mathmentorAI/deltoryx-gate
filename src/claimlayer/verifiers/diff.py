@@ -14,6 +14,7 @@ from typing import Any
 
 from claimlayer.models import Policy, Source, normalize_key
 from claimlayer.verifiers.quote_quantity import (
+    _canonicalize_layout_text,
     _normalize_pair_with_maps,
     extract_dates,
     extract_quantities,
@@ -39,12 +40,13 @@ _NAMED_SECTION_HEADER_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Bare numbered or ordinal headers at line start: "4.01 Events of Default", "PRIMERA.- Objeto", "1.- Objeto", "1) Purpose"
+# Bare numbered or ordinal headers at line start: "4.01 Events of Default", "PRIMERA.- Objeto", "1.- Objeto", "1: Purpose"
+# Note: bare "1)" at line start is a list enumeration marker equivalent to "(1)"/"1." rather than a standalone section break.
 _BARE_NUMBER_HEADER_RE = re.compile(
     r"(?m)^[ \t]*(?:#{1,6}\s*)?"
     r"(?:"
     r"(?P<num>\d+\.\d+(?:\.\d+)*)(?P<num_sep>\s*[:.\-—)]\s*|\s+)"
-    r"|(?P<ord>[A-ZÁÉÍÓÚÑ]{4,18}|\d+)(?P<ord_sep>\s*(?:\.\s*[-—:]|[:—)]))\s*"
+    r"|(?P<ord>[A-ZÁÉÍÓÚÑ]{4,18}|\d+)(?P<ord_sep>\s*(?:\.\s*[-—:]|[:—]))\s*"
     r")"
     r"(?P<title>[A-ZÁÉÍÓÚÑ][^\n]+)"
 )
@@ -84,6 +86,22 @@ class SectionComparisonReport:
     secondary_uncovered_spans: tuple[tuple[int, int], ...] = ()
     primary_excluded_furniture: tuple[dict[str, Any], ...] = ()
     secondary_excluded_furniture: tuple[dict[str, Any], ...] = ()
+    exclusion_symmetric: bool = True
+    exclusion_asymmetry: bool = False
+    exclusion_symmetry_check: Mapping[str, Any] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.exclusion_symmetry_check is None:
+            object.__setattr__(
+                self,
+                "exclusion_symmetry_check",
+                {
+                    "symmetric": bool(self.exclusion_symmetric),
+                    "asymmetry_detected": bool(self.exclusion_asymmetry),
+                    "primary_excluded_only": [],
+                    "secondary_excluded_only": [],
+                },
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -94,6 +112,9 @@ class SectionComparisonReport:
             "secondary_uncovered_spans": [list(sp) for sp in self.secondary_uncovered_spans],
             "primary_excluded_furniture": [dict(x) for x in self.primary_excluded_furniture],
             "secondary_excluded_furniture": [dict(x) for x in self.secondary_excluded_furniture],
+            "exclusion_symmetric": bool(self.exclusion_symmetric),
+            "exclusion_asymmetry": bool(self.exclusion_asymmetry),
+            "exclusion_symmetry_check": dict(self.exclusion_symmetry_check),
         }
 
 
@@ -334,18 +355,41 @@ def _map_norm_span(
     return (mapped_s, max(mapped_s, mapped_e))
 
 
+def _exclusion_symmetry_report(
+    p_furn: tuple[dict[str, Any], ...],
+    s_furn: tuple[dict[str, Any], ...],
+) -> tuple[bool, bool, dict[str, Any]]:
+    """Verify whether normalized excluded furniture records match across both versions."""
+    p_norms = sorted(_canonicalize_layout_text(str(x.get("text", ""))) for x in p_furn if str(x.get("text", "")).strip())
+    s_norms = sorted(_canonicalize_layout_text(str(x.get("text", ""))) for x in s_furn if str(x.get("text", "")).strip())
+    p_set = sorted(set(p_norms))
+    s_set = sorted(set(s_norms))
+    p_only = [k for k in p_set if k not in s_set]
+    s_only = [k for k in s_set if k not in p_set]
+    symmetric = (p_norms == s_norms)
+    return symmetric, (not symmetric), {
+        "symmetric": symmetric,
+        "asymmetry_detected": not symmetric,
+        "primary_excluded_count": len(p_norms),
+        "secondary_excluded_count": len(s_norms),
+        "primary_excluded_only": p_only,
+        "secondary_excluded_only": s_only,
+    }
+
+
 def extract_divergent_sections_with_coverage(
     primary: Source,
     secondary: Source,
     *,
     fail_on_incomplete_coverage: bool = True,
 ) -> SectionComparisonReport:
-    """Compare *primary* and *secondary* guaranteeing 100% character coverage and recording stripped furniture."""
+    """Compare *primary* and *secondary* guaranteeing 100% character coverage and symmetric normalization."""
     (p_norm, p_starts, p_ends, p_furn), (s_norm, s_starts, s_ends, s_furn) = _normalize_pair_with_maps(
         primary.text,
         secondary.text,
         apply_furniture_filter=True,
     )
+    excl_sym, excl_asym, excl_check = _exclusion_symmetry_report(p_furn, s_furn)
 
     p_has_headers = bool(_split_into_sections(p_norm))
     s_has_headers = bool(_split_into_sections(s_norm))
@@ -401,13 +445,15 @@ def extract_divergent_sections_with_coverage(
                     )
                 )
 
-    p_norm_all_key = normalize_key(p_norm)
-    s_norm_all_key = normalize_key(s_norm)
+    p_canon = _canonicalize_layout_text(p_norm)
+    s_canon = _canonicalize_layout_text(s_norm)
+    p_norm_all_key = normalize_key(p_canon)
+    s_norm_all_key = normalize_key(s_canon)
     if (
         not p_uncov
         and not s_uncov
-        and p_norm_all_key == s_norm_all_key
-        and _quantity_tokens(p_norm) == _quantity_tokens(s_norm)
+        and p_canon == s_canon
+        and _quantity_tokens(p_canon) == _quantity_tokens(s_canon)
     ):
         return SectionComparisonReport(
             divergences=tuple(divergences),
@@ -417,13 +463,16 @@ def extract_divergent_sections_with_coverage(
             secondary_uncovered_spans=s_uncov,
             primary_excluded_furniture=p_furn,
             secondary_excluded_furniture=s_furn,
+            exclusion_symmetric=excl_sym,
+            exclusion_asymmetry=excl_asym,
+            exclusion_symmetry_check=excl_check,
         )
 
     # Unsegmented pair (both lack headers)
     if not p_has_headers and not s_has_headers:
-        p_quants = _quantity_tokens(p_norm)
-        s_quants = _quantity_tokens(s_norm)
-        if p_quants != s_quants or p_norm_all_key != s_norm_all_key:
+        p_quants = _quantity_tokens(p_canon)
+        s_quants = _quantity_tokens(s_canon)
+        if p_quants != s_quants or p_canon != s_canon:
             divergences.append(
                 SectionDivergence(
                     section_key="document_body",
@@ -447,6 +496,9 @@ def extract_divergent_sections_with_coverage(
             secondary_uncovered_spans=s_uncov,
             primary_excluded_furniture=p_furn,
             secondary_excluded_furniture=s_furn,
+            exclusion_symmetric=excl_sym,
+            exclusion_asymmetry=excl_asym,
+            exclusion_symmetry_check=excl_check,
         )
 
     matched_sec_keys: set[str] = set()
@@ -466,13 +518,12 @@ def extract_divergent_sections_with_coverage(
             s_sec = sec_secs[key]
             matched_sec_keys.add(key)
         elif key != "unsegmented_remainder":
-            # Check for renumbered section with identical title or identical body content
+            # Check for renumbered section with identical title or identical canonical body content
+            p_b_canon = _canonicalize_layout_text(p_sec.body_without_header)
             for cand_key, cand_sec in sec_secs.items():
                 if cand_key in matched_sec_keys or cand_key in prim_secs or cand_key == "unsegmented_remainder":
                     continue
-                same_body = normalize_key(p_sec.body_without_header) == normalize_key(
-                    cand_sec.body_without_header
-                )
+                same_body = p_b_canon == _canonicalize_layout_text(cand_sec.body_without_header)
                 same_title = bool(p_sec.title_key) and p_sec.title_key == cand_sec.title_key
                 if same_body or same_title:
                     s_sec = cand_sec
@@ -480,19 +531,16 @@ def extract_divergent_sections_with_coverage(
                     break
 
         if s_sec is None:
-            p_sec_full_key = normalize_key(p_sec.body)
-            # When secondary has NO headers at all (unsegmented prose summary / OM), an
-            # exact normalized section match in s_norm means that section wasn't omitted
-            # (we still check below that any leftover unsegmented prose cannot fail open).
-            # When secondary HAS headers, only allow substring match if secondary has no
-            # unsegmented remainder hiding uncompared edits.
-            s_has_internal_unseg = s_has_headers and ("unsegmented_remainder" in sec_secs)
+            p_sec_canon = _canonicalize_layout_text(p_sec.body)
+            p_sec_body_canon = _canonicalize_layout_text(p_sec.body_without_header)
+            # Layout-independent rule (P0): a section whose normalized body is intact in counterpart is NOT missing.
             if (
-                not s_has_internal_unseg
-                and p_sec_full_key
-                and len(p_sec_full_key) >= 16
-                and p_sec_full_key in s_norm_all_key
-                and _quantity_tokens(p_sec.body).issubset(_quantity_tokens(s_norm))
+                p_sec_canon
+                and (
+                    (len(p_sec_canon) >= 16 and p_sec_canon in s_canon)
+                    or (len(p_sec_body_canon) >= 16 and p_sec_body_canon in s_canon)
+                )
+                and _quantity_tokens(p_sec_canon).issubset(_quantity_tokens(s_canon))
             ):
                 continue
             divergences.append(
@@ -528,7 +576,7 @@ def extract_divergent_sections_with_coverage(
                     secondary_span=_map_norm_span(s_starts, s_ends, (s_sec.start, s_sec.end), len(secondary.text)),
                 )
             )
-        elif normalize_key(p_sec.body_without_header) != normalize_key(s_sec.body_without_header):
+        elif _canonicalize_layout_text(p_sec.body_without_header) != _canonicalize_layout_text(s_sec.body_without_header):
             divergences.append(
                 SectionDivergence(
                     section_key=key,
@@ -544,20 +592,21 @@ def extract_divergent_sections_with_coverage(
             )
 
     # Also detect sections or residual blocks present in the secondary document
-    p_has_internal_unseg = p_has_headers and ("unsegmented_remainder" in prim_secs)
     for sec_key in sorted(sec_secs.keys()):
         if sec_key in matched_sec_keys:
             continue
         if sec_key == "unsegmented_remainder" and s_remainder_only:
             continue
         s_sec = sec_secs[sec_key]
-        s_sec_full_key = normalize_key(s_sec.body)
+        s_sec_canon = _canonicalize_layout_text(s_sec.body)
+        s_sec_body_canon = _canonicalize_layout_text(s_sec.body_without_header)
         if (
-            not p_has_internal_unseg
-            and s_sec_full_key
-            and len(s_sec_full_key) >= 16
-            and s_sec_full_key in p_norm_all_key
-            and _quantity_tokens(s_sec.body).issubset(_quantity_tokens(p_norm))
+            s_sec_canon
+            and (
+                (len(s_sec_canon) >= 16 and s_sec_canon in p_canon)
+                or (len(s_sec_body_canon) >= 16 and s_sec_body_canon in p_canon)
+            )
+            and _quantity_tokens(s_sec_canon).issubset(_quantity_tokens(p_canon))
         ):
             continue
         s_quants = _quantity_tokens(s_sec.body)
@@ -577,14 +626,11 @@ def extract_divergent_sections_with_coverage(
             )
         )
 
-    # Fail-closed guard for asymmetric pairs (one doc has headers, counterpart is all-prose):
-    # if all recognized sections matched via substring so no divergence was emitted yet,
-    # yet the unsegmented counterpart actually differs textually or quantitatively, emit
-    # UNSEGMENTED_REMAINDER so extra/mutated unsegmented prose cannot fail open.
+    # Fail-closed guard for asymmetric pairs (one doc has headers, counterpart is all-prose)
     if (p_remainder_only or s_remainder_only) and not divergences:
-        p_all_quants = _quantity_tokens(p_norm)
-        s_all_quants = _quantity_tokens(s_norm)
-        if p_all_quants != s_all_quants or p_norm_all_key != s_norm_all_key:
+        p_all_quants = _quantity_tokens(p_canon)
+        s_all_quants = _quantity_tokens(s_canon)
+        if p_all_quants != s_all_quants or p_canon != s_canon or p_norm_all_key != s_norm_all_key:
             divergences.append(
                 SectionDivergence(
                     section_key="unsegmented_remainder",
@@ -609,6 +655,9 @@ def extract_divergent_sections_with_coverage(
         secondary_uncovered_spans=s_uncov,
         primary_excluded_furniture=p_furn,
         secondary_excluded_furniture=s_furn,
+        exclusion_symmetric=excl_sym,
+        exclusion_asymmetry=excl_asym,
+        exclusion_symmetry_check=excl_check,
     )
 
 

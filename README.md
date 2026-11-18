@@ -299,6 +299,8 @@ A serialized vocabulary description alone is not an executable vocabulary in v3;
 pass the operator-created `Vocabulary` object when verifying. An unsupported
 representation fails closed.
 
+See [ClaimLayer future work](docs/future_work.md) for the assisted pilot scope, verification boundaries, and the roadmap for broader authorization.
+
 ### Optimization Signal & Coverage Closure
 
 - **Never optimize a harness for raw `PASS` rate alone.** Optimizing `PASS` rate in isolation rewards omission of disputed/conflicting sections, ungrounded prose padding, and graph pruning.

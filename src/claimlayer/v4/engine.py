@@ -560,11 +560,16 @@ class EvidenceLayer:
             raise ValueError('Source identity mismatch')
         return document
 
-    def _refs_valid(self, refs):
+    def _refs_valid(self, refs, *, docs_cache=None):
         if not refs:
             raise ValueError('Source units need exact evidence references')
         for ref in refs:
-            document = self._document(ref.document_id, ref.revision)
+            cache_key = (ref.document_id, ref.revision)
+            document = docs_cache.get(cache_key) if docs_cache is not None else None
+            if document is None:
+                document = self._document(ref.document_id, ref.revision)
+                if docs_cache is not None:
+                    docs_cache[cache_key] = document
             if ref.end > len(document.text) or document.text[ref.start:ref.end] != ref.quote:
                 raise ValueError('Quote and offsets do not match the stored source')
 
@@ -779,6 +784,7 @@ class EvidenceLayer:
             raise ValueError('An application attestor is required')
         summary = {'units_admitted': 0, 'proposals_rejected': 0, 'rejection_reasons': {}, 'unit_ids': []}
         producer = {'kind': 'application', 'attestor': attestor}
+        docs_cache = {}
         with self.store.transaction(mode='IMMEDIATE'):
             for item in items:
                 evidence = [asdict(r) if isinstance(r, EvidenceRef) else r for r in item.get('evidence', ())]
@@ -791,6 +797,7 @@ class EvidenceLayer:
                     structural_reliability,
                     summary,
                     table_context=item.get('table_context'),
+                    docs_cache=docs_cache,
                 )
                 if unit_id is not None:
                     if item.get('field_evidence'):
@@ -925,14 +932,15 @@ class EvidenceLayer:
         summary['rejection_reasons'][error['reason']] = summary['rejection_reasons'].get(error['reason'], 0) + 1
         return None
 
-    def _admit(self, proposal, basis, evidence, origin, producer, structural_reliability, summary, *, table_context=None):
+    def _admit(self, proposal, basis, evidence, origin, producer, structural_reliability, summary, *,
+               table_context=None, docs_cache=None):
         try:
             prop_clean, stored_proposal = self._split_proposal_table_context(proposal, table_context)
             proposition = self.vocabulary.proposition(prop_clean)
             if not self.profile.admissible(basis):
                 raise UnmappedProposal('basis_blocked' if basis in self.profile.blocked else 'unknown_basis', 'basis', basis)
             refs = tuple(EvidenceRef(**r) for r in (evidence or ()))
-            self._refs_valid(refs)
+            self._refs_valid(refs, docs_cache=docs_cache)
             unit = EvidenceUnit(proposition, refs, basis, origin, producer, structural_reliability,
                                 proposal=stored_proposal)
         except UnmappedProposal as exc:
@@ -1084,65 +1092,84 @@ class EvidenceLayer:
             spec = self.vocabulary.predicate(query.predicate)
         except UnmappedProposal as exc:
             return self._issue({'status': 'invalid_query', 'abstain': True, 'reason': exc.as_dict(), 'results': []})
-        snap = self.snapshot()
-        fe_map = snap['field_evidences']
-        docs_map = snap['documents']
-        doc_revs_map = snap['document_revisions']
-        units_list = snap['units']
-        units_map = {u.unit_id: u for u in units_list}
-        bases, excluded = [], []
-        for unit in units_list:
-            p = unit.proposition
-            if label_key(p['entity']) != label_key(query.entity) or p['predicate'] != query.predicate:
-                continue
-            basis, reason = self._eligible(
-                unit,
-                query,
-                conditions,
-                kinds=assertion_kinds,
-                validity=validity,
-                units_by_id=units_map,
-                documents_override=docs_map,
-                document_revisions_override=doc_revs_map,
-                field_evidences_map=fe_map,
-            )
-            if basis is None:
-                excluded.append({'unit_id': unit.unit_id, 'reason': reason})
+        try:
+            snap = self.snapshot()
+            fe_map = snap['field_evidences']
+            docs_map = snap['documents']
+            doc_revs_map = snap['document_revisions']
+            units_list = snap['units']
+            units_map = {u.unit_id: u for u in units_list}
+            query_entity_key = label_key(query.entity)
+            bases, excluded = [], []
+            for unit in units_list:
+                p = unit.proposition
+                if label_key(p['entity']) != query_entity_key or p['predicate'] != query.predicate:
+                    continue
+                basis, reason = self._eligible(
+                    unit,
+                    query,
+                    conditions,
+                    kinds=assertion_kinds,
+                    validity=validity,
+                    units_by_id=units_map,
+                    documents_override=docs_map,
+                    document_revisions_override=doc_revs_map,
+                    field_evidences_map=fe_map,
+                )
+                if basis is None:
+                    excluded.append({'unit_id': unit.unit_id, 'reason': reason})
+                else:
+                    bases.append(basis)
+            rejected = [
+                r for r in snap['rejections']
+                if r['hint'].get('entity') == query.entity and r['hint'].get('predicate') == query.predicate
+            ]
+            coverage = {'eligible_units': len(bases), 'excluded_units': len(excluded),
+                        'rejected_proposals': len(rejected), 'rejection_ids': [r['rejection_id'] for r in rejected],
+                        'scope': 'ledger for this project and vocabulary; not completeness of the source corpus'}
+            if query.operation in {'sum', 'count', 'min', 'max', 'average'}:
+                results, reason = self._aggregate(bases, query, spec, coverage)
+                status = 'answered' if results else ('incomplete' if reason == 'coverage_incomplete' else
+                                                      'unresolved_conflict' if reason == 'unresolved_event_values' else
+                                                      'insufficient_evidence')
             else:
-                bases.append(basis)
-        rejected = [
-            r for r in snap['rejections']
-            if r['hint'].get('entity') == query.entity and r['hint'].get('predicate') == query.predicate
-        ]
-        coverage = {'eligible_units': len(bases), 'excluded_units': len(excluded),
-                    'rejected_proposals': len(rejected), 'rejection_ids': [r['rejection_id'] for r in rejected],
-                    'scope': 'ledger for this project and vocabulary; not completeness of the source corpus'}
-        if query.operation in {'sum', 'count', 'min', 'max', 'average'}:
-            results, reason = self._aggregate(bases, query, spec, coverage)
-            status = 'answered' if results else ('incomplete' if reason == 'coverage_incomplete' else
-                                                  'unresolved_conflict' if reason == 'unresolved_event_values' else
-                                                  'insufficient_evidence')
-        else:
-            results = self._resolve(bases, query, spec)
-            reason = None
-            accepted = [r for r in results if r['status'] == 'accepted']
-            status = ('answered' if accepted else 'unresolved_conflict'
-                      if any(r['status'] in {'unresolved_conflict', 'unresolved_comparison'} for r in results)
-                      else 'insufficient_evidence')
-        used = {b['unit'].unit_id for b in bases}
-        for basis in bases:
-            used.update(basis.get('premise_bases', ()))
-        revisions = sorted({d.revision for b in bases for d in b['documents'].values()})
-        unit_digests = {
-            uid: digest((units_map[uid] if uid in units_map else self.unit(uid)).record())
-            for uid in sorted(used)
-        }
-        return self._issue({'query': asdict(query), 'conditions_mode': conditions, 'validity_mode': validity, 'status': status,
-                            'abstain': status != 'answered', 'reason': reason, 'results': results,
-                            'excluded': excluded, 'coverage': coverage, 'configuration': self.configuration,
-                            'basis': {'unit_record_digests': unit_digests, 'source_revisions': revisions},
-                            'support_kind': 'policy index, not a calibrated probability',
-                            'source_authentication': 'not_verified'})
+                results = self._resolve(bases, query, spec)
+                reason = None
+                accepted = [r for r in results if r['status'] == 'accepted']
+                status = ('answered' if accepted else 'unresolved_conflict'
+                          if any(r['status'] in {'unresolved_conflict', 'unresolved_comparison'} for r in results)
+                          else 'insufficient_evidence')
+            used = {b['unit'].unit_id for b in bases}
+            for basis in bases:
+                used.update(basis.get('premise_bases', ()))
+            revisions = sorted({d.revision for b in bases for d in b['documents'].values()})
+            unit_digests = {
+                uid: digest((units_map[uid] if uid in units_map else self.unit(uid)).record())
+                for uid in sorted(used)
+            }
+            return self._issue({'query': asdict(query), 'conditions_mode': conditions, 'validity_mode': validity, 'status': status,
+                                'abstain': status != 'answered', 'reason': reason, 'results': results,
+                                'excluded': excluded, 'coverage': coverage, 'configuration': self.configuration,
+                                'basis': {'unit_record_digests': unit_digests, 'source_revisions': revisions},
+                                'support_kind': 'policy index, not a calibrated probability',
+                                'source_authentication': 'not_verified'})
+        except Exception as exc:
+            return self._issue_error_escalated({
+                'query': asdict(query),
+                'conditions_mode': conditions,
+                'validity_mode': validity,
+                'status': 'error_escalated',
+                'disposition': 'ESCALATE',
+                'abstain': True,
+                'reason': 'internal_error',
+                'error': {'type': type(exc).__name__, 'detail': str(exc)[:300]},
+                'results': [],
+                'excluded': [],
+                'coverage': {},
+                'configuration': self.configuration,
+                'support_kind': 'policy index, not a calibrated probability',
+                'source_authentication': 'not_verified',
+            })
 
     def _support(self, members):
         """Max within dependence groups, Noisy-OR across groups; shared origins never double count."""
@@ -1222,9 +1249,70 @@ class EvidenceLayer:
             return True  # explicit negation
         return spec.cardinality == 'single' and a['polarity'] == b['polarity'] == 'affirmed'
 
+    def _compare_group_competitors(self, spec, group, others):
+        """Compare *group* against potential conflicting peers, returning `(competitors, opposing)`."""
+        competitors, opposing = [], []
+        for other in others:
+            if other is group:
+                continue
+            value_relation_ = self._relation(spec, group, other) if self._incompatible(spec, group, other) else 'compatible'
+            if value_relation_ == 'compatible':
+                competitors.append(self._competitor(other, 'compatible'))
+                continue
+            if value_relation_ == 'unknown':
+                relation = 'unresolved'
+            elif other['rank'] < group['rank']:
+                relation = 'defeated_by_authority'
+            elif other['rank'] > group['rank']:
+                relation = 'outranks' if other['support'] is not None else 'unresolved'
+            else:
+                relation = 'opposing' if other['support'] is not None else 'unresolved'
+            competitors.append(self._competitor(other, relation))
+            if relation in {'opposing', 'outranks'}:
+                opposing.append(other)
+        return competitors, opposing
+
+    def _score_and_build_result(self, group, competitors, opposing, context):
+        if group['support'] is None:
+            status, opposition = 'unassessed', 0.0
+        else:
+            opposition = self._opposition(opposing)
+            q = _q_index(group['support'], opposition)
+            if any(c['relation'] == 'outranks' for c in competitors):
+                status = 'defeated_by_authority'
+            elif any(c['relation'] == 'unresolved' for c in competitors):
+                status = 'unresolved_comparison'
+            elif q >= self.policy.tau and group['support'] - opposition >= self.policy.delta:
+                status = 'accepted'
+            elif opposition > 0:
+                status = 'unresolved_conflict'
+            else:
+                status = 'below_threshold'
+        return self._result(group, status, context, competitors, opposition)
+
     def _decide(self, table, spec, query, context):
+        if spec.cardinality == 'multi':
+            # Distinct values in a multi-valued predicate never compete; only identical
+            # (canonical(value), unit) groups with opposite polarity can conflict (O(N)).
+            by_val_unit: dict[tuple[str, Any], list[dict[str, Any]]] = {}
+            group_keys: list[tuple[str, Any]] = []
+            for group in table:
+                key = (canonical(group['value']), group['unit'])
+                group_keys.append(key)
+                by_val_unit.setdefault(key, []).append(group)
+            out = []
+            for group, key in zip(table, group_keys):
+                others = [
+                    other for other in by_val_unit[key]
+                    if other is not group and other['polarity'] != group['polarity']
+                    and other['assertion'] != group['assertion']
+                ]
+                competitors, opposing = self._compare_group_competitors(spec, group, others)
+                out.append(self._score_and_build_result(group, competitors, opposing, context))
+            return out
+
         out = []
-        candidates = table if (query.operation == 'list' or spec.cardinality == 'multi') else None
+        candidates = table if query.operation == 'list' else None
         if candidates is None:
             assessed = [g for g in table if g['support'] is not None]
             if not assessed:
@@ -1233,41 +1321,8 @@ class EvidenceLayer:
             top = sorted([g for g in assessed if g['rank'] == top_rank], key=lambda g: (-g['support'], g['assertion']))
             candidates = top[:1]
         for group in candidates:
-            competitors, opposing = [], []
-            for other in table:
-                if other is group:
-                    continue
-                value_relation_ = self._relation(spec, group, other) if self._incompatible(spec, group, other) else 'compatible'
-                if value_relation_ == 'compatible':
-                    competitors.append(self._competitor(other, 'compatible'))
-                    continue
-                if value_relation_ == 'unknown':
-                    relation = 'unresolved'
-                elif other['rank'] < group['rank']:
-                    relation = 'defeated_by_authority'
-                elif other['rank'] > group['rank']:
-                    relation = 'outranks' if other['support'] is not None else 'unresolved'
-                else:
-                    relation = 'opposing' if other['support'] is not None else 'unresolved'
-                competitors.append(self._competitor(other, relation))
-                if relation in {'opposing', 'outranks'}:
-                    opposing.append(other)
-            if group['support'] is None:
-                status, opposition = 'unassessed', 0.0
-            else:
-                opposition = self._opposition(opposing)
-                q = _q_index(group['support'], opposition)
-                if any(c['relation'] == 'outranks' for c in competitors):
-                    status = 'defeated_by_authority'
-                elif any(c['relation'] == 'unresolved' for c in competitors):
-                    status = 'unresolved_comparison'
-                elif q >= self.policy.tau and group['support'] - opposition >= self.policy.delta:
-                    status = 'accepted'
-                elif opposition > 0:
-                    status = 'unresolved_conflict'
-                else:
-                    status = 'below_threshold'
-            out.append(self._result(group, status, context, competitors, opposition))
+            competitors, opposing = self._compare_group_competitors(spec, group, table)
+            out.append(self._score_and_build_result(group, competitors, opposing, context))
         return out
 
     def _competitor(self, group, relation):
@@ -1348,7 +1403,7 @@ class EvidenceLayer:
                  'event_ids': sorted(events), 'events': details}], None
 
     # --------------------------------------------------------------- claim check
-    def check_claim(self, proposal, *, as_of=None, context=None, validity='filter'):
+    def check_claim(self, proposal, *, as_of=None, context=None, validity='filter', _ask_cache=None):
         """Deterministically compare an external assertion with the ledger. No model call.
 
         supported: an accepted ledger value in the same context equals it.
@@ -1356,67 +1411,126 @@ class EvidenceLayer:
         not_supported: the ledger holds the entity/predicate only in other contexts
                        (e.g. the assertion drops or inverts a condition, or changes the kind).
         not_representable: the assertion violates the vocabulary (e.g. unit dimension).
+        error_escalated: fail-closed internal error during claim resolution (escalates, never aborts callers).
         """
         try:
             proposition = self.vocabulary.proposition(proposal)
         except UnmappedProposal as exc:
-            return self._issue({'operation': 'check_claim', 'status': 'not_representable', 'proposal': proposal,
-                                'reason': exc.as_dict(), 'configuration': self.configuration})
-        query = {'entity': proposition['entity'], 'predicate': proposition['predicate'], 'operation': 'list',
-                 'as_of': as_of, 'context': dict(context or {})}
-        response = self.ask(query, conditions='report', validity=validity,
-                            assertion_kinds=tuple(sorted(set(self.policy.allowed_assertion_kinds) | {proposition['assertion_kind']})))
-        target_context = json.loads(context_key(proposition))
-        same = [r for r in response['results'] if r['context'] == target_context]
-        claim_value = {'value': proposition['value'], 'unit': proposition['unit'], 'polarity': proposition['polarity']}
-        spec = self.vocabulary.predicate(proposition['predicate'])
-        status, matched, differences = 'insufficient_evidence', None, []
-        accepted = [r for r in same if r['status'] == 'accepted']
-        for result in accepted:
-            same_value = canonical({'value': result['value'], 'unit': result['unit'], 'polarity': result['polarity']}) == canonical(claim_value)
-            if not same_value and result['unit'] == claim_value['unit'] and result['polarity'] == claim_value['polarity']:
-                same_value = value_relation(spec.value, result['value'], claim_value['value']) == 'equal'
-            if same_value:
-                status, matched = 'supported', result
-                break
-        relation = 'equal' if status == 'supported' else None
-        if status != 'supported':
-            weaker = None
+            return self._issue_error_escalated({'operation': 'check_claim', 'status': 'not_representable',
+                                                'proposal': proposal, 'reason': exc.as_dict(),
+                                                'configuration': self.configuration})
+        try:
+            query = {'entity': proposition['entity'], 'predicate': proposition['predicate'], 'operation': 'list',
+                     'as_of': as_of, 'context': dict(context or {})}
+            assertion_kinds = tuple(sorted(set(self.policy.allowed_assertion_kinds) | {proposition['assertion_kind']}))
+            response = None
+            cache_key = None
+            if _ask_cache is not None:
+                cache_key = (canonical(query), 'report', assertion_kinds, validity)
+                response = _ask_cache.get(cache_key)
+            if response is None:
+                response = self.ask(query, conditions='report', validity=validity, assertion_kinds=assertion_kinds)
+                if _ask_cache is not None and response.get('status') != 'error_escalated':
+                    _ask_cache[cache_key] = response
+            if response.get('status') == 'error_escalated':
+                return self._issue_error_escalated({
+                    'operation': 'check_claim',
+                    'status': 'error_escalated',
+                    'disposition': 'ESCALATE',
+                    'abstain': True,
+                    'proposition': proposition,
+                    'matched_result': None,
+                    'differences': [],
+                    'relation': None,
+                    'error': response.get('error'),
+                    'normalizer_version': NORMALIZER_VERSION,
+                    'ledger_response_id': response.get('response_id'),
+                    'configuration': self.configuration,
+                    'decision_kind': 'fail-closed escalation on internal resolution error',
+                })
+            target_context = json.loads(context_key(proposition))
+            same = [r for r in response['results'] if r['context'] == target_context]
+            claim_value = {'value': proposition['value'], 'unit': proposition['unit'], 'polarity': proposition['polarity']}
+            target_val_canon = canonical(claim_value['value'])
+            spec = self.vocabulary.predicate(proposition['predicate'])
+            status, matched, differences = 'insufficient_evidence', None, []
+            accepted = [r for r in same if r['status'] == 'accepted']
             for result in accepted:
-                a = {'assertion': 'x', **{k: result[k] for k in ('value', 'unit', 'polarity')}}
-                b = {'assertion': 'y', **claim_value}
-                kind = self._relation(spec, a, b) if self._incompatible(spec, a, b) else 'compatible'
-                if kind == 'incompatible':
-                    status, matched, relation = 'contradicted', result, 'incompatible'
-                    differences = self._differences(claim_value, {k: result[k] for k in ('value', 'unit', 'polarity')})
+                same_value = (
+                    result['unit'] == claim_value['unit']
+                    and result['polarity'] == claim_value['polarity']
+                    and canonical(result['value']) == target_val_canon
+                )
+                if not same_value and result['unit'] == claim_value['unit'] and result['polarity'] == claim_value['polarity']:
+                    same_value = value_relation(spec.value, result['value'], claim_value['value']) == 'equal'
+                if same_value:
+                    status, matched = 'supported', result
                     break
-                if weaker is None or (kind == 'unknown' and weaker[0] == 'compatible'):
-                    weaker = (kind, result)
-            if status != 'contradicted' and weaker is not None:
-                # Not decidable from the ledger: e.g. a less precise date or a fuller name. Shown, never a verdict.
-                relation, matched = weaker[0], weaker[1]
-                differences = self._differences(claim_value, {k: weaker[1][k] for k in ('value', 'unit', 'polarity')})
-        if status == 'insufficient_evidence' and same and any(r['status'] in {'unresolved_conflict', 'unresolved_comparison'} for r in same):
-            status = 'unresolved_conflict'
-        if status == 'insufficient_evidence' and not same and response['results']:
-            status = 'not_supported'
-            nearest = min(response['results'], key=lambda r: len(self._context_differences(target_context, proposition, r)))
-            matched = nearest
-            differences = self._context_differences(target_context, proposition, nearest)
-            if nearest.get('status') == 'accepted':
-                if canonical({'value': nearest['value'], 'unit': nearest['unit'], 'polarity': nearest['polarity']}) == canonical(claim_value):
-                    relation = 'equal'
-                elif nearest['unit'] == claim_value['unit'] and nearest['polarity'] == claim_value['polarity']:
-                    relation = value_relation(spec.value, nearest['value'], claim_value['value'])
-                else:
-                    a = {'assertion': 'x', **{k: nearest[k] for k in ('value', 'unit', 'polarity')}}
+            relation = 'equal' if status == 'supported' else None
+            if status != 'supported':
+                weaker = None
+                for result in accepted:
+                    a = {'assertion': 'x', **{k: result[k] for k in ('value', 'unit', 'polarity')}}
                     b = {'assertion': 'y', **claim_value}
-                    relation = self._relation(spec, a, b) if self._incompatible(spec, a, b) else 'compatible'
-        return self._issue({'operation': 'check_claim', 'status': status, 'proposition': proposition,
-                            'matched_result': matched, 'differences': differences, 'relation': relation,
-                            'normalizer_version': NORMALIZER_VERSION,
-                            'ledger_response_id': response['response_id'], 'configuration': self.configuration,
-                            'decision_kind': 'deterministic comparison with ledger; truth not certified'})
+                    if spec.cardinality == 'multi':
+                        incompatible = (
+                            result['unit'] == claim_value['unit']
+                            and result['polarity'] != claim_value['polarity']
+                            and canonical(result['value']) == target_val_canon
+                        )
+                    else:
+                        incompatible = self._incompatible(spec, a, b)
+                    kind = self._relation(spec, a, b) if incompatible else 'compatible'
+                    if kind == 'incompatible':
+                        status, matched, relation = 'contradicted', result, 'incompatible'
+                        differences = self._differences(claim_value, {k: result[k] for k in ('value', 'unit', 'polarity')})
+                        break
+                    if weaker is None or (kind == 'unknown' and weaker[0] == 'compatible'):
+                        weaker = (kind, result)
+                if status != 'contradicted' and weaker is not None:
+                    # Not decidable from the ledger: e.g. a less precise date or a fuller name. Shown, never a verdict.
+                    relation, matched = weaker[0], weaker[1]
+                    differences = self._differences(claim_value, {k: weaker[1][k] for k in ('value', 'unit', 'polarity')})
+            if status == 'insufficient_evidence' and same and any(r['status'] in {'unresolved_conflict', 'unresolved_comparison'} for r in same):
+                status = 'unresolved_conflict'
+            if status == 'insufficient_evidence' and not same and response['results']:
+                status = 'not_supported'
+                nearest = min(response['results'], key=lambda r: len(self._context_differences(target_context, proposition, r)))
+                matched = nearest
+                differences = self._context_differences(target_context, proposition, nearest)
+                if nearest.get('status') == 'accepted':
+                    if (
+                        nearest['unit'] == claim_value['unit']
+                        and nearest['polarity'] == claim_value['polarity']
+                        and canonical(nearest['value']) == target_val_canon
+                    ):
+                        relation = 'equal'
+                    elif nearest['unit'] == claim_value['unit'] and nearest['polarity'] == claim_value['polarity']:
+                        relation = value_relation(spec.value, nearest['value'], claim_value['value'])
+                    else:
+                        a = {'assertion': 'x', **{k: nearest[k] for k in ('value', 'unit', 'polarity')}}
+                        b = {'assertion': 'y', **claim_value}
+                        relation = self._relation(spec, a, b) if self._incompatible(spec, a, b) else 'compatible'
+            return self._issue({'operation': 'check_claim', 'status': status, 'proposition': proposition,
+                                'matched_result': matched, 'differences': differences, 'relation': relation,
+                                'normalizer_version': NORMALIZER_VERSION,
+                                'ledger_response_id': response['response_id'], 'configuration': self.configuration,
+                                'decision_kind': 'deterministic comparison with ledger; truth not certified'})
+        except Exception as exc:
+            return self._issue_error_escalated({
+                'operation': 'check_claim',
+                'status': 'error_escalated',
+                'disposition': 'ESCALATE',
+                'abstain': True,
+                'proposition': proposition,
+                'matched_result': None,
+                'differences': [],
+                'relation': None,
+                'error': {'type': type(exc).__name__, 'detail': str(exc)[:300]},
+                'normalizer_version': NORMALIZER_VERSION,
+                'configuration': self.configuration,
+                'decision_kind': 'fail-closed escalation on internal resolution error',
+            })
 
     @staticmethod
     def _differences(expected, observed, path=''):
@@ -1453,6 +1567,16 @@ class EvidenceLayer:
         response_id = digest(response)
         self.store.put('response', response_id, response)
         return {**response, 'response_id': response_id}
+
+    def _issue_error_escalated(self, payload):
+        """Issue a certified fail-closed response even if store persistence itself raises."""
+        try:
+            return self._issue(payload)
+        except Exception:
+            clean = json.loads(canonical(payload))
+            response = {**clean, 'certificate': {'scheme': 'CLAIMLAYER-EVIDENCE-INTEGRITY-v4', 'scope': 'integrity',
+                                                 'payload_digest': digest(clean)}}
+            return {**response, 'response_id': digest(response)}
 
     def verify_response_integrity(self, response):
         try:

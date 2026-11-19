@@ -201,19 +201,52 @@ def triage(ledger: EvidenceLayer, draft_layer: EvidenceLayer, draft_text: str, *
     for segment in segments:
         segment['claims'] = []
     unlocated = []
+    escalations = []
+    ask_cache = {}
+    use_cache = (
+        type(ledger) is EvidenceLayer
+        and 'check_claim' not in ledger.__dict__
+        and 'ask' not in ledger.__dict__
+    )
     for unit in draft_layer.units:
-        result = ledger.check_claim({**unit.proposal, 'entity': unit.proposition['entity']}, validity='ignore')
+        proposal_arg = {**unit.proposal, 'entity': unit.proposition['entity']}
+        try:
+            if use_cache:
+                result = ledger.check_claim(proposal_arg, validity='ignore', _ask_cache=ask_cache)
+            else:
+                result = ledger.check_claim(proposal_arg, validity='ignore')
+        except Exception as exc:
+            result = {
+                'status': 'error_escalated',
+                'disposition': 'ESCALATE',
+                'proposition': dict(unit.proposition),
+                'differences': [],
+                'relation': None,
+                'matched_result': None,
+                'error': {'type': type(exc).__name__, 'detail': str(exc)[:300]},
+            }
         status, note = result['status'], None
         if status == 'not_supported' and {d['path'] for d in result.get('differences', [])} == {'/assertion_kind'}:
             # same value, conditions and scope; only the speech act was read differently (e.g. the draft reports
             # as a fact what a source alleges). The value is supported; the difference is shown, not hidden.
             status, note = 'supported', 'assertion_kind_differs'
+        elif status == 'error_escalated':
+            note = 'internal_error_escalated'
+            escalations.append({
+                'unit_id': unit.unit_id,
+                'status': 'error_escalated',
+                'disposition': result.get('disposition', 'ESCALATE'),
+                'error': result.get('error'),
+            })
         claim = {'unit_id': unit.unit_id, 'status': status, 'check_status': result['status'], 'note': note,
                  'relation': result.get('relation'),
                  'proposition': {k: result.get('proposition', {}).get(k) for k in ('entity', 'predicate', 'value', 'unit', 'polarity')},
                  'raw_value': unit.proposal.get('value'), 'differences': result.get('differences', []),
                  'sources': _sources_of(result.get('matched_result')),
                  'draft_span': [(r.start, r.end) for r in unit.evidence]}
+        if status == 'error_escalated':
+            claim['disposition'] = result.get('disposition', 'ESCALATE')
+            claim['error'] = result.get('error')
         hits = [s for s in segments if any(s['start'] < end and start < s['end'] for start, end in claim['draft_span'])]
         if not hits or len(hits) > max_segments_per_claim:
             unlocated.append(claim)
@@ -257,7 +290,9 @@ def triage(ledger: EvidenceLayer, draft_layer: EvidenceLayer, draft_text: str, *
         value['minutes'] = round(value['words'] / READING_WPM, 2)
     return {'segments': segments, 'unlocated_claims': unlocated, 'lanes': lanes, 'reading': reading,
             'guard': guard, 'claims': sum(len(s['claims']) for s in segments) + len(unlocated),
-            'reading_wpm': READING_WPM}
+            'reading_wpm': READING_WPM,
+            'escalations': escalations,
+            'disposition': 'ESCALATE' if escalations else None}
 
 
 def draft_vocabulary(ledger: EvidenceLayer, *, max_entities: int = 200, per_predicate: int = 12):

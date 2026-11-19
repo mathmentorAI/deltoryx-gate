@@ -7,6 +7,7 @@ from typing import Any, Iterable
 from claimlayer.ledger import Ledger
 from claimlayer.models import Assertion, ConflictDiff, Issue, Policy, Verdict, VerdictStatus
 from claimlayer.receipt import build_receipt
+from claimlayer.verifiers.code_evidence import verify_code_config_evidence
 from claimlayer.verifiers.conflict import evaluate_conflicts_and_thresholds
 from claimlayer.verifiers.coverage import verify_coverage
 from claimlayer.verifiers.precedence import verify_precedence_and_validity
@@ -97,8 +98,11 @@ def verify(
                 assertion_scores[score_key] = 0.0
                 continue
 
-        # 2a. Quote & quantity/unit/date grounding
-        grounding_issues = verify_quote_and_quantities(assertion, source, pol)
+        # 2a. Quote & quantity/unit/date grounding (explicit per-source evidence_profile)
+        if source is not None and source.evidence_profile == "code_config":
+            grounding_issues = verify_code_config_evidence(assertion, source, pol)
+        else:
+            grounding_issues = verify_quote_and_quantities(assertion, source, pol)
         if grounding_issues:
             all_issues.extend(grounding_issues)
             assertion_scores[score_key] = 0.0

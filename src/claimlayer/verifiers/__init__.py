@@ -1,5 +1,6 @@
 """Deterministic verification modules for ClaimLayer."""
 
+from claimlayer.verifiers.code_evidence import verify_code_config_evidence
 from claimlayer.verifiers.conflict import evaluate_conflicts_and_thresholds
 from claimlayer.verifiers.coverage import verify_coverage
 from claimlayer.verifiers.diff import (
@@ -25,6 +26,7 @@ __all__ = [
     "extract_quantities",
     "is_source_active",
     "normalize_span",
+    "verify_code_config_evidence",
     "verify_coverage",
     "verify_precedence_and_validity",
     "verify_quote_and_quantities",

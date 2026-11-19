@@ -3,8 +3,10 @@
 from claimlayer.ledger import Ledger
 from claimlayer.mcp_server import MCPVerificationServer
 from claimlayer.models import (
+    EVIDENCE_PROFILES,
     Assertion,
     ConflictDiff,
+    EvidenceProfile,
     FactRecord,
     Issue,
     Policy,
@@ -40,7 +42,9 @@ __all__ = [
     "AcceptancePolicy",
     "Assertion",
     "ConflictDiff",
+    "EVIDENCE_PROFILES",
     "EvidenceLayer",
+    "EvidenceProfile",
     "EvidenceUnit",
     "FactRecord",
     "FieldSpec",

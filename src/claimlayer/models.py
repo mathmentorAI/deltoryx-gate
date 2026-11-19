@@ -12,6 +12,8 @@ from typing import Any, Literal, Mapping
 
 Disposition = Literal["RETRY", "ESCALATE"]
 VerdictStatus = Literal["PASS", "RETRY", "ESCALATE"]
+EvidenceProfile = Literal["legal_prose", "code_config"]
+EVIDENCE_PROFILES: frozenset[str] = frozenset({"legal_prose", "code_config"})
 
 TIER_RANKS: dict[str, int] = {
     "authoritative": 100,
@@ -127,12 +129,17 @@ class Source:
     valid_until: str | None = None
     supersedes: tuple[str, ...] | list[str] = field(default_factory=tuple)
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    evidence_profile: EvidenceProfile = "legal_prose"
     _sha256: str = field(init=False, repr=False, compare=False)
     _content_sha256: str = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         # Validate tier immediately
         _ = resolve_tier_rank(self.tier, self.authority_rank)
+        if self.evidence_profile not in EVIDENCE_PROFILES:
+            raise ValueError(
+                f"Unknown evidence_profile '{self.evidence_profile}'. Valid profiles: {sorted(EVIDENCE_PROFILES)}"
+            )
         if isinstance(self.supersedes, list):
             object.__setattr__(self, "supersedes", tuple(self.supersedes))
         elif not isinstance(self.supersedes, tuple):
@@ -142,16 +149,19 @@ class Source:
         raw_text = self.text or ""
         digest = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
         object.__setattr__(self, "_sha256", digest)
-        body_lines = [
-            ln
-            for ln in unicodedata.normalize("NFKC", raw_text).splitlines()
-            if not re.match(
-                r"^\s*(?:draft|borrador|confidential|confidencial|page\s+\d+|p[áa]gina\s+\d+)"
-                r"(?:\s*[-—:|]\s*(?:page\s+\d+|p[áa]gina\s+\d+|\w+))?\s*$",
-                ln,
-                flags=re.IGNORECASE,
-            )
-        ]
+        if self.evidence_profile == "code_config":
+            body_lines = unicodedata.normalize("NFKC", raw_text).splitlines()
+        else:
+            body_lines = [
+                ln
+                for ln in unicodedata.normalize("NFKC", raw_text).splitlines()
+                if not re.match(
+                    r"^\s*(?:draft|borrador|confidential|confidencial|page\s+\d+|p[áa]gina\s+\d+)"
+                    r"(?:\s*[-—:|]\s*(?:page\s+\d+|p[áa]gina\s+\d+|\w+))?\s*$",
+                    ln,
+                    flags=re.IGNORECASE,
+                )
+            ]
         norm_text = re.sub(r"\s+", " ", " ".join(body_lines).strip()).lower()
         content_digest = hashlib.sha256(norm_text.encode("utf-8")).hexdigest()
         object.__setattr__(self, "_content_sha256", content_digest)
@@ -180,6 +190,7 @@ class Source:
             "supersedes": list(self.supersedes),
             "sha256": self.sha256,
             "metadata": dict(self.metadata),
+            "evidence_profile": self.evidence_profile,
         }
 
 

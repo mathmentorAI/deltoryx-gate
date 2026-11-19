@@ -17,6 +17,7 @@ from claimlayer.models import (
     Verdict,
     VerificationReceipt,
 )
+from claimlayer.verifiers.code_evidence import is_code_config_assertion_self_consistent
 from claimlayer.verifiers.quote_quantity import extract_dates, extract_quantities
 
 if TYPE_CHECKING:
@@ -94,6 +95,7 @@ def compute_sources_digest(sources: list[Source]) -> str:
             "valid_until": s.valid_until,
             "supersedes": list(s.supersedes),
             "metadata": dict(s.metadata),
+            "evidence_profile": s.evidence_profile,
         }
         for s in sorted(sources, key=lambda item: item.id)
     ]
@@ -246,13 +248,22 @@ def build_receipt(
     )
 
 
-def _assertions_self_consistent_for_pass(assertions: tuple[Assertion, ...]) -> bool:
+def _assertions_self_consistent_for_pass(
+    assertions: tuple[Assertion, ...],
+    *,
+    ledger: Ledger | None = None,
+) -> bool:
     """Verify intrinsic quote/quantity consistency for PASS verdicts."""
     if not assertions:
         return False
     for a in assertions:
         if not a.quote or not a.quote.strip():
             return False
+        src = ledger.get_source(a.source_id) if ledger is not None else None
+        if src is not None and src.evidence_profile == "code_config":
+            if not is_code_config_assertion_self_consistent(a):
+                return False
+            continue
         for d in extract_dates(a.value):
             if d not in extract_dates(a.quote):
                 return False
@@ -317,7 +328,7 @@ def verify_receipt(
     except Exception:
         return False
 
-    if status == "PASS" and not _assertions_self_consistent_for_pass(typed_assertions):
+    if status == "PASS" and not _assertions_self_consistent_for_pass(typed_assertions, ledger=ledger):
         return False
 
     failed_ids = {

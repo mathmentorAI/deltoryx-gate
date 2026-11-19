@@ -445,14 +445,15 @@
     "llm_v2vocab": {
       "claim_status": {
         "contradicted": 15,
-        "insufficient_evidence": 222,
-        "supported": 144,
+        "insufficient_evidence": 221,
+        "supported": 145,
         "unverifiable": 833
       },
       "draft_rejected": {
         "string_required": 3
       },
       "errors": 0,
+      "escalated": 0,
       "gate_v4_vocab2": {
         "misaligned": {
           "f1": 0.2667,
@@ -577,11 +578,12 @@
         "files_changed_count:contradicted": 1,
         "lines_added_count:contradicted": 11,
         "lines_deleted_count:contradicted": 3,
-        "modifies_identifier:insufficient_evidence": 15,
-        "modifies_identifier:supported": 1,
+        "modifies_identifier:insufficient_evidence": 14,
+        "modifies_identifier:supported": 2,
         "removes_identifier:insufficient_evidence": 12,
         "removes_identifier:supported": 5
-      }
+      },
+      "truncated": 0
     },
     "n": 72,
     "rules_and_baselines": {
@@ -1065,8 +1067,8 @@
         },
         "llm_v2vocab": {
           "misaligned": {
-            "f1": 0.5432,
-            "fn": 5,
+            "f1": 0.525,
+            "fn": 6,
             "fp": 32,
             "fp_rate": 0.3516,
             "fp_rate_ci95": [
@@ -1076,22 +1078,22 @@
             "n": 118,
             "neg": 91,
             "pos": 27,
-            "precision": 0.4074,
+            "precision": 0.3962,
             "precision_ci95": [
-              0.2868,
-              0.5403
+              0.2759,
+              0.5306
             ],
-            "recall": 0.8148,
+            "recall": 0.7778,
             "recall_ci95": [
-              0.633,
-              0.9182
+              0.5924,
+              0.8939
             ],
             "tn": 59,
-            "tp": 22
+            "tp": 21
           },
           "partial_o_misaligned": {
-            "f1": 0.5631,
-            "fn": 20,
+            "f1": 0.549,
+            "fn": 21,
             "fp": 25,
             "fp_rate": 0.3623,
             "fp_rate_ci95": [
@@ -1101,18 +1103,18 @@
             "n": 118,
             "neg": 69,
             "pos": 49,
-            "precision": 0.537,
+            "precision": 0.5283,
             "precision_ci95": [
-              0.4061,
-              0.6631
+              0.3966,
+              0.6562
             ],
-            "recall": 0.5918,
+            "recall": 0.5714,
             "recall_ci95": [
-              0.4525,
-              0.7178
+              0.4327,
+              0.6998
             ],
             "tn": 44,
-            "tp": 29
+            "tp": 28
           }
         },
         "n": 118,
@@ -1596,11 +1598,11 @@
           "misaligned": {
             "f1": 0.0,
             "fn": 0,
-            "fp": 5,
-            "fp_rate": 0.0667,
+            "fp": 4,
+            "fp_rate": 0.0533,
             "fp_rate_ci95": [
-              0.0288,
-              0.1468
+              0.0209,
+              0.1293
             ],
             "n": 75,
             "neg": 75,
@@ -1608,19 +1610,19 @@
             "precision": 0.0,
             "precision_ci95": [
               0.0,
-              0.4345
+              0.4899
             ],
             "recall": 0.0,
             "recall_ci95": [
               0.0,
               0.0
             ],
-            "tn": 70,
+            "tn": 71,
             "tp": 0
           },
           "partial_o_misaligned": {
-            "f1": 0.1538,
-            "fn": 19,
+            "f1": 0.08,
+            "fn": 20,
             "fp": 3,
             "fp_rate": 0.0556,
             "fp_rate_ci95": [
@@ -1630,18 +1632,18 @@
             "n": 75,
             "neg": 54,
             "pos": 21,
-            "precision": 0.4,
+            "precision": 0.25,
             "precision_ci95": [
-              0.1176,
-              0.7693
+              0.0456,
+              0.6994
             ],
-            "recall": 0.0952,
+            "recall": 0.0476,
             "recall_ci95": [
-              0.0265,
-              0.2891
+              0.0085,
+              0.2267
             ],
             "tn": 51,
-            "tp": 2
+            "tp": 1
           }
         },
         "n": 75,
@@ -3178,6 +3180,7 @@
       }
     },
     "errors_llm_v2": 0,
+    "escalated_llm_v2": 0,
     "flip_audit_rules": {
       "v1_parse_fix": [],
       "v2_code_orig_to_postreview": [
@@ -3243,8 +3246,8 @@
     "llm_v2vocab": {
       "claim_status": {
         "contradicted": 9,
-        "insufficient_evidence": 396,
-        "supported": 446,
+        "insufficient_evidence": 389,
+        "supported": 453,
         "unverifiable": 2386
       },
       "draft_rejected": {
@@ -3254,33 +3257,33 @@
       },
       "gate_v4_vocab2": {
         "misaligned": {
-          "f1": 0.4553,
-          "fn": 11,
-          "fp": 56,
-          "fp_rate": 0.1145,
+          "f1": 0.4463,
+          "fn": 12,
+          "fp": 55,
+          "fp_rate": 0.1125,
           "fp_rate_ci95": [
-            0.0892,
-            0.1458
+            0.0874,
+            0.1436
           ],
           "n": 528,
           "neg": 489,
           "pos": 39,
-          "precision": 0.3333,
+          "precision": 0.3293,
           "precision_ci95": [
-            0.2418,
-            0.4395
+            0.2372,
+            0.4366
           ],
-          "recall": 0.7179,
+          "recall": 0.6923,
           "recall_ci95": [
-            0.5622,
-            0.8346
+            0.5358,
+            0.8143
           ],
-          "tn": 433,
-          "tp": 28
+          "tn": 434,
+          "tp": 27
         },
         "partial_o_misaligned": {
-          "f1": 0.4195,
-          "fn": 78,
+          "f1": 0.4039,
+          "fn": 80,
           "fp": 41,
           "fp_rate": 0.1007,
           "fp_rate_ci95": [
@@ -3290,18 +3293,18 @@
           "n": 528,
           "neg": 407,
           "pos": 121,
-          "precision": 0.5119,
+          "precision": 0.5,
           "precision_ci95": [
-            0.4068,
-            0.6159
+            0.3942,
+            0.6058
           ],
-          "recall": 0.3554,
+          "recall": 0.3388,
           "recall_ci95": [
-            0.2757,
-            0.4439
+            0.2606,
+            0.427
           ],
           "tn": 366,
-          "tp": 43
+          "tp": 41
         }
       },
       "paper_heuristic": {
@@ -3357,8 +3360,8 @@
         }
       },
       "pred_status": {
-        "adds_identifier:insufficient_evidence": 120,
-        "adds_identifier:supported": 52,
+        "adds_identifier:insufficient_evidence": 116,
+        "adds_identifier:supported": 56,
         "adds_test:insufficient_evidence": 97,
         "adds_test:supported": 47,
         "changes_dependency:insufficient_evidence": 17,
@@ -3372,8 +3375,8 @@
         "lines_added_count:supported": 2,
         "lines_deleted_count:contradicted": 2,
         "lines_deleted_count:supported": 3,
-        "modifies_identifier:insufficient_evidence": 54,
-        "modifies_identifier:supported": 33,
+        "modifies_identifier:insufficient_evidence": 51,
+        "modifies_identifier:supported": 36,
         "removes_identifier:insufficient_evidence": 21,
         "removes_identifier:supported": 15,
         "removes_test:insufficient_evidence": 5
@@ -3850,7 +3853,8 @@
           "tp": 40
         }
       }
-    }
+    },
+    "truncated_llm_v2": 0
   },
   "vocabulary_v2_fingerprint": "620ebd71c7dda399cb8b90e5ac038a2a2cf510782a86202b79b75c8d84900d2c"
 }

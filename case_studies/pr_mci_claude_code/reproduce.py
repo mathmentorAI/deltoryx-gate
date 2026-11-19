@@ -392,6 +392,8 @@ def run_all(args, out_dir: str) -> dict[str, str]:
             "n": p2_rules["summary"]["n"],
             "ok_llm_v2": p2_llm_v2["summary"]["ok"],
             "errors_llm_v2": p2_llm_v2["summary"]["errors"],
+            "escalated_llm_v2": p2_llm_v2["summary"]["escalated"],
+            "truncated_llm_v2": p2_llm_v2["summary"]["truncated"],
             "labels": p2_rules["summary"]["labels"],
             "rules_and_baselines": p2_rules["summary"]["metrics"],
             "llm_v2vocab": {

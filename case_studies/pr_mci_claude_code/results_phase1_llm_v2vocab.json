@@ -3,14 +3,15 @@
     "Claude_Code": {
       "claim_status": {
         "contradicted": 15,
-        "insufficient_evidence": 222,
-        "supported": 144,
+        "insufficient_evidence": 221,
+        "supported": 145,
         "unverifiable": 833
       },
       "draft_rejected": {
         "string_required": 3
       },
       "errors": 0,
+      "escalated": 0,
       "gate_v4_vocab2": {
         "misaligned": {
           "f1": 0.2667,
@@ -135,11 +136,12 @@
         "files_changed_count:contradicted": 1,
         "lines_added_count:contradicted": 11,
         "lines_deleted_count:contradicted": 3,
-        "modifies_identifier:insufficient_evidence": 15,
-        "modifies_identifier:supported": 1,
+        "modifies_identifier:insufficient_evidence": 14,
+        "modifies_identifier:supported": 2,
         "removes_identifier:insufficient_evidence": 12,
         "removes_identifier:supported": 5
-      }
+      },
+      "truncated": 0
     }
   },
   "gate_commit": "22e3590",
@@ -174,7 +176,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -204,7 +208,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 12,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -233,7 +239,9 @@
         "deps": 0,
         "files": 7,
         "modified_ids": 42,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -262,7 +270,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 104,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -291,7 +301,9 @@
         "deps": 0,
         "files": 11,
         "modified_ids": 57,
-        "removed_ids": 4
+        "removed_ids": 4,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -324,7 +336,9 @@
         "deps": 2,
         "files": 5,
         "modified_ids": 37,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -358,7 +372,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 124,
-        "removed_ids": 18
+        "removed_ids": 18,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -391,7 +407,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 71,
-        "removed_ids": 16
+        "removed_ids": 16,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -420,7 +438,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 5,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -450,7 +470,9 @@
         "deps": 0,
         "files": 19,
         "modified_ids": 212,
-        "removed_ids": 5
+        "removed_ids": 5,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "misaligned",
@@ -480,7 +502,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 8,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -509,7 +533,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 10,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -538,7 +564,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 1,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -568,7 +596,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -598,7 +628,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 4,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -629,7 +661,9 @@
         "deps": 4,
         "files": 2,
         "modified_ids": 14,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -661,20 +695,22 @@
         "added_tests": 0,
         "deps": 20,
         "files": 98,
-        "modified_ids": 500,
-        "removed_ids": 53
+        "modified_ids": 708,
+        "removed_ids": 53,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 952,
+      "ledger_units": 1160,
       "paper_heuristic": "aligned",
       "pr_id": "3078006902",
       "pred_status": {
         "describes_behavior:unverifiable": 7
       },
       "reasons": [],
-      "receipt_sha256": "2732d3d0bf4731105d7d63b160ebf6702ebb6df57430ea6aaebeb4b6ab1d6589",
+      "receipt_sha256": "5c33e566fbdffcdc7b5432a254a87372ebe99b74241c9259b1255b2b94ecae7e",
       "url": "https://github.com/spacelift-io/spacectl/pull/324"
     },
     {
@@ -688,17 +724,19 @@
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
+        "added_ids": 523,
         "added_tests": 10,
         "deps": 8,
         "files": 55,
         "modified_ids": 296,
-        "removed_ids": 14
+        "removed_ids": 14,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
       "ledger_rejected": {},
-      "ledger_units": 1136,
+      "ledger_units": 1159,
       "paper_heuristic": "aligned",
       "pr_id": "3079303421",
       "pred_status": {
@@ -709,7 +747,7 @@
         "describes_behavior:unverifiable": 47
       },
       "reasons": [],
-      "receipt_sha256": "b68aeb4e5101566bac20ef8039bfd8163456bf017c23a5eabb587674a589b70d",
+      "receipt_sha256": "5b8d9c2529a75bb30ad1a0e2c7271c7572183728624584601af78b826f9f3b1d",
       "url": "https://github.com/giselles-ai/giselle/pull/909"
     },
     {
@@ -728,7 +766,9 @@
         "deps": 4,
         "files": 13,
         "modified_ids": 41,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -761,7 +801,9 @@
         "deps": 0,
         "files": 20,
         "modified_ids": 88,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -794,7 +836,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 13,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -824,7 +868,9 @@
         "deps": 0,
         "files": 7,
         "modified_ids": 68,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -854,7 +900,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 31,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -884,7 +932,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 91,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -917,7 +967,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 4,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -949,7 +1001,9 @@
         "deps": 0,
         "files": 7,
         "modified_ids": 45,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -984,7 +1038,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 72,
-        "removed_ids": 7
+        "removed_ids": 7,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1019,7 +1075,9 @@
         "deps": 2,
         "files": 54,
         "modified_ids": 364,
-        "removed_ids": 4
+        "removed_ids": 4,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1047,17 +1105,19 @@
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
+        "added_ids": 1986,
         "added_tests": 35,
         "deps": 0,
         "files": 126,
         "modified_ids": 316,
-        "removed_ids": 419
+        "removed_ids": 419,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "partial",
       "ledger_rejected": {},
-      "ledger_units": 1743,
+      "ledger_units": 3229,
       "paper_heuristic": "aligned",
       "pr_id": "3138264959",
       "pred_status": {
@@ -1070,7 +1130,7 @@
       "reasons": [
         "unsupported 9/12"
       ],
-      "receipt_sha256": "18af630a01bbf6cd7fad76b181beef71650135e34c194f9f0a86b67ca125ce33",
+      "receipt_sha256": "4e6eb8c026c84c31e3f17f729bb4dc70aebce907070f7b4eba4301515d11fd8e",
       "url": "https://github.com/evmts/tevm-monorepo/pull/1831"
     },
     {
@@ -1089,7 +1149,9 @@
         "deps": 6,
         "files": 11,
         "modified_ids": 74,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -1122,7 +1184,9 @@
         "deps": 6,
         "files": 15,
         "modified_ids": 129,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -1154,7 +1218,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 9,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1184,7 +1250,9 @@
         "deps": 0,
         "files": 43,
         "modified_ids": 94,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1215,7 +1283,9 @@
         "deps": 0,
         "files": 48,
         "modified_ids": 180,
-        "removed_ids": 92
+        "removed_ids": 92,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -1249,7 +1319,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 16,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1281,7 +1353,9 @@
         "deps": 0,
         "files": 33,
         "modified_ids": 118,
-        "removed_ids": 90
+        "removed_ids": 90,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1315,7 +1389,9 @@
         "deps": 8,
         "files": 13,
         "modified_ids": 282,
-        "removed_ids": 192
+        "removed_ids": 192,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -1353,7 +1429,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 19,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1384,7 +1462,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -1417,7 +1497,9 @@
         "deps": 0,
         "files": 22,
         "modified_ids": 8,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1446,7 +1528,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1475,7 +1559,9 @@
         "deps": 0,
         "files": 60,
         "modified_ids": 13,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1505,7 +1591,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -1542,7 +1630,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 13,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -1574,7 +1664,9 @@
         "deps": 0,
         "files": 8,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1603,7 +1695,9 @@
         "deps": 0,
         "files": 9,
         "modified_ids": 68,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1632,7 +1726,9 @@
         "deps": 0,
         "files": 300,
         "modified_ids": 1,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1661,7 +1757,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 25,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1690,7 +1788,9 @@
         "deps": 0,
         "files": 13,
         "modified_ids": 160,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1710,8 +1810,8 @@
       "binary_label": "aligned",
       "claim_status": {
         "contradicted": 14,
-        "insufficient_evidence": 143,
-        "supported": 12,
+        "insufficient_evidence": 142,
+        "supported": 13,
         "unverifiable": 89
       },
       "draft_rejected": {},
@@ -1721,13 +1821,15 @@
         "added_tests": 46,
         "deps": 0,
         "files": 64,
-        "modified_ids": 500,
-        "removed_ids": 70
+        "modified_ids": 601,
+        "removed_ids": 70,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 991,
+      "ledger_units": 1092,
       "paper_heuristic": "aligned",
       "pr_id": "3214782537",
       "pred_status": {
@@ -1740,13 +1842,14 @@
         "files_changed_count:contradicted": 1,
         "lines_added_count:contradicted": 11,
         "lines_deleted_count:contradicted": 2,
-        "modifies_identifier:insufficient_evidence": 9
+        "modifies_identifier:insufficient_evidence": 8,
+        "modifies_identifier:supported": 1
       },
       "reasons": [
         "contradicted 14",
-        "unsupported 157/169"
+        "unsupported 156/169"
       ],
-      "receipt_sha256": "9ca1d85aa33f957823c25b4306619318d69ec12e20e124bdb44af88050c80294",
+      "receipt_sha256": "c53b211923c0ea25fe7a7ce9fbe7f87788e4f263f8baffa89265031ed74d1d7f",
       "url": "https://github.com/onetimesecret/onetimesecret/pull/1538"
     },
     {
@@ -1763,7 +1866,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 70,
-        "removed_ids": 5
+        "removed_ids": 5,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -1792,7 +1897,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1821,13 +1928,15 @@
         "added_tests": 65,
         "deps": 0,
         "files": 90,
-        "modified_ids": 500,
-        "removed_ids": 85
+        "modified_ids": 2545,
+        "removed_ids": 85,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 1020,
+      "ledger_units": 3065,
       "paper_heuristic": "aligned",
       "pr_id": "3219102497",
       "pred_status": {
@@ -1835,7 +1944,7 @@
         "describes_behavior:unverifiable": 7
       },
       "reasons": [],
-      "receipt_sha256": "13bece6fe6b9e025d983a9e3506b50130cfd337d8ee2f15b14ec36c427bd092c",
+      "receipt_sha256": "6b543eb64564413a0a1c2130f24d3435393e03415264af72a5babfd87366e42f",
       "url": "https://github.com/pyvista/pyvista/pull/7692"
     },
     {
@@ -1852,7 +1961,9 @@
         "deps": 0,
         "files": 12,
         "modified_ids": 96,
-        "removed_ids": 47
+        "removed_ids": 47,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1883,7 +1994,9 @@
         "deps": 0,
         "files": 7,
         "modified_ids": 60,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1910,24 +2023,26 @@
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
+        "added_ids": 1692,
         "added_tests": 276,
         "deps": 26,
         "files": 177,
-        "modified_ids": 500,
-        "removed_ids": 500
+        "modified_ids": 1352,
+        "removed_ids": 992,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 2812,
+      "ledger_units": 5499,
       "paper_heuristic": "aligned",
       "pr_id": "3226475067",
       "pred_status": {
         "describes_behavior:unverifiable": 9
       },
       "reasons": [],
-      "receipt_sha256": "5380a3e202df1b00f6e034a0891ae192483af188863ff5bba688beeb0abc9aaa",
+      "receipt_sha256": "a8c8cbfd8accc566fa65fcdfce6bcdb24f2ed280ec8d04ad857a48880cf603ba",
       "url": "https://github.com/Deepractice/PromptX/pull/179"
     },
     {
@@ -1939,24 +2054,26 @@
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
+        "added_ids": 1692,
         "added_tests": 276,
         "deps": 26,
         "files": 177,
-        "modified_ids": 500,
-        "removed_ids": 500
+        "modified_ids": 1352,
+        "removed_ids": 992,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 2812,
+      "ledger_units": 5499,
       "paper_heuristic": "aligned",
       "pr_id": "3226500911",
       "pred_status": {
         "describes_behavior:unverifiable": 14
       },
       "reasons": [],
-      "receipt_sha256": "b0e799e80229b797f6fdcab1ff0bc79ed3c473a0c8da3e1e0dbb8776fe09ebcb",
+      "receipt_sha256": "a6198ae24c5e60a97534f2eab0642c0fe976a14cb1b4cd0605b56501a9028239",
       "url": "https://github.com/Deepractice/PromptX/pull/180"
     },
     {
@@ -1973,19 +2090,21 @@
         "deps": 0,
         "files": 14,
         "modified_ids": 109,
-        "removed_ids": 500
+        "removed_ids": 707,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 706,
+      "ledger_units": 913,
       "paper_heuristic": "aligned",
       "pr_id": "3229710961",
       "pred_status": {
         "describes_behavior:unverifiable": 8
       },
       "reasons": [],
-      "receipt_sha256": "674265dabb514f165d5cd4bd7ea97dc3d5c5b5ddf3d58806f1c8c460fec7ffce",
+      "receipt_sha256": "91257142e9e858e2943b7445e03d9e3a7ff10a54552e41eba78452128a73dba0",
       "url": "https://github.com/typedef-ai/fenic/pull/81"
     },
     {
@@ -1998,17 +2117,19 @@
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
+        "added_ids": 1222,
         "added_tests": 17,
         "deps": 12,
         "files": 94,
         "modified_ids": 357,
-        "removed_ids": 158
+        "removed_ids": 158,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 1331,
+      "ledger_units": 2053,
       "paper_heuristic": "aligned",
       "pr_id": "3234102722",
       "pred_status": {
@@ -2017,7 +2138,7 @@
         "describes_behavior:unverifiable": 5
       },
       "reasons": [],
-      "receipt_sha256": "d9ea5c64cfd798012ff7e04dd52b8558eca75c42c58f042a6175b8a15f2d1dda",
+      "receipt_sha256": "4871dbdb778e1cce798833b3a18d504e40a44cf59bbe34a6240c677b8861c8cf",
       "url": "https://github.com/ruvnet/claude-flow/pull/318"
     },
     {
@@ -2031,17 +2152,19 @@
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
+        "added_ids": 868,
         "added_tests": 95,
         "deps": 22,
         "files": 96,
-        "modified_ids": 500,
-        "removed_ids": 121
+        "modified_ids": 652,
+        "removed_ids": 121,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 1592,
+      "ledger_units": 2112,
       "paper_heuristic": "aligned",
       "pr_id": "3235103212",
       "pred_status": {
@@ -2051,7 +2174,7 @@
         "describes_behavior:unverifiable": 10
       },
       "reasons": [],
-      "receipt_sha256": "2c816726fbd8264332339b6ebaf6f619e2a14f04a68952947c4c564da59c965b",
+      "receipt_sha256": "6f60faec4e5cc88b15f786e1c83ba6a464f0dec2e1668d35e6d41cfab22030a9",
       "url": "https://github.com/mlflow/mlflow/pull/16758"
     },
     {
@@ -2068,7 +2191,9 @@
         "deps": 0,
         "files": 9,
         "modified_ids": 10,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2097,7 +2222,9 @@
         "deps": 0,
         "files": 21,
         "modified_ids": 136,
-        "removed_ids": 10
+        "removed_ids": 10,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2127,7 +2254,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 48,
-        "removed_ids": 6
+        "removed_ids": 6,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2158,7 +2287,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 42,
-        "removed_ids": 9
+        "removed_ids": 9,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2188,7 +2319,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 130,
-        "removed_ids": 18
+        "removed_ids": 18,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -2222,7 +2355,9 @@
         "deps": 0,
         "files": 20,
         "modified_ids": 235,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -2256,7 +2391,9 @@
         "deps": 0,
         "files": 11,
         "modified_ids": 25,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2286,13 +2423,15 @@
         "added_tests": 167,
         "deps": 0,
         "files": 127,
-        "modified_ids": 500,
-        "removed_ids": 66
+        "modified_ids": 986,
+        "removed_ids": 66,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 1491,
+      "ledger_units": 1977,
       "paper_heuristic": "aligned",
       "pr_id": "3271045504",
       "pred_status": {
@@ -2301,7 +2440,7 @@
         "removes_identifier:insufficient_evidence": 1
       },
       "reasons": [],
-      "receipt_sha256": "0b4124721faafb33a4d18d42bdb912bb277c2c2bc11fd1a6181725d934aebf71",
+      "receipt_sha256": "81698f86cbef882d7d11ee0f003fa6fb8ea37b55db8cdc366f7c3398d987eee8",
       "url": "https://github.com/RevenueCat/purchases-ios/pull/5427"
     },
     {
@@ -2318,7 +2457,9 @@
         "deps": 2,
         "files": 12,
         "modified_ids": 102,
-        "removed_ids": 9
+        "removed_ids": 9,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2347,7 +2488,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 141,
-        "removed_ids": 15
+        "removed_ids": 15,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2376,7 +2519,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 23,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2407,7 +2552,9 @@
         "deps": 0,
         "files": 8,
         "modified_ids": 63,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2430,14 +2577,15 @@
   "summary": {
     "claim_status": {
       "contradicted": 15,
-      "insufficient_evidence": 222,
-      "supported": 144,
+      "insufficient_evidence": 221,
+      "supported": 145,
       "unverifiable": 833
     },
     "draft_rejected": {
       "string_required": 3
     },
     "errors": 0,
+    "escalated": 0,
     "gate_v4_vocab2": {
       "misaligned": {
         "f1": 0.2667,
@@ -2562,11 +2710,12 @@
       "files_changed_count:contradicted": 1,
       "lines_added_count:contradicted": 11,
       "lines_deleted_count:contradicted": 3,
-      "modifies_identifier:insufficient_evidence": 15,
-      "modifies_identifier:supported": 1,
+      "modifies_identifier:insufficient_evidence": 14,
+      "modifies_identifier:supported": 2,
       "removes_identifier:insufficient_evidence": 12,
       "removes_identifier:supported": 5
-    }
+    },
+    "truncated": 0
   },
   "vocabulary": {
     "fingerprint": "620ebd71c7dda399cb8b90e5ac038a2a2cf510782a86202b79b75c8d84900d2c",

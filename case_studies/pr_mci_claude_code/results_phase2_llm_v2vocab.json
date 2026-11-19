@@ -3,8 +3,8 @@
     "Copilot": {
       "claim_status": {
         "contradicted": 8,
-        "insufficient_evidence": 227,
-        "supported": 181,
+        "insufficient_evidence": 224,
+        "supported": 184,
         "unverifiable": 830
       },
       "draft_rejected": {
@@ -12,10 +12,11 @@
         "unknown_or_foreign_evidence_id": 22
       },
       "errors": 0,
+      "escalated": 0,
       "gate_v4_vocab2": {
         "misaligned": {
-          "f1": 0.5432,
-          "fn": 5,
+          "f1": 0.525,
+          "fn": 6,
           "fp": 32,
           "fp_rate": 0.3516,
           "fp_rate_ci95": [
@@ -25,22 +26,22 @@
           "n": 118,
           "neg": 91,
           "pos": 27,
-          "precision": 0.4074,
+          "precision": 0.3962,
           "precision_ci95": [
-            0.2868,
-            0.5403
+            0.2759,
+            0.5306
           ],
-          "recall": 0.8148,
+          "recall": 0.7778,
           "recall_ci95": [
-            0.633,
-            0.9182
+            0.5924,
+            0.8939
           ],
           "tn": 59,
-          "tp": 22
+          "tp": 21
         },
         "partial_o_misaligned": {
-          "f1": 0.5631,
-          "fn": 20,
+          "f1": 0.549,
+          "fn": 21,
           "fp": 25,
           "fp_rate": 0.3623,
           "fp_rate_ci95": [
@@ -50,18 +51,18 @@
           "n": 118,
           "neg": 69,
           "pos": 49,
-          "precision": 0.537,
+          "precision": 0.5283,
           "precision_ci95": [
-            0.4061,
-            0.6631
+            0.3966,
+            0.6562
           ],
-          "recall": 0.5918,
+          "recall": 0.5714,
           "recall_ci95": [
-            0.4525,
-            0.7178
+            0.4327,
+            0.6998
           ],
           "tn": 44,
-          "tp": 29
+          "tp": 28
         }
       },
       "labels": {
@@ -139,32 +140,34 @@
         "lines_added_count:supported": 2,
         "lines_deleted_count:contradicted": 2,
         "lines_deleted_count:supported": 3,
-        "modifies_identifier:insufficient_evidence": 29,
-        "modifies_identifier:supported": 13,
+        "modifies_identifier:insufficient_evidence": 26,
+        "modifies_identifier:supported": 16,
         "removes_identifier:insufficient_evidence": 7,
         "removes_identifier:supported": 7,
         "removes_test:insufficient_evidence": 4
-      }
+      },
+      "truncated": 0
     },
     "Cursor": {
       "claim_status": {
-        "insufficient_evidence": 32,
-        "supported": 105,
+        "insufficient_evidence": 29,
+        "supported": 108,
         "unverifiable": 228
       },
       "draft_rejected": {
         "assertion_kind_not_declared_for_predicate": 2
       },
       "errors": 0,
+      "escalated": 0,
       "gate_v4_vocab2": {
         "misaligned": {
           "f1": 0.0,
           "fn": 0,
-          "fp": 5,
-          "fp_rate": 0.0667,
+          "fp": 4,
+          "fp_rate": 0.0533,
           "fp_rate_ci95": [
-            0.0288,
-            0.1468
+            0.0209,
+            0.1293
           ],
           "n": 75,
           "neg": 75,
@@ -172,19 +175,19 @@
           "precision": 0.0,
           "precision_ci95": [
             0.0,
-            0.4345
+            0.4899
           ],
           "recall": 0.0,
           "recall_ci95": [
             0.0,
             0.0
           ],
-          "tn": 70,
+          "tn": 71,
           "tp": 0
         },
         "partial_o_misaligned": {
-          "f1": 0.1538,
-          "fn": 19,
+          "f1": 0.08,
+          "fn": 20,
           "fp": 3,
           "fp_rate": 0.0556,
           "fp_rate_ci95": [
@@ -194,18 +197,18 @@
           "n": 75,
           "neg": 54,
           "pos": 21,
-          "precision": 0.4,
+          "precision": 0.25,
           "precision_ci95": [
-            0.1176,
-            0.7693
+            0.0456,
+            0.6994
           ],
-          "recall": 0.0952,
+          "recall": 0.0476,
           "recall_ci95": [
-            0.0265,
-            0.2891
+            0.0085,
+            0.2267
           ],
           "tn": 51,
-          "tp": 2
+          "tp": 1
         }
       },
       "labels": {
@@ -267,8 +270,8 @@
         }
       },
       "pred_status": {
-        "adds_identifier:insufficient_evidence": 11,
-        "adds_identifier:supported": 16,
+        "adds_identifier:insufficient_evidence": 8,
+        "adds_identifier:supported": 19,
         "adds_test:insufficient_evidence": 1,
         "adds_test:supported": 10,
         "changes_dependency:insufficient_evidence": 2,
@@ -280,13 +283,14 @@
         "modifies_identifier:supported": 14,
         "removes_identifier:insufficient_evidence": 5,
         "removes_identifier:supported": 4
-      }
+      },
+      "truncated": 0
     },
     "Devin": {
       "claim_status": {
         "contradicted": 1,
-        "insufficient_evidence": 103,
-        "supported": 99,
+        "insufficient_evidence": 102,
+        "supported": 100,
         "unverifiable": 613
       },
       "draft_rejected": {
@@ -294,6 +298,7 @@
         "reader_schema": 23
       },
       "errors": 0,
+      "escalated": 0,
       "gate_v4_vocab2": {
         "misaligned": {
           "f1": 0.2308,
@@ -406,8 +411,8 @@
         }
       },
       "pred_status": {
-        "adds_identifier:insufficient_evidence": 37,
-        "adds_identifier:supported": 16,
+        "adds_identifier:insufficient_evidence": 36,
+        "adds_identifier:supported": 17,
         "adds_test:insufficient_evidence": 17,
         "adds_test:supported": 8,
         "changes_dependency:insufficient_evidence": 8,
@@ -420,7 +425,8 @@
         "modifies_identifier:supported": 5,
         "removes_identifier:insufficient_evidence": 9,
         "removes_identifier:supported": 3
-      }
+      },
+      "truncated": 0
     },
     "OpenAI_Codex": {
       "claim_status": {
@@ -430,6 +436,7 @@
       },
       "draft_rejected": {},
       "errors": 0,
+      "escalated": 0,
       "gate_v4_vocab2": {
         "misaligned": {
           "f1": 0.5455,
@@ -553,7 +560,8 @@
         "modifies_identifier:supported": 1,
         "removes_identifier:supported": 1,
         "removes_test:insufficient_evidence": 1
-      }
+      },
+      "truncated": 0
     }
   },
   "gate_commit": "22e3590",
@@ -588,7 +596,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 4,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -618,7 +628,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 5,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -647,7 +659,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 8,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -676,7 +690,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 29,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -707,7 +723,9 @@
         "deps": 2,
         "files": 6,
         "modified_ids": 28,
-        "removed_ids": 7
+        "removed_ids": 7,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -739,7 +757,9 @@
         "deps": 2,
         "files": 7,
         "modified_ids": 6,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -769,7 +789,9 @@
         "deps": 104,
         "files": 10,
         "modified_ids": 63,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -798,7 +820,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 11,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -827,7 +851,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 88,
-        "removed_ids": 5
+        "removed_ids": 5,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -856,7 +882,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 39,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -885,7 +913,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 31,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -916,7 +946,9 @@
         "deps": 6,
         "files": 4,
         "modified_ids": 35,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -949,17 +981,19 @@
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
+        "added_ids": 1132,
         "added_tests": 205,
         "deps": 6,
         "files": 177,
-        "modified_ids": 500,
-        "removed_ids": 418
+        "modified_ids": 1591,
+        "removed_ids": 418,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
       "ledger_rejected": {},
-      "ledger_units": 2262,
+      "ledger_units": 3985,
       "paper_heuristic": "aligned",
       "pr_id": "2832575560",
       "pred_status": {
@@ -967,7 +1001,7 @@
         "describes_behavior:unverifiable": 5
       },
       "reasons": [],
-      "receipt_sha256": "0a3d91031bfb2291f1817d77c3ab77202dd08ca3e34b95caf1ae56216446ef8b",
+      "receipt_sha256": "42415c13e949f10020930b43c6f3f58ae2e76c0721161f19b60716a7a2a234e3",
       "url": "https://github.com/crewAIInc/crewAI/pull/2034"
     },
     {
@@ -984,7 +1018,9 @@
         "deps": 76,
         "files": 19,
         "modified_ids": 184,
-        "removed_ids": 19
+        "removed_ids": 19,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1013,7 +1049,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 95,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1043,7 +1081,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 106,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1075,7 +1115,9 @@
         "deps": 22,
         "files": 9,
         "modified_ids": 141,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -1109,7 +1151,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 5,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -1138,7 +1182,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 73,
-        "removed_ids": 12
+        "removed_ids": 12,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -1168,7 +1214,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 4,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -1202,7 +1250,9 @@
         "deps": 24,
         "files": 7,
         "modified_ids": 24,
-        "removed_ids": 8
+        "removed_ids": 8,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -1236,7 +1286,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 2,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1267,7 +1319,9 @@
         "deps": 0,
         "files": 7,
         "modified_ids": 83,
-        "removed_ids": 8
+        "removed_ids": 8,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "misaligned",
@@ -1297,7 +1351,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 10,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1325,20 +1381,22 @@
         "added_tests": 0,
         "deps": 0,
         "files": 46,
-        "modified_ids": 500,
-        "removed_ids": 1
+        "modified_ids": 778,
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 763,
+      "ledger_units": 1041,
       "paper_heuristic": "aligned",
       "pr_id": "2879844166",
       "pred_status": {
         "describes_behavior:unverifiable": 13
       },
       "reasons": [],
-      "receipt_sha256": "9b636231f95a7a3f11f86cee88367880a19aa429fabac25ca8dda0e3b436f156",
+      "receipt_sha256": "26215a4d724585e81d62452882eb29b07bcdef70692876411e302dbe7f17508d",
       "url": "https://github.com/codegen-sh/codegen/pull/658"
     },
     {
@@ -1357,7 +1415,9 @@
         "deps": 0,
         "files": 7,
         "modified_ids": 26,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -1393,7 +1453,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 9,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "misaligned",
@@ -1423,7 +1485,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 35,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1452,7 +1516,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -1484,7 +1550,9 @@
         "deps": 0,
         "files": 18,
         "modified_ids": 270,
-        "removed_ids": 15
+        "removed_ids": 15,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1514,7 +1582,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 37,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1543,7 +1613,9 @@
         "deps": 2,
         "files": 16,
         "modified_ids": 37,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1572,7 +1644,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 23,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1601,7 +1675,9 @@
         "deps": 0,
         "files": 19,
         "modified_ids": 71,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1630,7 +1706,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 90,
-        "removed_ids": 28
+        "removed_ids": 28,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1659,7 +1737,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1690,7 +1770,9 @@
         "deps": 0,
         "files": 7,
         "modified_ids": 6,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -1721,7 +1803,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1750,7 +1834,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -1779,7 +1865,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 23,
-        "removed_ids": 6
+        "removed_ids": 6,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1808,7 +1896,9 @@
         "deps": 0,
         "files": 17,
         "modified_ids": 57,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -1837,7 +1927,9 @@
         "deps": 18,
         "files": 15,
         "modified_ids": 172,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -1867,7 +1959,9 @@
         "deps": 0,
         "files": 11,
         "modified_ids": 141,
-        "removed_ids": 9
+        "removed_ids": 9,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -1898,7 +1992,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 24,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -1925,17 +2021,19 @@
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
+        "added_ids": 1709,
         "added_tests": 290,
         "deps": 8,
         "files": 301,
-        "modified_ids": 500,
-        "removed_ids": 225
+        "modified_ids": 971,
+        "removed_ids": 225,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
       "ledger_rejected": {},
-      "ledger_units": 2583,
+      "ledger_units": 4263,
       "paper_heuristic": "aligned",
       "pr_id": "2982204377",
       "pred_status": {
@@ -1947,7 +2045,7 @@
       "reasons": [
         "unsupported 4/5"
       ],
-      "receipt_sha256": "3f28ad0ede31370f60daed2eb42c07a752cb824dcd0bf217e09f9fc5ce92cc18",
+      "receipt_sha256": "17b8e55b462af761f817931799db3ef4c8f0ad4feef77f09819003d4a2b32158",
       "url": "https://github.com/crewAIInc/crewAI/pull/2548"
     },
     {
@@ -1965,7 +2063,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 10,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -1996,7 +2096,9 @@
         "deps": 0,
         "files": 8,
         "modified_ids": 41,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2028,7 +2130,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 5,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2057,20 +2161,22 @@
         "added_tests": 50,
         "deps": 2,
         "files": 43,
-        "modified_ids": 500,
-        "removed_ids": 139
+        "modified_ids": 532,
+        "removed_ids": 139,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 1148,
+      "ledger_units": 1180,
       "paper_heuristic": "aligned",
       "pr_id": "3007216622",
       "pred_status": {
         "describes_behavior:unverifiable": 7
       },
       "reasons": [],
-      "receipt_sha256": "47ea884225c9b10a1d2f298731f3c2f7aff678e9efdfbb50da049ada9469fded",
+      "receipt_sha256": "22df348846acd69ee2039d4c97a8f7f18e652c70a483fa67e8afd09a20ae4380",
       "url": "https://github.com/antiwork/flexile/pull/167"
     },
     {
@@ -2087,7 +2193,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 15,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2117,7 +2225,9 @@
         "deps": 0,
         "files": 8,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "partial",
@@ -2152,7 +2262,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 22,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2184,7 +2296,9 @@
         "deps": 6,
         "files": 33,
         "modified_ids": 60,
-        "removed_ids": 213
+        "removed_ids": 213,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2213,7 +2327,9 @@
         "deps": 0,
         "files": 9,
         "modified_ids": 68,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2244,7 +2360,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 24,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -2277,7 +2395,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 4,
-        "removed_ids": 8
+        "removed_ids": 8,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -2311,7 +2431,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 9,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2341,7 +2463,9 @@
         "deps": 2,
         "files": 6,
         "modified_ids": 20,
-        "removed_ids": 10
+        "removed_ids": 10,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2370,7 +2494,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 51,
-        "removed_ids": 4
+        "removed_ids": 4,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -2399,7 +2525,9 @@
         "deps": 0,
         "files": 20,
         "modified_ids": 100,
-        "removed_ids": 7
+        "removed_ids": 7,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -2429,7 +2557,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2459,7 +2589,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2483,24 +2615,26 @@
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
-        "added_tests": 300,
+        "added_ids": 1316,
+        "added_tests": 757,
         "deps": 200,
         "files": 361,
-        "modified_ids": 500,
-        "removed_ids": 132
+        "modified_ids": 1267,
+        "removed_ids": 132,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 3063,
+      "ledger_units": 5103,
       "paper_heuristic": "aligned",
       "pr_id": "3060701727",
       "pred_status": {
         "describes_behavior:unverifiable": 9
       },
       "reasons": [],
-      "receipt_sha256": "59f81917d562434592e988477ac81cd2cc9a4f506e44cc0530ffef2ec992fec3",
+      "receipt_sha256": "e29a6fce6391e29cbf8180e9289b1b3068ddf26d4e6ae9b3a029867f45cb688f",
       "url": "https://github.com/faros-ai/airbyte-connectors/pull/2022"
     },
     {
@@ -2517,7 +2651,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 11,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2547,7 +2683,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 4,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2577,7 +2715,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 45,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2606,7 +2746,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 5,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2635,7 +2777,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 6,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2664,7 +2808,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2693,7 +2839,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2722,7 +2870,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 14,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2751,7 +2901,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 95,
-        "removed_ids": 6
+        "removed_ids": 6,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2780,7 +2932,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 3,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2809,7 +2963,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 33,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2839,7 +2995,9 @@
         "deps": 0,
         "files": 7,
         "modified_ids": 84,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "partial",
@@ -2873,7 +3031,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 67,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2902,7 +3062,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 5,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2933,7 +3095,9 @@
         "deps": 0,
         "files": 9,
         "modified_ids": 76,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -2961,17 +3125,19 @@
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
+        "added_ids": 878,
         "added_tests": 104,
         "deps": 214,
         "files": 74,
         "modified_ids": 193,
-        "removed_ids": 7
+        "removed_ids": 7,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 1223,
+      "ledger_units": 1601,
       "paper_heuristic": "aligned",
       "pr_id": "3074548447",
       "pred_status": {
@@ -2984,7 +3150,7 @@
       "reasons": [
         "unsupported 12/15"
       ],
-      "receipt_sha256": "89192ae3d499f4db5d2fa1b616145eab5285abd9860e297eaa9cc857f4d92da7",
+      "receipt_sha256": "1a1011630765e5b3f42c4a81ca9d7e100bfea3078a7447cab8f932c4550aba18",
       "url": "https://github.com/github/branch-deploy/pull/396"
     },
     {
@@ -3002,7 +3168,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -3036,7 +3204,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -3067,7 +3237,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 0,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3096,7 +3268,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3125,7 +3299,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 19,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -3154,7 +3330,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -3185,7 +3363,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 7,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3214,7 +3394,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 8,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3243,7 +3425,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 23,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3274,7 +3458,9 @@
         "deps": 0,
         "files": 12,
         "modified_ids": 55,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3306,7 +3492,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 22,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3336,7 +3524,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 5,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3365,7 +3555,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 3,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -3395,7 +3587,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -3428,7 +3622,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 24,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3459,7 +3655,9 @@
         "deps": 0,
         "files": 19,
         "modified_ids": 174,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -3495,7 +3693,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 56,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3524,7 +3724,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3555,7 +3757,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 6,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3586,7 +3790,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 9,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -3615,7 +3821,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 13,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3645,7 +3853,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 51,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3675,7 +3885,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 1,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3704,7 +3916,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 82,
-        "removed_ids": 8
+        "removed_ids": 8,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3733,7 +3947,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 22,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -3762,7 +3978,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 7,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3792,7 +4010,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 69,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -3822,7 +4042,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 4,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3853,7 +4075,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 19,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -3887,13 +4111,15 @@
         "added_tests": 266,
         "deps": 0,
         "files": 70,
-        "modified_ids": 500,
-        "removed_ids": 40
+        "modified_ids": 618,
+        "removed_ids": 40,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 1091,
+      "ledger_units": 1209,
       "paper_heuristic": "aligned",
       "pr_id": "3094488685",
       "pred_status": {
@@ -3904,7 +4130,7 @@
       "reasons": [
         "unsupported 30/42"
       ],
-      "receipt_sha256": "3029e2a7467122ae0fd00b0d75c5ffc000b76f547d28d541fa5737a1979a7ec3",
+      "receipt_sha256": "20ef7cf41313cf40b32285109344be5747510d9f1f0c46a591f6416fc7447d06",
       "url": "https://github.com/dotnet/aspire/pull/9527"
     },
     {
@@ -3922,7 +4148,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3952,7 +4180,9 @@
         "deps": 0,
         "files": 7,
         "modified_ids": 62,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -3982,7 +4212,9 @@
         "deps": 10,
         "files": 36,
         "modified_ids": 128,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "partial",
@@ -4014,7 +4246,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 40,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -4045,7 +4279,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 4,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -4076,7 +4312,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 105,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4105,7 +4343,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 38,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4134,7 +4374,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 31,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4163,7 +4405,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -4194,7 +4438,9 @@
         "deps": 0,
         "files": 20,
         "modified_ids": 100,
-        "removed_ids": 22
+        "removed_ids": 22,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -4225,7 +4471,9 @@
         "deps": 0,
         "files": 10,
         "modified_ids": 83,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -4259,7 +4507,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 1,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4289,7 +4539,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "misaligned",
@@ -4318,7 +4570,9 @@
         "deps": 0,
         "files": 24,
         "modified_ids": 188,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "partial",
@@ -4353,7 +4607,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 5,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4389,7 +4645,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 38,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4419,7 +4677,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "misaligned",
@@ -4448,7 +4708,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 22,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4477,7 +4739,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -4508,7 +4772,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 43,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4537,7 +4803,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 33,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4566,7 +4834,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 1,
-        "removed_ids": 17
+        "removed_ids": 17,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4595,7 +4865,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 20,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4625,7 +4897,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 11,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4655,7 +4929,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 3,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4684,7 +4960,9 @@
         "deps": 2,
         "files": 15,
         "modified_ids": 128,
-        "removed_ids": 38
+        "removed_ids": 38,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4713,7 +4991,9 @@
         "deps": 6,
         "files": 346,
         "modified_ids": 103,
-        "removed_ids": 12
+        "removed_ids": 12,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4748,7 +5028,9 @@
         "deps": 0,
         "files": 45,
         "modified_ids": 110,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -4782,7 +5064,9 @@
         "deps": 0,
         "files": 16,
         "modified_ids": 56,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -4817,7 +5101,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 31,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -4851,7 +5137,9 @@
         "deps": 0,
         "files": 7,
         "modified_ids": 51,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "partial",
@@ -4885,7 +5173,9 @@
         "deps": 20,
         "files": 45,
         "modified_ids": 358,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -4915,7 +5205,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 112,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4944,7 +5236,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 32,
-        "removed_ids": 4
+        "removed_ids": 4,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -4973,7 +5267,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 27,
-        "removed_ids": 4
+        "removed_ids": 4,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5002,7 +5298,9 @@
         "deps": 0,
         "files": 18,
         "modified_ids": 19,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5031,7 +5329,9 @@
         "deps": 2,
         "files": 15,
         "modified_ids": 229,
-        "removed_ids": 7
+        "removed_ids": 7,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5060,7 +5360,9 @@
         "deps": 0,
         "files": 15,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5091,7 +5393,9 @@
         "deps": 0,
         "files": 13,
         "modified_ids": 27,
-        "removed_ids": 129
+        "removed_ids": 129,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -5126,7 +5430,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 15,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5157,7 +5463,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 18,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -5193,7 +5501,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -5231,7 +5541,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5260,7 +5572,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 30,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5290,7 +5604,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 19,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5320,7 +5636,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 68,
-        "removed_ids": 18
+        "removed_ids": 18,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -5349,7 +5667,9 @@
         "deps": 0,
         "files": 21,
         "modified_ids": 93,
-        "removed_ids": 8
+        "removed_ids": 8,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -5378,7 +5698,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -5409,7 +5731,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 49,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5439,7 +5763,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 3,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5470,7 +5796,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 6,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5500,7 +5828,9 @@
         "deps": 156,
         "files": 3,
         "modified_ids": 116,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -5530,7 +5860,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 2,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5560,7 +5892,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 216,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5591,7 +5925,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 51,
-        "removed_ids": 5
+        "removed_ids": 5,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -5627,7 +5963,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -5656,7 +5994,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 5,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5685,7 +6025,9 @@
         "deps": 0,
         "files": 26,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5709,24 +6051,26 @@
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
-        "added_tests": 300,
+        "added_ids": 1096,
+        "added_tests": 423,
         "deps": 260,
         "files": 300,
-        "modified_ids": 500,
-        "removed_ids": 500
+        "modified_ids": 2471,
+        "removed_ids": 593,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "misaligned",
       "ledger_rejected": {},
-      "ledger_units": 2905,
+      "ledger_units": 5688,
       "paper_heuristic": "misaligned",
       "pr_id": "3130011634",
       "pred_status": {
         "describes_behavior:unverifiable": 1
       },
       "reasons": [],
-      "receipt_sha256": "b3305cd951a849cb9cec03585f5fd2eece4ef30f534d425b4f078419e4730a2c",
+      "receipt_sha256": "3686d954dafc00b8bf5fa91d26a3f219f46e633c92e32140c7bb865dbb9ab6a1",
       "url": "https://github.com/prebid/Prebid.js/pull/13320"
     },
     {
@@ -5744,7 +6088,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 11,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5775,7 +6121,9 @@
         "deps": 2,
         "files": 12,
         "modified_ids": 5,
-        "removed_ids": 439
+        "removed_ids": 439,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5807,7 +6155,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 32,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5837,7 +6187,9 @@
         "deps": 0,
         "files": 9,
         "modified_ids": 160,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -5867,7 +6219,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -5900,20 +6254,22 @@
         "added_tests": 39,
         "deps": 0,
         "files": 150,
-        "modified_ids": 500,
-        "removed_ids": 433
+        "modified_ids": 749,
+        "removed_ids": 433,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
       "ledger_rejected": {},
-      "ledger_units": 1894,
+      "ledger_units": 2143,
       "paper_heuristic": "aligned",
       "pr_id": "3131785378",
       "pred_status": {
         "describes_behavior:unverifiable": 4
       },
       "reasons": [],
-      "receipt_sha256": "1bf7d46ad977f3b87938c0a053b73c72c657c0b1f43e19b1bdb8316f3567d1a3",
+      "receipt_sha256": "187133b2fd308b6a902364c244849e0c58ad72e20eda1227123d39a70862996a",
       "url": "https://github.com/sequinstream/sequin/pull/1776"
     },
     {
@@ -5932,7 +6288,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -5964,7 +6322,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 10,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -5997,7 +6357,9 @@
         "deps": 0,
         "files": 12,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6026,7 +6388,9 @@
         "deps": 0,
         "files": 12,
         "modified_ids": 19,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6055,7 +6419,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 9,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6085,7 +6451,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 41,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6118,7 +6486,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 24,
-        "removed_ids": 8
+        "removed_ids": 8,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "partial",
@@ -6153,7 +6523,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 10,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6183,7 +6555,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 15,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6214,7 +6588,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 5,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -6249,7 +6625,9 @@
         "deps": 2,
         "files": 6,
         "modified_ids": 19,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6278,7 +6656,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -6309,7 +6689,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6339,7 +6721,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6371,7 +6755,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 14,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6404,7 +6790,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 76,
-        "removed_ids": 18
+        "removed_ids": 18,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -6437,7 +6825,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6467,7 +6857,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 2,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6496,7 +6888,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 1,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6525,7 +6919,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 52,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6556,7 +6952,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 12,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -6592,7 +6990,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 7,
-        "removed_ids": 5
+        "removed_ids": 5,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6626,7 +7026,9 @@
         "deps": 34,
         "files": 35,
         "modified_ids": 79,
-        "removed_ids": 23
+        "removed_ids": 23,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6657,7 +7059,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 58,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -6691,7 +7095,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6720,7 +7126,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 19,
-        "removed_ids": 8
+        "removed_ids": 8,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6751,7 +7159,9 @@
         "deps": 2,
         "files": 2,
         "modified_ids": 265,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -6783,16 +7193,18 @@
       "error": null,
       "facts": {
         "added_ids": 312,
-        "added_tests": 300,
+        "added_tests": 475,
         "deps": 18,
         "files": 503,
-        "modified_ids": 500,
-        "removed_ids": 3
+        "modified_ids": 850,
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 3099,
+      "ledger_units": 3624,
       "paper_heuristic": "aligned",
       "pr_id": "3141023608",
       "pred_status": {
@@ -6802,7 +7214,7 @@
       "reasons": [
         "contradicted 1"
       ],
-      "receipt_sha256": "8b495d85daed40a8d5e5d351e872c739c306d10ef6dc3cac499e3006be10842e",
+      "receipt_sha256": "88dbf38542680daf79b17a4d2150298864fd924f5442914e8aac6fe73d1d4950",
       "url": "https://github.com/SchemaStore/schemastore/pull/4787"
     },
     {
@@ -6819,7 +7231,9 @@
         "deps": 0,
         "files": 15,
         "modified_ids": 222,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6843,24 +7257,26 @@
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
+        "added_ids": 1726,
         "added_tests": 17,
         "deps": 282,
         "files": 703,
         "modified_ids": 330,
-        "removed_ids": 79
+        "removed_ids": 79,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "misaligned",
       "ledger_rejected": {},
-      "ledger_units": 6546,
+      "ledger_units": 7772,
       "paper_heuristic": "aligned",
       "pr_id": "3141477809",
       "pred_status": {
         "describes_behavior:unverifiable": 2
       },
       "reasons": [],
-      "receipt_sha256": "00c3c217dfa95b65255f86836e19f04847150470b43d948a2049383689babe06",
+      "receipt_sha256": "9e29d0ad98687cfac63ad860023a0ef090d0eac750ad2e0ceffb14fb736504d0",
       "url": "https://github.com/Azure/azure-rest-api-specs/pull/35251"
     },
     {
@@ -6877,7 +7293,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 11,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6909,7 +7327,9 @@
         "deps": 6,
         "files": 5,
         "modified_ids": 180,
-        "removed_ids": 9
+        "removed_ids": 9,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6939,7 +7359,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 21,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -6969,7 +7391,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 9,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -7002,7 +7426,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7033,7 +7459,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 39,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -7068,7 +7496,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7097,7 +7527,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 25,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7126,7 +7558,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7155,7 +7589,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 10,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7186,7 +7622,9 @@
         "deps": 4,
         "files": 16,
         "modified_ids": 166,
-        "removed_ids": 70
+        "removed_ids": 70,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -7224,7 +7662,9 @@
         "deps": 32,
         "files": 20,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -7256,7 +7696,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 6,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7287,7 +7729,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 79,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7318,7 +7762,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7347,7 +7793,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 12,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7376,7 +7824,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 19,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7405,7 +7855,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 14,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7435,7 +7887,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7465,7 +7919,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7494,7 +7950,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7524,7 +7982,9 @@
         "deps": 0,
         "files": 13,
         "modified_ids": 216,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -7555,7 +8015,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7585,7 +8047,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 50,
-        "removed_ids": 6
+        "removed_ids": 6,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7615,7 +8079,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7645,7 +8111,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7674,7 +8142,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 10,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7703,7 +8173,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 1,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -7732,7 +8204,9 @@
         "deps": 2,
         "files": 4,
         "modified_ids": 23,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7761,7 +8235,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 7,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7791,7 +8267,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 6,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7822,7 +8300,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 35,
-        "removed_ids": 11
+        "removed_ids": 11,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7855,7 +8335,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7888,7 +8370,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 2,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -7924,7 +8408,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 4,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7955,7 +8441,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 22,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -7985,13 +8473,15 @@
         "added_tests": 84,
         "deps": 6,
         "files": 324,
-        "modified_ids": 500,
-        "removed_ids": 5
+        "modified_ids": 5079,
+        "removed_ids": 5,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "misaligned",
       "ledger_rejected": {},
-      "ledger_units": 3701,
+      "ledger_units": 8280,
       "paper_heuristic": "aligned",
       "pr_id": "3152257828",
       "pred_status": {
@@ -8000,7 +8490,7 @@
         "describes_behavior:unverifiable": 2
       },
       "reasons": [],
-      "receipt_sha256": "ae3db7a8fd2f146b608742c562fb57fee53dcaa27e2afcab9f666ed24833ec60",
+      "receipt_sha256": "e246a7a9b69ff814d2c90114e2584abd8f2295bf8a88643ffdc2099a5aa83e4e",
       "url": "https://github.com/microsoft/typespec/pull/7667"
     },
     {
@@ -8014,17 +8504,19 @@
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
+        "added_ids": 898,
         "added_tests": 229,
         "deps": 4,
         "files": 296,
-        "modified_ids": 500,
-        "removed_ids": 130
+        "modified_ids": 1660,
+        "removed_ids": 130,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 2724,
+      "ledger_units": 4282,
       "paper_heuristic": "aligned",
       "pr_id": "3152602811",
       "pred_status": {
@@ -8035,7 +8527,7 @@
       "reasons": [
         "unsupported 2/3"
       ],
-      "receipt_sha256": "1bff36eea4ab28f892e2f8134052ba528cfe50c0d75fab949c5c6d9999d29f2b",
+      "receipt_sha256": "6ab799a1d4ef0a09896bbcb211809d0c72565053a219e21e64b0465b725c0e03",
       "url": "https://github.com/microsoft/testfx/pull/5797"
     },
     {
@@ -8052,7 +8544,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8082,7 +8576,9 @@
         "deps": 0,
         "files": 10,
         "modified_ids": 120,
-        "removed_ids": 7
+        "removed_ids": 7,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -8116,7 +8612,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 25,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -8149,7 +8647,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 12,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8179,7 +8679,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8208,7 +8710,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 55,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "misaligned",
@@ -8237,7 +8741,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 39,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8267,7 +8773,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 44,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8299,7 +8807,9 @@
         "deps": 4,
         "files": 1,
         "modified_ids": 36,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -8333,7 +8843,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8364,7 +8876,9 @@
         "deps": 0,
         "files": 18,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -8398,7 +8912,9 @@
         "deps": 2,
         "files": 9,
         "modified_ids": 115,
-        "removed_ids": 22
+        "removed_ids": 22,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8432,7 +8948,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8458,17 +8976,19 @@
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
-        "added_tests": 300,
+        "added_ids": 1333,
+        "added_tests": 335,
         "deps": 68,
         "files": 542,
-        "modified_ids": 500,
-        "removed_ids": 474
+        "modified_ids": 1191,
+        "removed_ids": 474,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
       "ledger_rejected": {},
-      "ledger_units": 5699,
+      "ledger_units": 7258,
       "paper_heuristic": "aligned",
       "pr_id": "3158683531",
       "pred_status": {
@@ -8477,7 +8997,7 @@
         "describes_behavior:unverifiable": 10
       },
       "reasons": [],
-      "receipt_sha256": "396741aaa42c10aae54f3a571482f6d22744ff4eefdfee691b6d7447229a1aa9",
+      "receipt_sha256": "f7266c8467d0378e048fd333c1eef14ea587227ec3b0f445cf9269e75cef2ed6",
       "url": "https://github.com/liam-hq/liam/pull/2079"
     },
     {
@@ -8494,7 +9014,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8523,7 +9045,9 @@
         "deps": 0,
         "files": 15,
         "modified_ids": 23,
-        "removed_ids": 147
+        "removed_ids": 147,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8553,7 +9077,9 @@
         "deps": 0,
         "files": 7,
         "modified_ids": 5,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "partial",
@@ -8585,7 +9111,9 @@
         "deps": 0,
         "files": 12,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8614,7 +9142,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 7,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8644,7 +9174,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8674,7 +9206,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 31,
-        "removed_ids": 7
+        "removed_ids": 7,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8703,7 +9237,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 5,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8732,7 +9268,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 175,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8761,7 +9299,9 @@
         "deps": 0,
         "files": 7,
         "modified_ids": 42,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8792,7 +9332,9 @@
         "deps": 2,
         "files": 2,
         "modified_ids": 26,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8827,7 +9369,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 61,
-        "removed_ids": 15
+        "removed_ids": 15,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8860,7 +9404,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 50,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8891,7 +9437,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 6,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8921,7 +9469,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 2,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8952,7 +9502,9 @@
         "deps": 0,
         "files": 13,
         "modified_ids": 36,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -8984,7 +9536,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 23,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -9016,7 +9570,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 14,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9049,7 +9605,9 @@
         "deps": 14,
         "files": 7,
         "modified_ids": 36,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9079,7 +9637,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 17,
-        "removed_ids": 6
+        "removed_ids": 6,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9111,7 +9671,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 1,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9140,7 +9702,9 @@
         "deps": 0,
         "files": 70,
         "modified_ids": 52,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9169,7 +9733,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -9201,7 +9767,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 13,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9232,7 +9800,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 57,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9263,7 +9833,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -9299,7 +9871,9 @@
         "deps": 2,
         "files": 8,
         "modified_ids": 76,
-        "removed_ids": 4
+        "removed_ids": 4,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9329,7 +9903,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 23,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9359,7 +9935,9 @@
         "deps": 0,
         "files": 7,
         "modified_ids": 15,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9390,7 +9968,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9422,7 +10002,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9452,7 +10034,9 @@
         "deps": 0,
         "files": 9,
         "modified_ids": 3,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9482,7 +10066,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 1,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9514,7 +10100,9 @@
         "deps": 0,
         "files": 19,
         "modified_ids": 23,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -9547,7 +10135,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9577,7 +10167,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 88,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9606,7 +10198,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 2,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9635,7 +10229,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 29,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9665,7 +10261,9 @@
         "deps": 0,
         "files": 10,
         "modified_ids": 59,
-        "removed_ids": 9
+        "removed_ids": 9,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -9695,7 +10293,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 4,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9725,7 +10325,9 @@
         "deps": 6,
         "files": 2,
         "modified_ids": 15,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9756,7 +10358,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 12,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9785,7 +10389,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -9817,7 +10423,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -9849,7 +10457,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -9880,7 +10490,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 6,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9909,7 +10521,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9938,7 +10552,9 @@
         "deps": 0,
         "files": 37,
         "modified_ids": 85,
-        "removed_ids": 4
+        "removed_ids": 4,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9968,7 +10584,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 10,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -9999,7 +10617,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10029,7 +10649,9 @@
         "deps": 0,
         "files": 16,
         "modified_ids": 52,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10058,7 +10680,9 @@
         "deps": 0,
         "files": 10,
         "modified_ids": 90,
-        "removed_ids": 10
+        "removed_ids": 10,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -10089,7 +10713,9 @@
         "deps": 0,
         "files": 30,
         "modified_ids": 178,
-        "removed_ids": 5
+        "removed_ids": 5,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -10123,7 +10749,9 @@
         "deps": 4,
         "files": 5,
         "modified_ids": 16,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10153,7 +10781,9 @@
         "deps": 0,
         "files": 15,
         "modified_ids": 251,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "partial",
@@ -10187,7 +10817,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 8,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10218,7 +10850,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 5,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10250,7 +10884,9 @@
         "deps": 0,
         "files": 10,
         "modified_ids": 139,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "partial",
@@ -10283,7 +10919,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 32,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -10318,7 +10956,9 @@
         "deps": 0,
         "files": 21,
         "modified_ids": 82,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10352,7 +10992,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 15,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "partial",
@@ -10386,7 +11028,9 @@
         "deps": 12,
         "files": 20,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10415,7 +11059,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -10446,7 +11092,9 @@
         "deps": 0,
         "files": 21,
         "modified_ids": 185,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10475,7 +11123,9 @@
         "deps": 0,
         "files": 10,
         "modified_ids": 17,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10504,7 +11154,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 14,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10534,7 +11186,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 6,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "misaligned",
@@ -10566,7 +11220,9 @@
         "deps": 0,
         "files": 9,
         "modified_ids": 24,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10594,24 +11250,26 @@
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
+        "added_ids": 787,
         "added_tests": 18,
         "deps": 12,
         "files": 310,
-        "modified_ids": 500,
-        "removed_ids": 89
+        "modified_ids": 1054,
+        "removed_ids": 89,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
       "ledger_rejected": {},
-      "ledger_units": 2775,
+      "ledger_units": 3616,
       "paper_heuristic": "aligned",
       "pr_id": "3189263416",
       "pred_status": {
         "describes_behavior:unverifiable": 1
       },
       "reasons": [],
-      "receipt_sha256": "ba08af0da6325f80bb8a78f2438aae82f4e7f0b7e49eaef50ad1db44899a51da",
+      "receipt_sha256": "1f2af7ef337b2850f9a6124858832758a1d1445a7578d515f0a5691cc03cf630",
       "url": "https://github.com/actualbudget/actual/pull/5262"
     },
     {
@@ -10628,7 +11286,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 4,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10657,7 +11317,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 24,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10686,7 +11348,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 12,
-        "removed_ids": 10
+        "removed_ids": 10,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10715,7 +11379,9 @@
         "deps": 0,
         "files": 20,
         "modified_ids": 37,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10745,7 +11411,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10775,7 +11443,9 @@
         "deps": 2,
         "files": 3,
         "modified_ids": 42,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -10806,7 +11476,9 @@
         "deps": 0,
         "files": 16,
         "modified_ids": 108,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -10839,7 +11511,9 @@
         "deps": 0,
         "files": 25,
         "modified_ids": 46,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10868,7 +11542,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -10900,7 +11576,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -10934,7 +11612,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 2,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10964,7 +11644,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 18,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -10995,7 +11677,9 @@
         "deps": 4,
         "files": 41,
         "modified_ids": 282,
-        "removed_ids": 61
+        "removed_ids": 61,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11027,7 +11711,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 20,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -11056,7 +11742,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 13,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11085,7 +11773,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 182,
-        "removed_ids": 29
+        "removed_ids": 29,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11116,7 +11806,9 @@
         "deps": 0,
         "files": 13,
         "modified_ids": 19,
-        "removed_ids": 26
+        "removed_ids": 26,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11149,7 +11841,9 @@
         "deps": 0,
         "files": 8,
         "modified_ids": 14,
-        "removed_ids": 6
+        "removed_ids": 6,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11181,7 +11875,9 @@
         "deps": 0,
         "files": 21,
         "modified_ids": 80,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11212,7 +11908,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 14,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11247,7 +11945,9 @@
         "deps": 0,
         "files": 9,
         "modified_ids": 86,
-        "removed_ids": 29
+        "removed_ids": 29,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -11280,7 +11980,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 5,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11309,7 +12011,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11340,12 +12044,14 @@
         "deps": 0,
         "files": 26,
         "modified_ids": 130,
-        "removed_ids": 500
+        "removed_ids": 652,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 867,
+      "ledger_units": 1019,
       "paper_heuristic": "aligned",
       "pr_id": "3200393827",
       "pred_status": {
@@ -11358,7 +12064,7 @@
       "reasons": [
         "unsupported 6/7"
       ],
-      "receipt_sha256": "9c0ed717d8a13e02e9eb745944c82d0bb393c0234d4a2e0f7a90f8cf2d72d2ce",
+      "receipt_sha256": "341265de5d1e719baf9fb1b851a7596418a01ae72a68ccaabbeb6a2a59c359b6",
       "url": "https://github.com/dotnet/maui/pull/30424"
     },
     {
@@ -11377,7 +12083,9 @@
         "deps": 0,
         "files": 54,
         "modified_ids": 405,
-        "removed_ids": 146
+        "removed_ids": 146,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -11410,7 +12118,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 10,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11439,7 +12149,9 @@
         "deps": 0,
         "files": 8,
         "modified_ids": 83,
-        "removed_ids": 7
+        "removed_ids": 7,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11469,7 +12181,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 21,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11499,7 +12213,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 16,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11528,7 +12244,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 33,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11557,7 +12275,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 57,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -11586,7 +12306,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 9,
-        "removed_ids": 5
+        "removed_ids": 5,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11615,7 +12337,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 109,
-        "removed_ids": 7
+        "removed_ids": 7,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11646,7 +12370,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 7,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11678,7 +12404,9 @@
         "deps": 0,
         "files": 15,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11707,7 +12435,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 34,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11737,7 +12467,9 @@
         "deps": 0,
         "files": 27,
         "modified_ids": 150,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11767,7 +12499,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11796,7 +12530,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 24,
-        "removed_ids": 60
+        "removed_ids": 60,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11826,7 +12562,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 3,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11852,23 +12590,25 @@
       "error": null,
       "facts": {
         "added_ids": 76,
-        "added_tests": 300,
+        "added_tests": 400,
         "deps": 0,
         "files": 103,
         "modified_ids": 36,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 833,
+      "ledger_units": 933,
       "paper_heuristic": "aligned",
       "pr_id": "3206215915",
       "pred_status": {
         "describes_behavior:unverifiable": 4
       },
       "reasons": [],
-      "receipt_sha256": "eb3f54b7aa015c0b5c53882295b86081d61b5817b6e3195e2084c48b9bc9866e",
+      "receipt_sha256": "eb6ef299934981fb3282c9d7e2a8f3ef0d874df70d2add215bffb5b44aa222bc",
       "url": "https://github.com/mochilang/mochi/pull/5508"
     },
     {
@@ -11887,7 +12627,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 32,
-        "removed_ids": 15
+        "removed_ids": 15,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "misaligned",
@@ -11918,7 +12660,9 @@
         "deps": 0,
         "files": 43,
         "modified_ids": 73,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11947,7 +12691,9 @@
         "deps": 0,
         "files": 60,
         "modified_ids": 53,
-        "removed_ids": 32
+        "removed_ids": 32,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -11976,7 +12722,9 @@
         "deps": 0,
         "files": 23,
         "modified_ids": 12,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12007,7 +12755,9 @@
         "deps": 0,
         "files": 10,
         "modified_ids": 49,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "partial",
@@ -12040,7 +12790,9 @@
         "deps": 0,
         "files": 12,
         "modified_ids": 45,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12071,7 +12823,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 12,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12103,7 +12857,9 @@
         "deps": 2,
         "files": 52,
         "modified_ids": 283,
-        "removed_ids": 38
+        "removed_ids": 38,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -12132,7 +12888,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 23,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12159,7 +12917,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 18,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -12187,7 +12947,9 @@
         "deps": 0,
         "files": 10,
         "modified_ids": 81,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -12218,7 +12980,9 @@
         "deps": 0,
         "files": 8,
         "modified_ids": 126,
-        "removed_ids": 4
+        "removed_ids": 4,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -12247,7 +13011,9 @@
         "deps": 0,
         "files": 12,
         "modified_ids": 41,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12277,7 +13043,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12308,7 +13076,9 @@
         "deps": 0,
         "files": 11,
         "modified_ids": 150,
-        "removed_ids": 7
+        "removed_ids": 7,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -12342,7 +13112,9 @@
         "deps": 18,
         "files": 75,
         "modified_ids": 108,
-        "removed_ids": 331
+        "removed_ids": 331,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12378,7 +13150,9 @@
         "deps": 0,
         "files": 14,
         "modified_ids": 188,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12408,7 +13182,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 12,
-        "removed_ids": 4
+        "removed_ids": 4,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12437,7 +13213,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 6,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -12466,7 +13244,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 260,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -12483,28 +13263,31 @@
       "agent": "Devin",
       "binary_label": "aligned",
       "claim_status": {
-        "insufficient_evidence": 10,
-        "supported": 5,
+        "insufficient_evidence": 9,
+        "supported": 6,
         "unverifiable": 13
       },
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
+        "added_ids": 847,
         "added_tests": 97,
         "deps": 10,
         "files": 121,
-        "modified_ids": 500,
-        "removed_ids": 73
+        "modified_ids": 943,
+        "removed_ids": 73,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "partial",
       "ledger_rejected": {},
-      "ledger_units": 1597,
+      "ledger_units": 2387,
       "paper_heuristic": "aligned",
       "pr_id": "3215670862",
       "pred_status": {
-        "adds_identifier:insufficient_evidence": 3,
+        "adds_identifier:insufficient_evidence": 2,
+        "adds_identifier:supported": 1,
         "changes_file:insufficient_evidence": 1,
         "changes_file:supported": 5,
         "describes_behavior:unverifiable": 13,
@@ -12512,9 +13295,9 @@
         "removes_identifier:insufficient_evidence": 3
       },
       "reasons": [
-        "unsupported 10/15"
+        "unsupported 9/15"
       ],
-      "receipt_sha256": "c8f9c06e9eab424ac1412a1752257a08ee92a3236f2269d92e468838965da4bf",
+      "receipt_sha256": "f9ed24ac9c8443d1b169b9c60ccde2791d9425cd9b4a4e67a8268e1875c48210",
       "url": "https://github.com/tramlinehq/tramline/pull/855"
     },
     {
@@ -12531,7 +13314,9 @@
         "deps": 0,
         "files": 10,
         "modified_ids": 16,
-        "removed_ids": 57
+        "removed_ids": 57,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12561,20 +13346,22 @@
         "added_tests": 27,
         "deps": 4,
         "files": 32,
-        "modified_ids": 500,
-        "removed_ids": 112
+        "modified_ids": 606,
+        "removed_ids": 112,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 993,
+      "ledger_units": 1099,
       "paper_heuristic": "aligned",
       "pr_id": "3216373575",
       "pred_status": {
         "describes_behavior:unverifiable": 6
       },
       "reasons": [],
-      "receipt_sha256": "10bf8893743e3118bc7b2065f4f032f60447f6c14b20bb491c6e89bd00cec825",
+      "receipt_sha256": "7abe30a5236c0a0a4038523c3ede48f79b09411946f99ef6402802acc4ab0954",
       "url": "https://github.com/browser-use/browser-use/pull/2380"
     },
     {
@@ -12593,7 +13380,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 27,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12625,13 +13414,15 @@
         "added_tests": 185,
         "deps": 0,
         "files": 104,
-        "modified_ids": 500,
-        "removed_ids": 212
+        "modified_ids": 625,
+        "removed_ids": 212,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "misaligned",
       "ledger_rejected": {},
-      "ledger_units": 1723,
+      "ledger_units": 1848,
       "paper_heuristic": "aligned",
       "pr_id": "3216501010",
       "pred_status": {
@@ -12640,7 +13431,7 @@
         "describes_behavior:unverifiable": 8
       },
       "reasons": [],
-      "receipt_sha256": "14eb104fb1a5d1db6cd7f38d2fa766e8314d11289e0d9aa4e61a51aad898f4c3",
+      "receipt_sha256": "d49d15bc85b66f293f8f258f9ab264ebec35b5a1e5ed5984c0835ba6235d4d57",
       "url": "https://github.com/antiwork/flexile/pull/481"
     },
     {
@@ -12657,7 +13448,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 9,
-        "removed_ids": 10
+        "removed_ids": 10,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12688,7 +13481,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 10,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -12722,7 +13517,9 @@
         "deps": 0,
         "files": 24,
         "modified_ids": 203,
-        "removed_ids": 42
+        "removed_ids": 42,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12751,7 +13548,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 9,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12782,7 +13581,9 @@
         "deps": 0,
         "files": 80,
         "modified_ids": 149,
-        "removed_ids": 6
+        "removed_ids": 6,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -12816,7 +13617,9 @@
         "deps": 0,
         "files": 22,
         "modified_ids": 91,
-        "removed_ids": 25
+        "removed_ids": 25,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12845,7 +13648,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -12878,7 +13683,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12910,7 +13717,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 25,
-        "removed_ids": 98
+        "removed_ids": 98,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12939,7 +13748,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 1,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12968,7 +13779,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 9,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -12997,7 +13810,9 @@
         "deps": 4,
         "files": 11,
         "modified_ids": 139,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13027,7 +13842,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 7,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13057,7 +13874,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 6,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13086,7 +13905,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 27,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13117,7 +13938,9 @@
         "deps": 4,
         "files": 74,
         "modified_ids": 490,
-        "removed_ids": 29
+        "removed_ids": 29,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13149,7 +13972,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 96,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13180,7 +14005,9 @@
         "deps": 0,
         "files": 8,
         "modified_ids": 106,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "partial",
@@ -13216,7 +14043,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 2,
-        "removed_ids": 11
+        "removed_ids": 11,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13245,7 +14074,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13274,7 +14105,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 22,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13303,7 +14136,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 9,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13332,7 +14167,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 65,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13362,7 +14199,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 11,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13392,7 +14231,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 18,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13423,7 +14264,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 19,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -13459,7 +14302,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 1,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13489,7 +14334,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -13523,7 +14370,9 @@
         "deps": 2,
         "files": 5,
         "modified_ids": 14,
-        "removed_ids": 10
+        "removed_ids": 10,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13553,7 +14402,9 @@
         "deps": 0,
         "files": 7,
         "modified_ids": 28,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13583,7 +14434,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -13614,7 +14467,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 4,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13633,8 +14488,7 @@
       "agent": "Copilot",
       "binary_label": "misaligned",
       "claim_status": {
-        "insufficient_evidence": 2,
-        "supported": 1,
+        "supported": 3,
         "unverifiable": 9
       },
       "draft_rejected": {},
@@ -13644,24 +14498,24 @@
         "added_tests": 0,
         "deps": 0,
         "files": 3,
-        "modified_ids": 500,
-        "removed_ids": 11
+        "modified_ids": 913,
+        "removed_ids": 11,
+        "truncated": false,
+        "truncated_fields": {}
       },
-      "gate": "INCONSISTENT",
+      "gate": "CONSISTENT",
       "label": "misaligned",
       "ledger_rejected": {},
-      "ledger_units": 557,
+      "ledger_units": 970,
       "paper_heuristic": "aligned",
       "pr_id": "3230611789",
       "pred_status": {
         "changes_file:supported": 1,
         "describes_behavior:unverifiable": 9,
-        "modifies_identifier:insufficient_evidence": 2
+        "modifies_identifier:supported": 2
       },
-      "reasons": [
-        "unsupported 2/3"
-      ],
-      "receipt_sha256": "45de4c851a79cbc741cc29adc02788ba23d58864b62af58abdcbfa7b118fec22",
+      "reasons": [],
+      "receipt_sha256": "65639e60b45b82484801b64133022875c773f867972f38bf9c51674022b5eff5",
       "url": "https://github.com/jeroenterheerdt/HAsmartirrigation/pull/598"
     },
     {
@@ -13679,7 +14533,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 8,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13709,7 +14565,9 @@
         "deps": 0,
         "files": 46,
         "modified_ids": 145,
-        "removed_ids": 138
+        "removed_ids": 138,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13738,7 +14596,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 16,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -13766,20 +14626,22 @@
         "added_tests": 24,
         "deps": 40,
         "files": 117,
-        "modified_ids": 500,
-        "removed_ids": 214
+        "modified_ids": 709,
+        "removed_ids": 214,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
       "ledger_rejected": {},
-      "ledger_units": 1614,
+      "ledger_units": 1823,
       "paper_heuristic": "aligned",
       "pr_id": "3232357145",
       "pred_status": {
         "describes_behavior:unverifiable": 1
       },
       "reasons": [],
-      "receipt_sha256": "3b8b529ab5281b0283b928deb8bd7f5336fb8fe405e57ecb660ecf6c52bd57a4",
+      "receipt_sha256": "a4a7551e1d97bbc31610a3f7014a089195f64e4f13f2ef0b55e8dc66eee4cee5",
       "url": "https://github.com/odigos-io/odigos/pull/3186"
     },
     {
@@ -13796,7 +14658,9 @@
         "deps": 2,
         "files": 8,
         "modified_ids": 265,
-        "removed_ids": 243
+        "removed_ids": 243,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13827,7 +14691,9 @@
         "deps": 0,
         "files": 7,
         "modified_ids": 47,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13859,7 +14725,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 27,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13889,7 +14757,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 10,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -13913,24 +14783,26 @@
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
-        "added_tests": 300,
+        "added_ids": 680,
+        "added_tests": 1480,
         "deps": 0,
         "files": 298,
         "modified_ids": 68,
-        "removed_ids": 4
+        "removed_ids": 4,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 2363,
+      "ledger_units": 3723,
       "paper_heuristic": "aligned",
       "pr_id": "3235674228",
       "pred_status": {
         "describes_behavior:unverifiable": 3
       },
       "reasons": [],
-      "receipt_sha256": "4996bc06ffa1c2f589aa199439f2d05b510c377e21af74255fa0df498b679363",
+      "receipt_sha256": "eca9711732e629d209229c68b3ff135365574fdc484c45fb380aec51491ca733",
       "url": "https://github.com/mochilang/mochi/pull/8877"
     },
     {
@@ -13943,23 +14815,25 @@
       "error": null,
       "facts": {
         "added_ids": 20,
-        "added_tests": 300,
+        "added_tests": 310,
         "deps": 0,
         "files": 64,
         "modified_ids": 102,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 744,
+      "ledger_units": 754,
       "paper_heuristic": "aligned",
       "pr_id": "3235857607",
       "pred_status": {
         "describes_behavior:unverifiable": 3
       },
       "reasons": [],
-      "receipt_sha256": "aeff6455576995b90a1f7d0809f23859369ebb2122c0ebcb34d7f968995f7b30",
+      "receipt_sha256": "b241353c8648722fa955c713bcdd1be77c8f1b89325526f7211631e2f26c0d4d",
       "url": "https://github.com/mochilang/mochi/pull/8911"
     },
     {
@@ -13976,7 +14850,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 20,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14004,7 +14880,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 17,
-        "removed_ids": 4
+        "removed_ids": 4,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14034,7 +14912,9 @@
         "deps": 16,
         "files": 2,
         "modified_ids": 24,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -14063,7 +14943,9 @@
         "deps": 0,
         "files": 7,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14092,7 +14974,9 @@
         "deps": 0,
         "files": 8,
         "modified_ids": 62,
-        "removed_ids": 4
+        "removed_ids": 4,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14123,7 +15007,9 @@
         "deps": 0,
         "files": 21,
         "modified_ids": 185,
-        "removed_ids": 4
+        "removed_ids": 4,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14156,7 +15042,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 17,
-        "removed_ids": 48
+        "removed_ids": 48,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14186,7 +15074,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 8,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -14216,7 +15106,9 @@
         "deps": 0,
         "files": 36,
         "modified_ids": 68,
-        "removed_ids": 68
+        "removed_ids": 68,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14247,7 +15139,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 48,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -14278,7 +15172,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 14,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14303,23 +15199,25 @@
       "error": null,
       "facts": {
         "added_ids": 46,
-        "added_tests": 300,
+        "added_tests": 505,
         "deps": 0,
         "files": 103,
         "modified_ids": 237,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
       "ledger_rejected": {},
-      "ledger_units": 1099,
+      "ledger_units": 1304,
       "paper_heuristic": "aligned",
       "pr_id": "3238767869",
       "pred_status": {
         "describes_behavior:unverifiable": 4
       },
       "reasons": [],
-      "receipt_sha256": "78808a20df6215f6d2a17abeacfeba7744e872f20e2cba0419ef408ebb8ac3d1",
+      "receipt_sha256": "0ecc12b21071564a48332709be201ff89fbbd5513138478d639b12019ad5ddf7",
       "url": "https://github.com/mochilang/mochi/pull/9276"
     },
     {
@@ -14337,7 +15235,9 @@
         "deps": 0,
         "files": 8,
         "modified_ids": 15,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14369,7 +15269,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 15,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14399,7 +15301,9 @@
         "deps": 2,
         "files": 6,
         "modified_ids": 100,
-        "removed_ids": 15
+        "removed_ids": 15,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -14428,7 +15332,9 @@
         "deps": 0,
         "files": 15,
         "modified_ids": 90,
-        "removed_ids": 73
+        "removed_ids": 73,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14459,7 +15365,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 17,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14493,7 +15401,9 @@
         "deps": 0,
         "files": 16,
         "modified_ids": 29,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -14527,7 +15437,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 2,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -14558,7 +15470,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 13,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14587,7 +15501,9 @@
         "deps": 124,
         "files": 36,
         "modified_ids": 80,
-        "removed_ids": 38
+        "removed_ids": 38,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -14616,7 +15532,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14646,13 +15564,15 @@
         "added_tests": 247,
         "deps": 2,
         "files": 200,
-        "modified_ids": 500,
-        "removed_ids": 257
+        "modified_ids": 866,
+        "removed_ids": 257,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
       "ledger_rejected": {},
-      "ledger_units": 2893,
+      "ledger_units": 3259,
       "paper_heuristic": "aligned",
       "pr_id": "3242497585",
       "pred_status": {
@@ -14664,7 +15584,7 @@
         "modifies_identifier:supported": 1
       },
       "reasons": [],
-      "receipt_sha256": "8a3e28eed99005f641f7764f9801d895947e6b8afe646e0b7eca040f2b99f5e3",
+      "receipt_sha256": "ba90f451ab7d72dab93b1033c3082ccb48d8e66611b63da63194fd8a07e1453b",
       "url": "https://github.com/Azure/azure-sdk-for-net/pull/51345"
     },
     {
@@ -14681,7 +15601,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 1,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -14710,7 +15632,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 1,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14739,7 +15663,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 19,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14768,7 +15694,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 16,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14798,7 +15726,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 12,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14828,7 +15758,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 7,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14857,7 +15789,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14886,7 +15820,9 @@
         "deps": 0,
         "files": 11,
         "modified_ids": 1,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14916,7 +15852,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14946,7 +15884,9 @@
         "deps": 0,
         "files": 12,
         "modified_ids": 34,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -14975,7 +15915,9 @@
         "deps": 0,
         "files": 14,
         "modified_ids": 38,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15006,7 +15948,9 @@
         "deps": 4,
         "files": 6,
         "modified_ids": 19,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15037,7 +15981,9 @@
         "deps": 0,
         "files": 9,
         "modified_ids": 22,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15066,7 +16012,9 @@
         "deps": 0,
         "files": 8,
         "modified_ids": 9,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15095,7 +16043,9 @@
         "deps": 0,
         "files": 30,
         "modified_ids": 29,
-        "removed_ids": 5
+        "removed_ids": 5,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15124,7 +16074,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 16,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15153,7 +16105,9 @@
         "deps": 0,
         "files": 9,
         "modified_ids": 22,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15183,7 +16137,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -15218,7 +16174,9 @@
         "deps": 0,
         "files": 10,
         "modified_ids": 27,
-        "removed_ids": 99
+        "removed_ids": 99,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15247,7 +16205,9 @@
         "deps": 0,
         "files": 23,
         "modified_ids": 21,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15276,7 +16236,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 12,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15305,7 +16267,9 @@
         "deps": 0,
         "files": 17,
         "modified_ids": 32,
-        "removed_ids": 5
+        "removed_ids": 5,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15334,7 +16298,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 56,
-        "removed_ids": 5
+        "removed_ids": 5,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15363,7 +16329,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 64,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15392,7 +16360,9 @@
         "deps": 0,
         "files": 19,
         "modified_ids": 65,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15421,7 +16391,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 7,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15450,7 +16422,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 49,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15479,7 +16453,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 2,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15508,7 +16484,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 85,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15538,7 +16516,9 @@
         "deps": 2,
         "files": 1,
         "modified_ids": 3,
-        "removed_ids": 25
+        "removed_ids": 25,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15568,7 +16548,9 @@
         "deps": 0,
         "files": 9,
         "modified_ids": 2,
-        "removed_ids": 3
+        "removed_ids": 3,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -15597,7 +16579,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 2,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15626,7 +16610,9 @@
         "deps": 8,
         "files": 4,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -15655,7 +16641,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 18,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15684,7 +16672,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 57,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15703,36 +16693,35 @@
       "agent": "Cursor",
       "binary_label": "aligned",
       "claim_status": {
-        "insufficient_evidence": 5,
-        "supported": 1,
+        "insufficient_evidence": 2,
+        "supported": 4,
         "unverifiable": 4
       },
       "draft_rejected": {},
       "error": null,
       "facts": {
-        "added_ids": 500,
+        "added_ids": 1103,
         "added_tests": 3,
         "deps": 0,
         "files": 37,
         "modified_ids": 60,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
-      "gate": "INCONSISTENT",
+      "gate": "CONSISTENT",
       "label": "partial",
       "ledger_rejected": {},
-      "ledger_units": 692,
+      "ledger_units": 1295,
       "paper_heuristic": "aligned",
       "pr_id": "3250808281",
       "pred_status": {
-        "adds_identifier:insufficient_evidence": 3,
-        "adds_identifier:supported": 1,
+        "adds_identifier:supported": 4,
         "describes_behavior:unverifiable": 4,
         "modifies_identifier:insufficient_evidence": 2
       },
-      "reasons": [
-        "unsupported 5/6"
-      ],
-      "receipt_sha256": "d9096ad29dd6b9b181dfa47f852474a58b9e5146fa82e7528c55332672a7dc5e",
+      "reasons": [],
+      "receipt_sha256": "ee2f0fd9ec1a5452314f410ac311e49e39c750d75cabf7f377711a8fa88eb246",
       "url": "https://github.com/nnstreamer/nntrainer/pull/3345"
     },
     {
@@ -15749,7 +16738,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 20,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15778,7 +16769,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 76,
-        "removed_ids": 11
+        "removed_ids": 11,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15807,7 +16800,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 19,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15836,7 +16831,9 @@
         "deps": 2,
         "files": 7,
         "modified_ids": 70,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15865,7 +16862,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 20,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -15896,7 +16895,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 16,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -15930,7 +16931,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 8,
-        "removed_ids": 5
+        "removed_ids": 5,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -15959,7 +16962,9 @@
         "deps": 340,
         "files": 130,
         "modified_ids": 129,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -15989,7 +16994,9 @@
         "deps": 2,
         "files": 1,
         "modified_ids": 9,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16022,7 +17029,9 @@
         "deps": 0,
         "files": 9,
         "modified_ids": 40,
-        "removed_ids": 4
+        "removed_ids": 4,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "partial",
@@ -16056,7 +17065,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 55,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16086,7 +17097,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 7,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16119,7 +17132,9 @@
         "deps": 0,
         "files": 1,
         "modified_ids": 1,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "partial",
@@ -16148,7 +17163,9 @@
         "deps": 0,
         "files": 43,
         "modified_ids": 84,
-        "removed_ids": 12
+        "removed_ids": 12,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16177,7 +17194,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 2,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16206,7 +17225,9 @@
         "deps": 0,
         "files": 40,
         "modified_ids": 13,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16226,8 +17247,8 @@
       "binary_label": "aligned",
       "claim_status": {
         "contradicted": 1,
-        "insufficient_evidence": 2,
-        "supported": 2,
+        "insufficient_evidence": 1,
+        "supported": 3,
         "unverifiable": 10
       },
       "draft_rejected": {},
@@ -16237,13 +17258,15 @@
         "added_tests": 43,
         "deps": 0,
         "files": 124,
-        "modified_ids": 500,
-        "removed_ids": 20
+        "modified_ids": 1760,
+        "removed_ids": 20,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 1237,
+      "ledger_units": 2497,
       "paper_heuristic": "aligned",
       "pr_id": "3262902843",
       "pred_status": {
@@ -16251,14 +17274,12 @@
         "changes_file:supported": 1,
         "describes_behavior:unverifiable": 10,
         "files_changed_count:contradicted": 1,
-        "modifies_identifier:insufficient_evidence": 1,
-        "modifies_identifier:supported": 1
+        "modifies_identifier:supported": 2
       },
       "reasons": [
-        "contradicted 1",
-        "unsupported 3/5"
+        "contradicted 1"
       ],
-      "receipt_sha256": "4aa3a00bcf58ef79e91452d244bfcd6f885d8db3146dd8fdf991133ff3c3071b",
+      "receipt_sha256": "35a867e48a9201d4090c07882df61a3f7d0fb94e302dfd239f67b7182685e7e8",
       "url": "https://github.com/microsoft/vscode-copilot-chat/pull/365"
     },
     {
@@ -16276,7 +17297,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 63,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16302,23 +17325,25 @@
       "error": null,
       "facts": {
         "added_ids": 375,
-        "added_tests": 300,
+        "added_tests": 410,
         "deps": 0,
         "files": 86,
         "modified_ids": 103,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 1209,
+      "ledger_units": 1319,
       "paper_heuristic": "aligned",
       "pr_id": "3264925676",
       "pred_status": {
         "describes_behavior:unverifiable": 4
       },
       "reasons": [],
-      "receipt_sha256": "382bc5a306a36250cb3e0606bb48c6df5841a4a6d5a0653d4be9fb1c85195bdc",
+      "receipt_sha256": "95e3838bb3749dd1df3020b9d00de334d5e0a74de6d34b8693d76d43f1ea619b",
       "url": "https://github.com/mochilang/mochi/pull/13279"
     },
     {
@@ -16335,7 +17360,9 @@
         "deps": 0,
         "files": 12,
         "modified_ids": 168,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16364,7 +17391,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16393,7 +17422,9 @@
         "deps": 0,
         "files": 5,
         "modified_ids": 34,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16422,7 +17453,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 1,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16451,7 +17484,9 @@
         "deps": 0,
         "files": 6,
         "modified_ids": 60,
-        "removed_ids": 1
+        "removed_ids": 1,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16480,7 +17515,9 @@
         "deps": 0,
         "files": 21,
         "modified_ids": 22,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16509,7 +17546,9 @@
         "deps": 0,
         "files": 0,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "misaligned",
@@ -16541,7 +17580,9 @@
         "deps": 0,
         "files": 29,
         "modified_ids": 83,
-        "removed_ids": 17
+        "removed_ids": 17,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16571,7 +17612,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 6,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16601,7 +17644,9 @@
         "deps": 0,
         "files": 3,
         "modified_ids": 29,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "INCONSISTENT",
       "label": "aligned",
@@ -16634,7 +17679,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 0,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16663,7 +17710,9 @@
         "deps": 0,
         "files": 31,
         "modified_ids": 33,
-        "removed_ids": 2
+        "removed_ids": 2,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16692,7 +17741,9 @@
         "deps": 0,
         "files": 2,
         "modified_ids": 25,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16722,7 +17773,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 13,
-        "removed_ids": 0
+        "removed_ids": 0,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16750,23 +17803,25 @@
       "error": null,
       "facts": {
         "added_ids": 4,
-        "added_tests": 300,
+        "added_tests": 510,
         "deps": 6,
         "files": 104,
         "modified_ids": 0,
-        "removed_ids": 80
+        "removed_ids": 80,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
       "ledger_rejected": {},
-      "ledger_units": 913,
+      "ledger_units": 1123,
       "paper_heuristic": "aligned",
       "pr_id": "3276240606",
       "pred_status": {
         "describes_behavior:unverifiable": 3
       },
       "reasons": [],
-      "receipt_sha256": "8b0f64cc292296a52b87182833bf7b9caa3d1ee9fc9416136e52078e37e1a4c0",
+      "receipt_sha256": "dd91f17373fc4202a9bfc694bec7b99cd5c6518b3ba88f9a3d984643f046109c",
       "url": "https://github.com/mochilang/mochi/pull/14949"
     },
     {
@@ -16783,7 +17838,9 @@
         "deps": 0,
         "files": 4,
         "modified_ids": 66,
-        "removed_ids": 4
+        "removed_ids": 4,
+        "truncated": false,
+        "truncated_fields": {}
       },
       "gate": "CONSISTENT",
       "label": "aligned",
@@ -16802,8 +17859,8 @@
   "summary": {
     "claim_status": {
       "contradicted": 9,
-      "insufficient_evidence": 396,
-      "supported": 446,
+      "insufficient_evidence": 389,
+      "supported": 453,
       "unverifiable": 2386
     },
     "draft_rejected": {
@@ -16812,35 +17869,36 @@
       "unknown_or_foreign_evidence_id": 22
     },
     "errors": 0,
+    "escalated": 0,
     "gate_v4_vocab2": {
       "misaligned": {
-        "f1": 0.4553,
-        "fn": 11,
-        "fp": 56,
-        "fp_rate": 0.1145,
+        "f1": 0.4463,
+        "fn": 12,
+        "fp": 55,
+        "fp_rate": 0.1125,
         "fp_rate_ci95": [
-          0.0892,
-          0.1458
+          0.0874,
+          0.1436
         ],
         "n": 528,
         "neg": 489,
         "pos": 39,
-        "precision": 0.3333,
+        "precision": 0.3293,
         "precision_ci95": [
-          0.2418,
-          0.4395
+          0.2372,
+          0.4366
         ],
-        "recall": 0.7179,
+        "recall": 0.6923,
         "recall_ci95": [
-          0.5622,
-          0.8346
+          0.5358,
+          0.8143
         ],
-        "tn": 433,
-        "tp": 28
+        "tn": 434,
+        "tp": 27
       },
       "partial_o_misaligned": {
-        "f1": 0.4195,
-        "fn": 78,
+        "f1": 0.4039,
+        "fn": 80,
         "fp": 41,
         "fp_rate": 0.1007,
         "fp_rate_ci95": [
@@ -16850,18 +17908,18 @@
         "n": 528,
         "neg": 407,
         "pos": 121,
-        "precision": 0.5119,
+        "precision": 0.5,
         "precision_ci95": [
-          0.4068,
-          0.6159
+          0.3942,
+          0.6058
         ],
-        "recall": 0.3554,
+        "recall": 0.3388,
         "recall_ci95": [
-          0.2757,
-          0.4439
+          0.2606,
+          0.427
         ],
         "tn": 366,
-        "tp": 43
+        "tp": 41
       }
     },
     "labels": {
@@ -16924,8 +17982,8 @@
       }
     },
     "pred_status": {
-      "adds_identifier:insufficient_evidence": 120,
-      "adds_identifier:supported": 52,
+      "adds_identifier:insufficient_evidence": 116,
+      "adds_identifier:supported": 56,
       "adds_test:insufficient_evidence": 97,
       "adds_test:supported": 47,
       "changes_dependency:insufficient_evidence": 17,
@@ -16939,12 +17997,13 @@
       "lines_added_count:supported": 2,
       "lines_deleted_count:contradicted": 2,
       "lines_deleted_count:supported": 3,
-      "modifies_identifier:insufficient_evidence": 54,
-      "modifies_identifier:supported": 33,
+      "modifies_identifier:insufficient_evidence": 51,
+      "modifies_identifier:supported": 36,
       "removes_identifier:insufficient_evidence": 21,
       "removes_identifier:supported": 15,
       "removes_test:insufficient_evidence": 5
-    }
+    },
+    "truncated": 0
   },
   "vocabulary": {
     "fingerprint": "620ebd71c7dda399cb8b90e5ac038a2a2cf510782a86202b79b75c8d84900d2c",

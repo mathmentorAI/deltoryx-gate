@@ -305,7 +305,12 @@ def _path_variants(path_str: str) -> list[str]:
     return ["/".join(parts[i:]) for i in range(len(parts))]
 
 
-def diff_facts_v2(pr: dict) -> dict:
+def diff_facts_v2(
+    pr: dict,
+    *,
+    max_syms: int | None = None,
+    max_tests: int | None = None,
+) -> dict:
     patch = pr["patch"] or ""
     files = pr["files"] or []
     added, removed, touched = [], [], []
@@ -336,9 +341,12 @@ def diff_facts_v2(pr: dict) -> dict:
     a_uniq = list(dict.fromkeys(added))
     r_uniq = list(dict.fromkeys(removed))
     a_set, r_set = set(a_uniq), set(r_uniq)
-    mod_syms = [x for x in a_uniq if x in r_set] + [
-        x for x in dict.fromkeys(touched) if x not in a_set and x not in r_set
-    ]
+    mod_syms = list(
+        dict.fromkeys(
+            [x for x in a_uniq if x in r_set]
+            + [x for x in dict.fromkeys(touched) if x not in a_set and x not in r_set]
+        )
+    )
     add_syms = [x for x in a_uniq if x not in r_set]
     rem_syms = [x for x in r_uniq if x not in a_set]
 
@@ -374,23 +382,48 @@ def diff_facts_v2(pr: dict) -> dict:
             if ver:
                 deps.append({"package": pkg, "action": "remove"})
 
+    truncated_fields: dict[str, dict[str, int]] = {}
+
+    def _apply_cap(name: str, seq: list[str], cap: int | None) -> list[str]:
+        if cap is None:
+            return seq
+        if cap < 0:
+            raise ValueError(f"Truncation cap for {name} must be non-negative, got {cap}")
+        if len(seq) > cap:
+            truncated_fields[name] = {"kept": cap, "total": len(seq)}
+            return seq[:cap]
+        return seq
+
+    add_syms_out = _apply_cap("add_syms", add_syms, max_syms)
+    rem_syms_out = _apply_cap("rem_syms", rem_syms, max_syms)
+    mod_syms_out = _apply_cap("mod_syms", mod_syms, max_syms)
+    add_tests_out = _apply_cap("add_tests", add_tests, max_tests)
+    rem_tests_out = _apply_cap("rem_tests", rem_tests, max_tests)
+
     return {
         "files_raw": list(files),
         "file_vals": file_vals,
-        "add_syms": add_syms[:500],
-        "rem_syms": rem_syms[:500],
-        "mod_syms": list(dict.fromkeys(mod_syms))[:500],
+        "add_syms": add_syms_out,
+        "rem_syms": rem_syms_out,
+        "mod_syms": mod_syms_out,
         "deps": deps,
-        "add_tests": add_tests[:300],
-        "rem_tests": rem_tests[:300],
+        "add_tests": add_tests_out,
+        "rem_tests": rem_tests_out,
         "files_count": len(files),
         "adds_count": pr.get("adds"),
         "dels_count": pr.get("dels"),
+        "truncated": bool(truncated_fields),
+        "truncated_fields": truncated_fields,
     }
 
 
-def build_ledger_v2(pr: dict):
-    facts = diff_facts_v2(pr)
+def build_ledger_v2(
+    pr: dict,
+    *,
+    max_syms: int | None = None,
+    max_tests: int | None = None,
+):
+    facts = diff_facts_v2(pr, max_syms=max_syms, max_tests=max_tests)
     entries: list[tuple[str, object, str]] = []
     seen_keys: set[tuple[str, str]] = set()
 
@@ -452,6 +485,8 @@ def build_ledger_v2(pr: dict):
         "modified_ids": len(facts["mod_syms"]),
         "deps": len(facts["deps"]),
         "added_tests": len(facts["add_tests"]),
+        "truncated": facts["truncated"],
+        "truncated_fields": facts["truncated_fields"],
     }
     return layer, adm, summary_facts
 
@@ -493,6 +528,8 @@ def verdict_v2(rep: dict, facts: dict):
     tot_ver = supported + unsup
 
     reasons = []
+    if facts.get("truncated"):
+        reasons.append("diff_facts_truncated")
     if contradicted >= 1:
         reasons.append(f"contradicted {contradicted}")
     if escalated >= 1:
@@ -505,8 +542,14 @@ def verdict_v2(rep: dict, facts: dict):
     all_counts = dict(sorted(ver_counts.items()))
     if unverifiable_count:
         all_counts["unverifiable"] = unverifiable_count
+    if facts.get("truncated"):
+        verdict = "ESCALATE"
+    elif reasons:
+        verdict = "INCONSISTENT"
+    else:
+        verdict = "CONSISTENT"
     return (
-        ("INCONSISTENT" if reasons else "CONSISTENT"),
+        verdict,
         reasons,
         all_counts,
         dict(sorted(pred_status.items())),
@@ -600,8 +643,15 @@ def compute_metrics(rows, pred_fn, pos_fn) -> dict:
     }
 
 
-def evaluate_pr(row_meta: dict, pr: dict, reader: LLMProposalReader) -> dict:
-    ledger, adm, facts = build_ledger_v2(pr)
+def evaluate_pr(
+    row_meta: dict,
+    pr: dict,
+    reader: LLMProposalReader,
+    *,
+    max_syms: int | None = None,
+    max_tests: int | None = None,
+) -> dict:
+    ledger, adm, facts = build_ledger_v2(pr, max_syms=max_syms, max_tests=max_tests)
     draft = (pr["title"] + "\n\n" + pr["body"]).strip()
     unit_statuses: list[tuple[str, str]] = []
     try:
@@ -624,6 +674,9 @@ def evaluate_pr(row_meta: dict, pr: dict, reader: LLMProposalReader) -> dict:
         "unit_statuses": unit_statuses,
         "vocabulary_fingerprint": EXPECTED_VOCAB_FINGERPRINT,
     }
+    if facts.get("truncated"):
+        receipt_payload["truncated"] = True
+        receipt_payload["truncated_fields"] = facts["truncated_fields"]
     receipt_sha256 = hashlib.sha256(
         json.dumps(receipt_payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
     ).hexdigest()
@@ -657,6 +710,8 @@ def summarize_block(rows: list[dict]) -> dict:
         "n": len(rows),
         "ok": len(ok),
         "errors": len(rows) - len(ok),
+        "escalated": sum(1 for r in ok if r["gate"] == "ESCALATE"),
+        "truncated": sum(1 for r in ok if (r.get("facts") or {}).get("truncated")),
         "labels": dict(sorted(collections.Counter(r["label"] for r in rows).items())),
         "gate_v4_vocab2": {
             "partial_o_misaligned": compute_metrics(ok, g, pos_any),

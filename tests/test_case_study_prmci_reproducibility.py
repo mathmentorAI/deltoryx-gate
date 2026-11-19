@@ -194,3 +194,73 @@ def test_case_study_hygiene_no_secrets_caches_or_raw_pr_text() -> None:
             assert payload["gate_commit"] == EXPECTED_GATE_COMMIT
         hits = _walk_forbidden_keys(payload, forbidden_keys)
         assert not hits, f"Raw PR text keys {hits} found in {jf.name}"
+
+
+def _build_large_synthetic_pr(*, n_syms: int = 620, n_tests: int = 350) -> dict:
+    patch_lines = [
+        "@@ -1,2 +1,1000 @@",
+        "+def refresh_token(tok):",
+        "+    return tok",
+    ]
+    for idx in range(n_syms - 1):
+        patch_lines.append(f"+def helper_sym_{idx:04d}():")
+    for idx in range(n_tests):
+        patch_lines.append(f"+def test_unit_case_{idx:04d}():")
+    return {
+        "pr_id": "9990002",
+        "url": "https://example.invalid/org/repo/pull/2",
+        "title": "Add refresh_token helper in src/auth.py",
+        "body": "Updates src/auth.py with `refresh_token` and improves token refresh flow.",
+        "files": ["src/auth.py", "tests/test_auth.py"],
+        "patch": "\n".join(patch_lines),
+        "adds": 2 + (n_syms - 1) + n_tests,
+        "dels": 0,
+        "label": "aligned",
+    }
+
+
+def test_diff_facts_v2_no_silent_caps_by_default() -> None:
+    eval_v2vocab = _load_case_module("eval_v2vocab")
+    pr = _build_large_synthetic_pr(n_syms=620, n_tests=350)
+    facts = eval_v2vocab.diff_facts_v2(pr)
+    assert len(facts["add_syms"]) == 970
+    assert len(facts["add_tests"]) == 352
+    assert facts["truncated"] is False
+    assert facts["truncated_fields"] == {}
+
+
+def test_diff_facts_v2_explicit_cap_marks_truncated_and_escalates_never_consistent(tmp_path: Path) -> None:
+    eval_v2vocab = _load_case_module("eval_v2vocab")
+    from claimlayer.v4.reader import LLMProposalReader
+
+    pr = _build_large_synthetic_pr(n_syms=620, n_tests=350)
+    row_meta = {
+        "pr_id": "9990002",
+        "agent": "Synthetic_Agent",
+        "consensus_label": "aligned",
+        "annotator1_label": "aligned",
+        "binary_label": "aligned",
+        "predicted_heuristic": "aligned",
+    }
+
+    cache_path = tmp_path / "large_synthetic_cache.jsonl"
+    warm = eval_v2vocab.CachedModelV2(_DeterministicPRStubModel(), str(cache_path))
+    reader = LLMProposalReader(model=warm)
+
+    uncapped = eval_v2vocab.evaluate_pr(row_meta, pr, reader)
+    assert uncapped["gate"] == "CONSISTENT"
+    assert uncapped["facts"]["truncated"] is False
+    assert uncapped["facts"]["truncated_fields"] == {}
+    assert uncapped["facts"]["added_ids"] == 970
+    assert uncapped["facts"]["added_tests"] == 352
+
+    capped = eval_v2vocab.evaluate_pr(row_meta, pr, reader, max_syms=500, max_tests=300)
+    assert capped["gate"] == "ESCALATE"
+    assert capped["gate"] != "CONSISTENT"
+    assert "diff_facts_truncated" in capped["reasons"]
+    assert capped["facts"]["truncated"] is True
+    assert capped["facts"]["truncated_fields"]["add_syms"] == {"kept": 500, "total": 970}
+    assert capped["facts"]["truncated_fields"]["add_tests"] == {"kept": 300, "total": 352}
+    assert capped["receipt_sha256"] != uncapped["receipt_sha256"]
+    assert uncapped["error"] is None
+    assert capped["error"] is None

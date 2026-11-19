@@ -3,7 +3,7 @@
 This case study evaluates deterministic (`verify()`) and LLM-assisted (`Gate v4` + `verify_draft()`) verification of coding-agent pull request descriptions against their actual git diffs using the [PR-MCI](https://github.com/gjz78910/PR-MCI) replication benchmark (Gong, Pinna, Bian, Zhang — MSR '26, arXiv:2601.04886; dataset pinned to commit `ac6bbf4`).
 
 > **Headline finding (blind held-out Phase 2, `n = 528`):**
-> Gate v4 with `code_change` v2.0 + Nemotron does **not** beat simpler deterministic rules on broad inconsistency detection (`partial | misaligned` F1 `0.4195` vs `rules_v1` `0.4370`, `rules_v2_legal_prose` `0.4188`, `rules_v2_postreview_code_config` `0.4127`), and the paper's lightweight heuristic wins on strict `misaligned` detection (`F1 = 0.6377` vs Gate v4 `0.4553` and `rules_v2_postreview_code_config` `0.4486`). What the system demonstrates is **auditable, fail-closed triage**: literally checkable claims (files, identifiers, tests, dependencies, scalar counts) are verified against verbatim diff evidence with deterministic SHA-256 receipts, while `2,386` high-level behavioral claims are explicitly isolated as `unverifiable` (`describes_behavior`) instead of silently triggering false alarms.
+> Gate v4 with `code_change` v2.0 + Nemotron does **not** improve inconsistency detection over simpler deterministic rules or the PR-MCI baseline: on `partial | misaligned`, Gate v4 scores F1 `0.4039` (vs `rules_v1` `0.4370`, `rules_v2_legal_prose` `0.4188`, `rules_v2_postreview_code_config` `0.4127`), and on strict `misaligned` the paper's lightweight heuristic leads (`F1 = 0.6377` vs Gate v4 `0.4463` and `rules_v2_postreview_code_config` `0.4486`). What the system demonstrates is **auditable, fail-closed triage**: across `3,237` extracted agent claims in Phase 2, **`851` (`26.29%`)** are literally checkable against the diff (`453` supported, `389` insufficient evidence, `9` contradicted, each with deterministic SHA-256 receipts), while **`2,386` (`73.71%`)** high-level behavioral descriptions are explicitly isolated as `unverifiable` (`describes_behavior`) rather than silently firing false alarms—and any truncated diff registry fails closed as `ESCALATE` (never `CONSISTENT`).
 
 ---
 
@@ -40,7 +40,7 @@ All metrics report both label definitions used by PR-MCI:
 | `rules_v2_code_config` | Explicit profile | 39 | 31 | 82 | 376 | 0.5571 [0.4408, 0.6675] | 0.3223 [0.2456, 0.4099] | 0.4084 | 0.0762 [0.0542, 0.1061] |
 | `rules_v2_postreview_legal_prose` | Corrected after review | 40 | 30 | 81 | 377 | 0.5714 [0.4548, 0.6806] | 0.3306 [0.2531, 0.4185] | 0.4188 | 0.0737 [0.0521, 0.1033] |
 | `rules_v2_postreview_code_config` | Corrected after review | 39 | 29 | 82 | 378 | 0.5735 [0.4552, 0.6840] | 0.3223 [0.2456, 0.4099] | 0.4127 | 0.0713 [0.0501, 0.1005] |
-| `gate_v4_vocab2` | Frozen from P1 | 43 | 41 | 78 | 366 | 0.5119 [0.4068, 0.6159] | 0.3554 [0.2757, 0.4439] | 0.4195 | 0.1007 [0.0751, 0.1338] |
+| `gate_v4_vocab2` | Frozen from P1 | 41 | 41 | 80 | 366 | 0.5000 [0.3942, 0.6058] | 0.3388 [0.2606, 0.4270] | 0.4039 | 0.1007 [0.0751, 0.1338] |
 
 Note: `rules_v1_postreview_parse` is identical in all aggregate counts (`TP=52, FP=65, FN=69, TN=342, F1=0.4370`).
 
@@ -56,7 +56,7 @@ Note: `rules_v1_postreview_parse` is identical in all aggregate counts (`TP=52, 
 | `rules_v2_code_config` | Explicit profile | 24 | 46 | 15 | 443 | 0.3429 [0.2425, 0.4596] | 0.6154 [0.4590, 0.7511] | 0.4404 | 0.0941 [0.0713, 0.1232] |
 | `rules_v2_postreview_legal_prose` | Corrected after review | 24 | 46 | 15 | 443 | 0.3429 [0.2425, 0.4596] | 0.6154 [0.4590, 0.7511] | 0.4404 | 0.0941 [0.0713, 0.1232] |
 | `rules_v2_postreview_code_config` | Corrected after review | 24 | 44 | 15 | 445 | 0.3529 [0.2500, 0.4716] | 0.6154 [0.4590, 0.7511] | 0.4486 | 0.0900 [0.0677, 0.1186] |
-| `gate_v4_vocab2` | Frozen from P1 | 28 | 56 | 11 | 433 | 0.3333 [0.2418, 0.4395] | 0.7179 [0.5622, 0.8346] | 0.4553 | 0.1145 [0.0892, 0.1458] |
+| `gate_v4_vocab2` | Frozen from P1 | 27 | 55 | 12 | 434 | 0.3293 [0.2372, 0.4366] | 0.6923 [0.5358, 0.8143] | 0.4463 | 0.1125 [0.0874, 0.1436] |
 
 ### 2.3 Phase 2 Per-Agent Breakdown (`n = 528`, Gate Commit `22e3590`)
 
@@ -75,7 +75,7 @@ Distribution: `OpenAI_Codex` (`239`: `220/14/5`), `Copilot` (`118`: `69/22/27`),
 | `Copilot` (49/69) | `rules_v1_preregistered` | 30 | 17 | 19 | 52 | 0.6383 [0.4954, 0.7603] | 0.6122 [0.4725, 0.7357] | 0.6250 | 0.2464 [0.1599, 0.3596] |
 | `Copilot` (49/69) | `rules_v2_legal_prose` | 29 | 8 | 20 | 61 | 0.7838 [0.6280, 0.8861] | 0.5918 [0.4525, 0.7178] | 0.6744 | 0.1159 [0.0599, 0.2125] |
 | `Copilot` (49/69) | `rules_v2_postreview_code_config` | 29 | 7 | 20 | 62 | 0.8056 [0.6497, 0.9025] | 0.5918 [0.4525, 0.7178] | **0.6824** | 0.1014 [0.0500, 0.1949] |
-| `Copilot` (49/69) | `gate_v4_vocab2` | 29 | 25 | 20 | 44 | 0.5370 [0.4061, 0.6631] | 0.5918 [0.4525, 0.7178] | 0.5631 | 0.3623 [0.2590, 0.4802] |
+| `Copilot` (49/69) | `gate_v4_vocab2` | 28 | 25 | 21 | 44 | 0.5283 [0.3966, 0.6562] | 0.5714 [0.4327, 0.6998] | 0.5490 | 0.3623 [0.2590, 0.4802] |
 | `Devin` (32/64) | `paper_heuristic` | 0 | 0 | 32 | 64 | 0.0000 [0.0000, 0.0000] | 0.0000 [0.0000, 0.1072] | 0.0000 | 0.0000 [0.0000, 0.0566] |
 | `Devin` (32/64) | `rules_v1_preregistered` | 5 | 16 | 27 | 48 | 0.2381 [0.1063, 0.4509] | 0.1562 [0.0686, 0.3175] | 0.1887 | 0.2500 [0.1601, 0.3682] |
 | `Devin` (32/64) | `rules_v2_legal_prose` | 4 | 12 | 28 | 52 | 0.2500 [0.1018, 0.4950] | 0.1250 [0.0497, 0.2807] | 0.1667 | 0.1875 [0.1106, 0.2997] |
@@ -85,7 +85,7 @@ Distribution: `OpenAI_Codex` (`239`: `220/14/5`), `Copilot` (`118`: `69/22/27`),
 | `Cursor` (21/54) | `rules_v1_preregistered` | 10 | 15 | 11 | 39 | 0.4000 [0.2340, 0.5926] | 0.4762 [0.2834, 0.6763] | **0.4348** | 0.2778 [0.1762, 0.4089] |
 | `Cursor` (21/54) | `rules_v2_legal_prose` | 3 | 7 | 18 | 47 | 0.3000 [0.1078, 0.6032] | 0.1429 [0.0498, 0.3464] | 0.1935 | 0.1296 [0.0642, 0.2442] |
 | `Cursor` (21/54) | `rules_v2_postreview_code_config` | 3 | 7 | 18 | 47 | 0.3000 [0.1078, 0.6032] | 0.1429 [0.0498, 0.3464] | 0.1935 | 0.1296 [0.0642, 0.2442] |
-| `Cursor` (21/54) | `gate_v4_vocab2` | 2 | 3 | 19 | 51 | 0.4000 [0.1176, 0.7693] | 0.0952 [0.0265, 0.2891] | 0.1538 | 0.0556 [0.0191, 0.1511] |
+| `Cursor` (21/54) | `gate_v4_vocab2` | 1 | 3 | 20 | 51 | 0.2500 [0.0456, 0.6994] | 0.0476 [0.0085, 0.2267] | 0.0800 | 0.0556 [0.0191, 0.1511] |
 
 #### Strict `misaligned` by agent
 
@@ -100,7 +100,7 @@ Distribution: `OpenAI_Codex` (`239`: `220/14/5`), `Copilot` (`118`: `69/22/27`),
 | `Copilot` (27/91) | `rules_v1_preregistered` | 21 | 26 | 6 | 65 | 0.4468 [0.3141, 0.5875] | 0.7778 [0.5924, 0.8939] | 0.5676 | 0.2857 [0.2031, 0.3857] |
 | `Copilot` (27/91) | `rules_v2_legal_prose` | 20 | 17 | 7 | 74 | 0.5405 [0.3838, 0.6896] | 0.7407 [0.5532, 0.8683] | 0.6250 | 0.1868 [0.1200, 0.2790] |
 | `Copilot` (27/91) | `rules_v2_postreview_code_config` | 20 | 16 | 7 | 75 | 0.5556 [0.3958, 0.7046] | 0.7407 [0.5532, 0.8683] | 0.6349 | 0.1758 [0.1112, 0.2667] |
-| `Copilot` (27/91) | `gate_v4_vocab2` | 22 | 32 | 5 | 59 | 0.4074 [0.2868, 0.5403] | 0.8148 [0.6330, 0.9182] | 0.5432 | 0.3516 [0.2614, 0.4539] |
+| `Copilot` (27/91) | `gate_v4_vocab2` | 21 | 32 | 6 | 59 | 0.3962 [0.2759, 0.5306] | 0.7778 [0.5924, 0.8939] | 0.5250 | 0.3516 [0.2614, 0.4539] |
 | `Devin` (7/89) | `paper_heuristic` | 0 | 0 | 7 | 89 | 0.0000 [0.0000, 0.0000] | 0.0000 [0.0000, 0.3543] | 0.0000 | 0.0000 [0.0000, 0.0414] |
 | `Devin` (7/89) | `rules_v1_preregistered` | 1 | 20 | 6 | 69 | 0.0476 [0.0085, 0.2267] | 0.1429 [0.0257, 0.5131] | 0.0714 | 0.2247 [0.1504, 0.3218] |
 | `Devin` (7/89) | `rules_v2_legal_prose` | 1 | 15 | 6 | 74 | 0.0625 [0.0111, 0.2833] | 0.1429 [0.0257, 0.5131] | 0.0870 | 0.1685 [0.1049, 0.2596] |
@@ -110,16 +110,17 @@ Distribution: `OpenAI_Codex` (`239`: `220/14/5`), `Copilot` (`118`: `69/22/27`),
 | `Cursor` (0/75) | `rules_v1_preregistered` | 0 | 25 | 0 | 50 | 0.0000 [0.0000, 0.1332] | 0.0000 [0.0000, 0.0000] | 0.0000 | 0.3333 [0.2371, 0.4458] |
 | `Cursor` (0/75) | `rules_v2_legal_prose` | 0 | 10 | 0 | 65 | 0.0000 [0.0000, 0.2775] | 0.0000 [0.0000, 0.0000] | 0.0000 | 0.1333 [0.0741, 0.2283] |
 | `Cursor` (0/75) | `rules_v2_postreview_code_config` | 0 | 10 | 0 | 65 | 0.0000 [0.0000, 0.2775] | 0.0000 [0.0000, 0.0000] | 0.0000 | 0.1333 [0.0741, 0.2283] |
-| `Cursor` (0/75) | `gate_v4_vocab2` | 0 | 5 | 0 | 70 | 0.0000 [0.0000, 0.4345] | 0.0000 [0.0000, 0.0000] | 0.0000 | 0.0667 [0.0288, 0.1468] |
+| `Cursor` (0/75) | `gate_v4_vocab2` | 0 | 4 | 0 | 71 | 0.0000 [0.0000, 0.4899] | 0.0000 [0.0000, 0.0000] | 0.0000 | 0.0533 [0.0209, 0.1293] |
 
-### 2.4 Phase 2 Triage Breakdown (`gate_v4_vocab2`, `n = 528`, Gate Commit `22e3590`)
+### 2.4 Phase 2 Triage Breakdown & Literal Coverage (`gate_v4_vocab2`, `n = 528`, Gate Commit `22e3590`)
 
-- **Claim disposition totals:** `supported: 446`, `insufficient_evidence: 396`, `contradicted: 9`, `unverifiable: 2,386` (`describes_behavior` only).
+- **Claim disposition totals (`3,237` admitted proposals):** `supported: 453`, `insufficient_evidence: 389`, `contradicted: 9`, `unverifiable: 2,386` (`describes_behavior` only); `escalated: 0`, `truncated: 0`.
+- **Literal-verifiability coverage:** **`851 / 3,237 (26.29%)`** of agent claims fall under literally checkable code/diff predicates (`453` supported = `13.99%`, `389` insufficient_evidence = `12.02%`, `9` contradicted = `0.28%`), while **`2,386 / 3,237 (73.71%)`** are high-level behavioral descriptions explicitly routed to `describes_behavior` (`unverifiable`, `0` unsupported alerts triggered).
 - **By predicate (`supported / insufficient_evidence / contradicted`):**
   - `changes_file`: `273 / 82 / 0`
-  - `adds_identifier`: `52 / 120 / 0`
+  - `adds_identifier`: `56 / 116 / 0`
   - `adds_test`: `47 / 97 / 0`
-  - `modifies_identifier`: `33 / 54 / 0`
+  - `modifies_identifier`: `36 / 51 / 0`
   - `changes_dependency`: `19 / 17 / 0`
   - `removes_identifier`: `15 / 21 / 0`
   - `removes_test`: `0 / 5 / 0`
@@ -129,15 +130,15 @@ Distribution: `OpenAI_Codex` (`239`: `220/14/5`), `Copilot` (`118`: `69/22/27`),
   - `describes_behavior`: `2,386` marked `unverifiable` (`0` unsupported alerts triggered)
 - **Draft reader rejections (excluded before engine scoring):** `reader_schema: 45`, `unknown_or_foreign_evidence_id: 22`, `assertion_kind_not_declared_for_predicate: 11`.
 
-### 2.5 Recovery of 3 Formerly Crashing Large Phase 2 PRs (`08c598c`)
+### 2.5 Recovery of 3 Formerly Crashing Large Phase 2 PRs (`08c598c`, Uncapped)
 
-Before commit `08c598c`, `engine.ask()` and `_decide()` materialized quadratic `competitors` cross-products across `cardinality="multi"` predicates, crashing with `DataError`/`OverflowError` on 3 large Phase 2 PRs (leaving `525/528` evaluated). Fixing `_decide()` to bucket `multi` claims by exact equal key with opposite polarity (`O(N)` time/memory) resolved all 3 PRs cleanly from the existing replay cache (`528/528`, `0` errors):
+Before commit `08c598c`, `engine.ask()` and `_decide()` materialized quadratic `competitors` cross-products across `cardinality="multi"` predicates, crashing with `DataError`/`OverflowError` on 3 large Phase 2 PRs (leaving `525/528` evaluated). Fixing `_decide()` to bucket `multi` claims by exact equal key with opposite polarity (`O(N)` time/memory) and removing silent `500`/`300` diff-fact caps resolved all 3 PRs cleanly from the existing replay cache (`528/528`, `0` errors, `truncated: False`):
 
-| `pr_id` | Agent | Gold Label | Multi Ledger Facts | Gate v4 Verdict (`22e3590`) | Claim Status Counts | Receipt Prefix |
+| `pr_id` | Agent | Gold Label | Uncapped Diff Facts | Gate v4 Verdict (`22e3590`) | Claim Status Counts | Receipt Prefix |
 |---|---|---|---|---|---|---|
-| `3111511868` | `Copilot` | `aligned` | 346 files, 103 mod IDs, 17 add IDs, 12 rem IDs, 6 deps, 3 add tests | `CONSISTENT` | `supported: 8`, `insufficient_evidence: 3`, `unverifiable: 7` | `aa56e703df43` |
-| `3152257828` | `Copilot` | `misaligned` | 324 files, 500 mod IDs, 27 add IDs, 5 rem IDs, 6 deps, 84 add tests | `CONSISTENT` | `supported: 3`, `unverifiable: 2` | `ae3db7a8fd2f` |
-| `3158683531` | `Devin` | `partial` | 542 files, 500 add IDs, 500 mod IDs, 474 rem IDs, 68 deps, 300 add tests | `CONSISTENT` | `supported: 1`, `insufficient_evidence: 1`, `unverifiable: 10` | `396741aaa42c` |
+| `3111511868` | `Copilot` | `aligned` | 346 files, 103 mod IDs, 17 add IDs, 12 rem IDs, 6 deps, 3 add tests (`truncated: False`) | `CONSISTENT` | `supported: 8`, `insufficient_evidence: 3`, `unverifiable: 7` | `aa56e703df43` |
+| `3152257828` | `Copilot` | `misaligned` | 324 files, 5,079 mod IDs, 27 add IDs, 5 rem IDs, 6 deps, 84 add tests (`truncated: False`) | `CONSISTENT` | `supported: 3`, `unverifiable: 2` | `e246a7a9b69f` |
+| `3158683531` | `Devin` | `partial` | 542 files, 1,333 add IDs, 1,191 mod IDs, 474 rem IDs, 68 deps, 335 add tests (`truncated: False`) | `CONSISTENT` | `supported: 1`, `insufficient_evidence: 1`, `unverifiable: 10` | `f7266c8467d0` |
 
 Note also on `22e3590`: replacing the temporary `verify_draft_closed()` workaround in `eval_v2vocab.py` with official `claimlayer.v4.triage.verify_draft(guard=False)` (after fixing `autovocab.with_entities()` to preserve `closed_entities`, `require_explicit_condition_status`, and entity aliases) produced **zero verdict or metric changes** across all `72` Phase 1 PRs and all `528` Phase 2 PRs.
 
@@ -190,7 +191,9 @@ Distribution: `59 aligned`, `10 partial`, `3 misaligned` (`pos = 13` broad, `3` 
 | `llm_v1_preregistered_codefilter` | Post-hoc filter | 5 | 7 | 8 | 52 | 0.4167 [0.1933, 0.6805] | 0.3846 [0.1771, 0.6448] | 0.4000 | 0.1186 [0.0587, 0.2252] | `135 / 200 / 0 / 0` |
 | `llm_v1_postreview_none` | Corrected after review | 10 | 36 | 3 | 23 | 0.2174 [0.1226, 0.3557] | 0.7692 [0.4974, 0.9182] | 0.3390 | 0.6102 [0.4827, 0.7242] | `158 / 485 / 0 / 0` |
 | `llm_v1_postreview_codefilter` | Corrected after review | 5 | 6 | 8 | 53 | 0.4545 [0.2127, 0.7199] | 0.3846 [0.1771, 0.6448] | 0.4167 | 0.1017 [0.0474, 0.2046] | `148 / 199 / 0 / 0` |
-| `gate_v4_vocab2` | Vocabulary v2.0 design (`P1`) | 3 | 9 | 10 | 50 | 0.2500 [0.0889, 0.5323] | 0.2308 [0.0818, 0.5026] | 0.2400 | 0.1525 [0.0824, 0.2652] | `144 / 222 / 15 / 833` |
+| `gate_v4_vocab2` | Vocabulary v2.0 design (`P1`) | 3 | 9 | 10 | 50 | 0.2500 [0.0889, 0.5323] | 0.2308 [0.0818, 0.5026] | 0.2400 | 0.1525 [0.0824, 0.2652] | `145 / 221 / 15 / 833` |
+
+Note on Phase 1 `gate_v4_vocab2` literal-verifiability coverage: `381 / 1,214 (31.38%)` admitted propositions are literally checkable (`145` supported = `11.94%`, `221` insufficient_evidence = `18.20%`, `15` contradicted = `1.24%`), vs `833 / 1,214 (68.62%)` `describes_behavior` (`unverifiable`); `escalated = 0`, `truncated = 0`.
 
 #### Strict: `misaligned` (`pos = 3`, `neg = 69`)
 
@@ -226,15 +229,26 @@ Every script bug found in review is isolated into explicit post-review functions
      - `3246950577` (`aligned`): `insufficient_evidence 2 -> 1`, flips `INCONSISTENT -> CONSISTENT` under both `none` and `codefilter` (dedup drops unsupported count below `>= 2`).
 4. **Uncommitted November 16 `v3` verifier changes (`f42c7b3`):**
    - Audited `src/claimlayer/verifiers/diff.py` (+46 lines: `normalization_provenance`, `internal_quantity_conflict`) and `quote_quantity.py` (`canonicalize_quantity_notations_with_provenance`, `detect_internal_quantity_conflicts`, heading-case folding, table-header years). Measured **`0` diffs** vs prior `HEAD` across all `600` PR-MCI PRs (`rules_v1` and `rules_v2`) and committed cleanly with tests as `f42c7b3`.
+5. **Removal of silent diff-fact caps (`500` symbols / `300` tests) and fail-closed `truncated -> ESCALATE` (`eval_v2vocab.py`):**
+   - `diff_facts_v2()` previously sliced `add_syms[:500]`, `rem_syms[:500]`, `mod_syms[:500]`, `add_tests[:300]`, and `rem_tests[:300]` silently, which risked marking an incompletely indexed PR as `CONSISTENT`. By default (`max_syms=None`, `max_tests=None`), all extracted facts are now kept; when explicit bounds are configured and exceeded, `diff_facts_v2()` records `"truncated": True` plus `truncated_fields` counts and `verdict_v2()` returns `"ESCALATE"` (never `"CONSISTENT"`).
+   - **Affected PRs (41 total across 600; 559 unaffected PRs had `0` diffs across `gate`, `claim_status`, `ledger_units`, and `receipt_sha256`):**
+     - **Phase 1 (`11 / 72`):** `3078006902`, `3079303421`, `3138264959`, `3214782537`, `3219102497`, `3226475067`, `3226500911`, `3229710961`, `3234102722`, `3235103212`, `3271045504`.
+     - **Phase 2 (`30 / 528`):** `OpenAI_Codex` (`3130011634`, `3131785378`, `3206215915`, `3235674228`, `3235857607`, `3238767869`, `3264925676`, `3276240606`); `Copilot` (`3074548447`, `3094488685`, `3141023608`, `3141477809`, `3152257828`, `3152602811`, `3200393827`, `3230611789`, `3242497585`, `3262902843`); `Devin` (`2832575560`, `2879844166`, `2982204377`, `3007216622`, `3060701727`, `3158683531`, `3215670862`, `3216501010`); `Cursor` (`3189263416`, `3216373575`, `3232357145`, `3250808281`).
+   - **Claim and verdict changes from uncapping (`5` PRs changed `claim_status`, `2` flipped verdict, `0` truncated):**
+     - **Phase 1 `3214782537` (`Claude_Code`, `aligned`):** `supported 12 -> 13`, `insufficient_evidence 143 -> 142` (`1` modified identifier past index 500 recovered); verdict stays `INCONSISTENT`.
+     - **Phase 2 `3215670862` (`Devin`, `partial`):** `supported 5 -> 6`, `insufficient_evidence 10 -> 9`; verdict stays `INCONSISTENT`.
+     - **Phase 2 `3262902843` (`Copilot`, `aligned`):** `supported 2 -> 3`, `insufficient_evidence 2 -> 1`; verdict stays `INCONSISTENT` (`contradicted: 1`).
+     - **Phase 2 `3230611789` (`Copilot`, `misaligned`):** `supported 1 -> 3`, `insufficient_evidence 2 -> 0` (the two remaining identifiers were modified symbols past the old `[:500]` cap), flipping `INCONSISTENT -> CONSISTENT`.
+     - **Phase 2 `3250808281` (`Cursor`, `partial`):** `supported 1 -> 4`, `insufficient_evidence 5 -> 2` (three added identifiers recovered past `[:500]`), flipping `INCONSISTENT -> CONSISTENT`.
 
 ---
 
 ## 5. Honest Conclusions
 
-1. **No detection superiority claim:** On broad `partial | misaligned` in blind held-out Phase 2 (`n = 528`), `gate_v4_vocab2` (`F1 = 0.4195`) trails `rules_v1` (`F1 = 0.4370`) and sits level with `rules_v2_legal_prose` (`F1 = 0.4188`). On strict `misaligned`, the PR-MCI `paper_heuristic` clearly leads (`F1 = 0.6377`, `P = 0.7333`, `R = 0.5641`, `FPR = 0.0164`) over both `gate_v4_vocab2` (`F1 = 0.4553`) and `rules_v2_postreview_code_config` (`F1 = 0.4486`).
+1. **No detection superiority claim:** On broad `partial | misaligned` in blind held-out Phase 2 (`n = 528`), `gate_v4_vocab2` (`F1 = 0.4039`) trails `rules_v1` (`F1 = 0.4370`), `rules_v2_legal_prose` (`F1 = 0.4188`), and `rules_v2_postreview_code_config` (`F1 = 0.4127`). On strict `misaligned`, the PR-MCI `paper_heuristic` clearly leads (`F1 = 0.6377`, `P = 0.7333`, `R = 0.5641`, `FPR = 0.0164`) over both `gate_v4_vocab2` (`F1 = 0.4463`) and `rules_v2_postreview_code_config` (`F1 = 0.4486`).
 2. **Where the value lies (auditable, fail-closed triage):**
-   - Separating literally checkable facts (`changes_file`, `adds_identifier`, `removes_identifier`, `modifies_identifier`, `changes_dependency`, `adds_test`, `removes_test`, `*_count`) from behavioral prose (`describes_behavior`) eliminates silent false alarms from uncheckable summaries (`458` unsupported claims and `61.0%` FPR in pre-registered `llm_v1` -> `2,386` explicitly tracked `unverifiable` claims and `10.1%` FPR in `Phase 2` `gate_v4_vocab2`).
-   - Every checkable claim carries a deterministic verification status backed by literal diff evidence or explicit conflict/escalation receipts (`receipt_sha256`), and internal resolution exceptions fail closed as `error_escalated` (`ESCALATE`) instead of crashing multi-hundred-file PR runs (`528/528`, `0` runtime errors).
+   - Across Phase 2, **`26.29%` (`851 / 3,237`)** of extracted agent claims target literally verifiable code/diff artifacts (`453` supported, `389` insufficient evidence, `9` contradicted), while **`73.71%` (`2,386 / 3,237`)** are high-level behavioral descriptions routed explicitly to `describes_behavior` (`unverifiable`)—eliminating silent false alarms (`458` unsupported claims and `61.0%` FPR in pre-registered `llm_v1` -> `10.1%` FPR in Phase 2 `gate_v4_vocab2`).
+   - Every checkable claim carries a deterministic verification status backed by literal diff evidence or explicit conflict/escalation receipts (`receipt_sha256`), internal resolution exceptions fail closed as `error_escalated` (`ESCALATE`) instead of crashing multi-hundred-file PR runs (`528/528`, `0` runtime errors), and capped diff ledgers fail closed as `ESCALATE` (never `CONSISTENT`).
 3. **Why deterministic + heuristic signals outperform on strict misalignment:** Strict `misaligned` PRs often fail due to unmentioned files, fabricated features described purely in prose, or PR-level metadata contradictions (`Copilot` is where `paper_heuristic` achieves `F1 = 0.8085`), whereas checking individual quoted symbols via an LLM extractor introduces reader noise (`45` schema rejections, `22` unknown evidence IDs) without improving aggregate PR-level classification over deterministic structural checks.
 
 ---
@@ -242,7 +256,8 @@ Every script bug found in review is isolated into explicit post-review functions
 ## 6. Limitations
 
 - **Sample size & wide uncertainty bounds:** Phase 1 has `n = 72` (`13` broad / `3` strict positives), giving wide 95% Wilson intervals (e.g., Phase 1 `paper_heuristic` precision `[0.2065, 1.0000]`). Phase 2 has `n = 528` with `39` strict `misaligned` cases overall and `0` in `Cursor`.
-- **Strong cross-phase & cross-agent instability:** `rules_v2_legal_prose` dropped from `F1 = 0.5385` (Phase 1) to `0.4188` (Phase 2), while `gate_v4_vocab2` shifted from `0.2400` (Phase 1) to `0.4195` (Phase 2). Across agents in Phase 2, `gate_v4_vocab2` broad F1 spans `0.5631` (`Copilot`), `0.3200` (`OpenAI_Codex`), `0.3137` (`Devin`), and `0.1538` (`Cursor`), while `paper_heuristic` spans `0.5507` (`Copilot`) to `0.0000` (`Devin`, `0/32` recall).
+- **Strong cross-phase & cross-agent instability:** `rules_v2_legal_prose` dropped from `F1 = 0.5385` (Phase 1) to `0.4188` (Phase 2), while `gate_v4_vocab2` shifted from `0.2400` (Phase 1) to `0.4039` (Phase 2). Across agents in Phase 2, `gate_v4_vocab2` broad F1 spans `0.5490` (`Copilot`), `0.3200` (`OpenAI_Codex`), `0.3137` (`Devin`), and `0.0800` (`Cursor`), while `paper_heuristic` spans `0.5507` (`Copilot`) to `0.0000` (`Devin`, `0/32` recall).
+- **Low literal-claim coverage on behavioral PR prose:** Only `26.29%` (Phase 2) / `31.38%` (Phase 1) of extracted propositions can be checked directly against literal diff artifacts; the remaining `73.71%` / `68.62%` describe behavior (`describes_behavior`) without multi-step inference verification.
 - **Dataset licensing constraint:** PR-MCI declares no open-source license, so neither the raw markdown annotations/diffs nor recorded LLM response caches (`*.jsonl`) are committed to this repository; reproduction requires fetching `ac6bbf4` externally via `fetch_data.sh`.
 - **LLM reader & single-model dependency:** Results reflect one extractor model (`nvidia/nemotron-3-ultra-550b-a55b` via NVIDIA NIM). Reader extraction boundary ambiguity (literal symbol vs `describes_behavior`) and malformed/foreign-evidence outputs (`reader_schema: 45`, `unknown_or_foreign_evidence_id: 22`, `assertion_kind_not_declared_for_predicate: 11` in Phase 2) remain upstream bottlenecks.
 - **Inference cost & latency:** Live reproduction across all `600` PRs issues multi-segment LLM API calls over up to hundreds of diff files per PR, making offline replay caches essential for deterministic regression testing and CI verification.

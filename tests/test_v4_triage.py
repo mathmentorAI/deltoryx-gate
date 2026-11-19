@@ -114,3 +114,126 @@ def test_same_value_read_as_another_speech_act_is_verified_with_a_note():
     segment = report['segments'][0]
     assert segment['lane'] == 'verified'
     assert segment['claims'][0]['check_status'] == 'not_supported' and segment['claims'][0]['note'] == 'assertion_kind_differs'
+
+
+def test_draft_vocabulary_inherits_closed_entities_aliases_and_condition_status():
+    from claimlayer.v4 import draft_vocabulary
+
+    # 1. Single-entity closed vocabulary with explicit condition_status, scope_keys, register_status_terms
+    closed_single = Vocabulary(
+        name='code_closed_1',
+        version='1.0',
+        predicates=(PredicateSpec('changes_file', FieldSpec('string'), cardinality='multi'),),
+        entities=(('pull request', ('PR', 'this PR')),),
+        closed_entities=True,
+        scope_keys=('event_id', 'repo'),
+        require_explicit_condition_status=True,
+        register_status_terms=('active',),
+    )
+    l1 = EvidenceLayer(vocabulary=closed_single)
+    d1 = SourceDocument('diff.txt', 'The pull request changes file src/app.py.', authority_rank=100, weight=1.0)
+    l1.ingest(d1)
+    l1.ingest_units([{
+        'proposal': {
+            'entity': 'pull request',
+            'predicate': 'changes_file',
+            'value': 'src/app.py',
+            'assertion_kind': 'fact',
+            'condition_status': 'unconditional',
+        },
+        'evidence': [EvidenceRef(d1.document_id, d1.revision, 0, len(d1.text), d1.text)],
+    }], attestor='fixture')
+
+    dv1 = draft_vocabulary(l1)
+    assert dv1.closed_entities is True
+    assert dv1.require_explicit_condition_status is True
+    assert dv1.scope_keys == ('event_id', 'repo')
+    assert dv1.register_status_terms == ('active',)
+    assert dv1.entities == closed_single.entities
+    assert dv1.fingerprint == closed_single.fingerprint
+
+    # Reader on verify_draft must reject undeclared entity & missing condition_status, and accept alias
+    draft_txt = 'This PR modifies src/app.py.'
+
+    def mixed_proposals(payload):
+        eid = payload['fragments'][0]['evidence_id']
+        return {'proposals': [
+            {
+                'entity': 'pull request #1538',
+                'predicate': 'changes_file',
+                'value': 'src/app.py',
+                'assertion_kind': 'fact',
+                'condition_status': 'unconditional',
+                'basis': 'explicit',
+                'evidence': [eid],
+                'quote': draft_txt,
+            },
+            {
+                'entity': 'this PR',
+                'predicate': 'changes_file',
+                'value': 'src/app.py',
+                'assertion_kind': 'fact',
+                'basis': 'explicit',  # missing condition_status -> rejected
+                'evidence': [eid],
+                'quote': draft_txt,
+            },
+            {
+                'entity': 'this PR',
+                'predicate': 'changes_file',
+                'value': 'src/app.py',
+                'assertion_kind': 'fact',
+                'condition_status': 'unconditional',
+                'basis': 'explicit',
+                'evidence': [eid],
+                'quote': draft_txt,
+            },
+        ]}
+
+    rep1 = verify_draft(l1, draft_txt, reader=LLMProposalReader(Model([mixed_proposals]), fragment_chars=2000,
+                                                              structural_reliability=0.9), guard=False)
+    assert rep1['draft_reading']['units_admitted'] == 1
+    assert rep1['draft_reading']['rejection_reasons'] == {
+        'unknown_entity': 1,
+        'condition_status_required': 1,
+    }
+    assert rep1['segments'][0]['lane'] == 'verified'
+
+    # 2. Multi-entity closed vocabulary keeps all declared entities/aliases + inherits flags + filters hints
+    closed_multi = Vocabulary(
+        name='code_closed_2',
+        version='1.0',
+        predicates=(PredicateSpec('role', FieldSpec('string')),),
+        entities=(('Acme', ('Acme Corp',)), ('Beta', ())),
+        closed_entities=True,
+        scope_keys=('event_id', 'repo'),
+        require_explicit_condition_status=True,
+        register_status_terms=('active',),
+    )
+    l2 = EvidenceLayer(vocabulary=closed_multi)
+    d2 = SourceDocument('s.txt', 'Acme is borrower.', authority_rank=100, weight=1.0)
+    l2.ingest(d2)
+    l2.ingest_units([{
+        'proposal': {'entity': 'Acme', 'predicate': 'role', 'value': 'borrower',
+                     'assertion_kind': 'fact', 'condition_status': 'unconditional'},
+        'evidence': [EvidenceRef(d2.document_id, d2.revision, 0, len(d2.text), d2.text)],
+    }], attestor='fixture')
+    dv2 = draft_vocabulary(l2)
+    assert dv2.closed_entities is True
+    assert dv2.require_explicit_condition_status is True
+    assert dv2.scope_keys == ('event_id', 'repo')
+    assert dv2.register_status_terms == ('active',)
+    assert dv2.entities == closed_multi.entities
+    assert dv2.entity('Acme Corp') == 'Acme'
+    assert dv2.entity('Beta') == 'Beta'
+    rep2 = verify_draft(
+        l2,
+        'Gamma is borrower.',
+        reader=LLMProposalReader(Model([lambda pl: {'proposals': [{
+            'entity': 'Gamma', 'predicate': 'role', 'value': 'borrower',
+            'assertion_kind': 'fact', 'condition_status': 'unconditional',
+            'basis': 'explicit', 'evidence': [pl['fragments'][0]['evidence_id']], 'quote': 'Gamma is borrower.',
+        }]}]), fragment_chars=2000, structural_reliability=0.9),
+        guard=False,
+    )
+    assert rep2['draft_reading']['units_admitted'] == 0
+    assert rep2['draft_reading']['rejection_reasons'] == {'unknown_entity': 1}

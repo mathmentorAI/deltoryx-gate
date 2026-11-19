@@ -154,17 +154,65 @@ def propose_vocabulary(model, assignment: str, documents: dict, *, name='documen
 def with_entities(vocabulary: Vocabulary, entities, hints=None):
     """The same contract plus entity names, so a second reading can reuse the first one's names.
 
-    hints maps a predicate to the entity names the first reading used for it; they are added to the predicate's
-    description so that a reader names the same thing the same way (it remains free to name something else)."""
-    unique = {}
+    Preserves all vocabulary properties (``closed_entities``, ``require_explicit_condition_status``,
+    ``register_status_terms``, ``scope_keys``, ``units``, and existing entity aliases). For closed-entity
+    vocabularies, out-of-list entities are never added; single-entity closed vocabularies return unchanged
+    because there is no cross-entity naming ambiguity.
+    """
+    existing_keys = {
+        label_key(lbl)
+        for canonical_name, aliases in vocabulary.entities
+        for lbl in (canonical_name, *aliases)
+    }
+    if vocabulary.closed_entities:
+        if len(vocabulary.entities) <= 1:
+            return vocabulary
+        allowed_canonical = {label_key(canonical_name) for canonical_name, _ in vocabulary.entities}
+        predicates = vocabulary.predicates
+        if hints:
+            predicates = tuple(
+                replace(
+                    p,
+                    description=(p.description + ' ' if p.description else '')
+                    + 'Entities named for this attribute in the sources: '
+                    + '; '.join(e for e in hints[p.name] if label_key(e) in allowed_canonical)
+                    + '.',
+                )
+                if hints.get(p.name) and any(label_key(e) in allowed_canonical for e in hints[p.name])
+                else p
+                for p in predicates
+            )
+        return replace(
+            vocabulary,
+            version=vocabulary.version + '+entities',
+            predicates=predicates,
+            entities=vocabulary.entities,
+        )
+
+    merged_entities = list(vocabulary.entities)
+    seen = set(existing_keys)
     for entity in entities:
-        unique.setdefault(label_key(entity), entity)
+        key = label_key(entity)
+        if key not in seen:
+            seen.add(key)
+            merged_entities.append((entity, ()))
     predicates = vocabulary.predicates
     if hints:
         predicates = tuple(
-            replace(p, description=(p.description + ' ' if p.description else '') +
-                    'Entities named for this attribute in the sources: ' + '; '.join(hints[p.name]) + '.')
-            if hints.get(p.name) else p for p in predicates)
-    return Vocabulary(vocabulary.name, vocabulary.version + '+entities', predicates,
-                      units=vocabulary.units, entities=tuple((e, ()) for e in unique.values()),
-                      scope_keys=vocabulary.scope_keys)
+            replace(
+                p,
+                description=(p.description + ' ' if p.description else '')
+                + 'Entities named for this attribute in the sources: '
+                + '; '.join(hints[p.name])
+                + '.',
+            )
+            if hints.get(p.name)
+            else p
+            for p in predicates
+        )
+    return replace(
+        vocabulary,
+        version=vocabulary.version + '+entities',
+        predicates=predicates,
+        entities=tuple(merged_entities),
+    )

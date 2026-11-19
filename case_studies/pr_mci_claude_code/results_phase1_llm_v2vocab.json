@@ -1,0 +1,2576 @@
+{
+  "by_agent": {
+    "Claude_Code": {
+      "claim_status": {
+        "contradicted": 15,
+        "insufficient_evidence": 222,
+        "supported": 144,
+        "unverifiable": 833
+      },
+      "draft_rejected": {
+        "string_required": 3
+      },
+      "errors": 0,
+      "gate_v4_vocab2": {
+        "misaligned": {
+          "f1": 0.2667,
+          "fn": 1,
+          "fp": 10,
+          "fp_rate": 0.1449,
+          "fp_rate_ci95": [
+            0.0807,
+            0.2466
+          ],
+          "n": 72,
+          "neg": 69,
+          "pos": 3,
+          "precision": 0.1667,
+          "precision_ci95": [
+            0.047,
+            0.448
+          ],
+          "recall": 0.6667,
+          "recall_ci95": [
+            0.2077,
+            0.9385
+          ],
+          "tn": 59,
+          "tp": 2
+        },
+        "partial_o_misaligned": {
+          "f1": 0.24,
+          "fn": 10,
+          "fp": 9,
+          "fp_rate": 0.1525,
+          "fp_rate_ci95": [
+            0.0824,
+            0.2652
+          ],
+          "n": 72,
+          "neg": 59,
+          "pos": 13,
+          "precision": 0.25,
+          "precision_ci95": [
+            0.0889,
+            0.5323
+          ],
+          "recall": 0.2308,
+          "recall_ci95": [
+            0.0818,
+            0.5026
+          ],
+          "tn": 50,
+          "tp": 3
+        }
+      },
+      "labels": {
+        "aligned": 59,
+        "misaligned": 3,
+        "partial": 10
+      },
+      "n": 72,
+      "ok": 72,
+      "paper_heuristic": {
+        "misaligned": {
+          "f1": 0.5,
+          "fn": 2,
+          "fp": 0,
+          "fp_rate": 0.0,
+          "fp_rate_ci95": [
+            0.0,
+            0.0527
+          ],
+          "n": 72,
+          "neg": 69,
+          "pos": 3,
+          "precision": 1.0,
+          "precision_ci95": [
+            0.2065,
+            1.0
+          ],
+          "recall": 0.3333,
+          "recall_ci95": [
+            0.0615,
+            0.7923
+          ],
+          "tn": 69,
+          "tp": 1
+        },
+        "partial_o_misaligned": {
+          "f1": 0.1429,
+          "fn": 12,
+          "fp": 0,
+          "fp_rate": 0.0,
+          "fp_rate_ci95": [
+            0.0,
+            0.0611
+          ],
+          "n": 72,
+          "neg": 59,
+          "pos": 13,
+          "precision": 1.0,
+          "precision_ci95": [
+            0.2065,
+            1.0
+          ],
+          "recall": 0.0769,
+          "recall_ci95": [
+            0.0137,
+            0.3331
+          ],
+          "tn": 59,
+          "tp": 1
+        }
+      },
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 40,
+        "adds_identifier:supported": 45,
+        "adds_test:insufficient_evidence": 16,
+        "adds_test:supported": 11,
+        "changes_dependency:insufficient_evidence": 7,
+        "changes_dependency:supported": 3,
+        "changes_file:insufficient_evidence": 132,
+        "changes_file:supported": 79,
+        "describes_behavior:unverifiable": 833,
+        "files_changed_count:contradicted": 1,
+        "lines_added_count:contradicted": 11,
+        "lines_deleted_count:contradicted": 3,
+        "modifies_identifier:insufficient_evidence": 15,
+        "modifies_identifier:supported": 1,
+        "removes_identifier:insufficient_evidence": 12,
+        "removes_identifier:supported": 5
+      }
+    }
+  },
+  "gate_commit": "22e3590",
+  "legacy_section": true,
+  "reader": {
+    "endpoint": "https://integrate.api.nvidia.com/v1",
+    "model": "nvidia/nemotron-3-ultra-550b-a55b",
+    "parameters": {
+      "extra_body": {
+        "chat_template_kwargs": {
+          "enable_thinking": false
+        }
+      },
+      "max_tokens": 4096,
+      "temperature": 0
+    },
+    "provider": "openai-compatible"
+  },
+  "rows": [
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "supported": 1,
+        "unverifiable": 2
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 1,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 1,
+        "modified_ids": 0,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 5,
+      "paper_heuristic": "aligned",
+      "pr_id": "2882576893",
+      "pred_status": {
+        "changes_file:supported": 1,
+        "describes_behavior:unverifiable": 2
+      },
+      "reasons": [],
+      "receipt_sha256": "06d57b2be4905132235f4c96ab98503f836d47a5e727e0d7d6b98bd98e8d3948",
+      "url": "https://github.com/modelcontextprotocol/inspector/pull/158"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 4
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 0,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 1,
+        "modified_ids": 12,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 18,
+      "paper_heuristic": "aligned",
+      "pr_id": "2886171819",
+      "pred_status": {
+        "describes_behavior:unverifiable": 4
+      },
+      "reasons": [],
+      "receipt_sha256": "e0ca201674e6f8835a4a4dc452626b5a07a2932e8bb989f34235ef457e2ed757",
+      "url": "https://github.com/Wan-Video/Wan2.1/pull/108"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 8
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 153,
+        "added_tests": 5,
+        "deps": 0,
+        "files": 7,
+        "modified_ids": 42,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "partial",
+      "ledger_rejected": {},
+      "ledger_units": 210,
+      "paper_heuristic": "aligned",
+      "pr_id": "2889875255",
+      "pred_status": {
+        "describes_behavior:unverifiable": 8
+      },
+      "reasons": [],
+      "receipt_sha256": "c0665558f07765573111f059c6662161371729c0a4662850ce8cdc823cc6a41a",
+      "url": "https://github.com/mrwadams/stride-gpt/pull/61"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 7
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 54,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 6,
+        "modified_ids": 104,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 183,
+      "paper_heuristic": "aligned",
+      "pr_id": "2889940236",
+      "pred_status": {
+        "describes_behavior:unverifiable": 7
+      },
+      "reasons": [],
+      "receipt_sha256": "11abb2a4e0f56cda4b7264be4ed47dd055e0a68aeb10666b770fe4f74f7a83c0",
+      "url": "https://github.com/rishikanthc/Scriberr/pull/70"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 5
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 84,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 11,
+        "modified_ids": 57,
+        "removed_ids": 4
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 194,
+      "paper_heuristic": "aligned",
+      "pr_id": "2892443818",
+      "pred_status": {
+        "describes_behavior:unverifiable": 5
+      },
+      "reasons": [],
+      "receipt_sha256": "dc27c793c1d2a2daea246a74e329001e4e82019d4034b26393950e40b577e781",
+      "url": "https://github.com/belladoreai/llama3-tokenizer-js/pull/11"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 1,
+        "supported": 7,
+        "unverifiable": 3
+      },
+      "draft_rejected": {
+        "string_required": 3
+      },
+      "error": null,
+      "facts": {
+        "added_ids": 59,
+        "added_tests": 0,
+        "deps": 2,
+        "files": 5,
+        "modified_ids": 37,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 111,
+      "paper_heuristic": "aligned",
+      "pr_id": "2894762370",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 1,
+        "adds_identifier:supported": 2,
+        "changes_file:supported": 5,
+        "describes_behavior:unverifiable": 3
+      },
+      "reasons": [],
+      "receipt_sha256": "deba12dc96c35278a1969cba55ca7edc65c2b1822134a3308494c6384462dd02",
+      "url": "https://github.com/567-labs/instructor/pull/1371"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 2,
+        "supported": 1,
+        "unverifiable": 6
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 45,
+        "added_tests": 6,
+        "deps": 0,
+        "files": 6,
+        "modified_ids": 124,
+        "removed_ids": 18
+      },
+      "gate": "INCONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 216,
+      "paper_heuristic": "aligned",
+      "pr_id": "2908771855",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 2,
+        "adds_identifier:supported": 1,
+        "describes_behavior:unverifiable": 6
+      },
+      "reasons": [
+        "unsupported 2/3"
+      ],
+      "receipt_sha256": "09b4d99947b45a0a1edb634ee85a22909d2089226c234f4f82f2fca3c7c77596",
+      "url": "https://github.com/INCATools/ontology-access-kit/pull/831"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 8
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 2,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 1,
+        "modified_ids": 71,
+        "removed_ids": 16
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 99,
+      "paper_heuristic": "aligned",
+      "pr_id": "2916677326",
+      "pred_status": {
+        "describes_behavior:unverifiable": 8
+      },
+      "reasons": [],
+      "receipt_sha256": "6e2e2ade295ad143bf6fb39f9ffa4ad00c87fe5d268f72c4672e8a02cc2a27a3",
+      "url": "https://github.com/artsy/eigen/pull/11672"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 1
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 2,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 2,
+        "modified_ids": 5,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 14,
+      "paper_heuristic": "aligned",
+      "pr_id": "2964743634",
+      "pred_status": {
+        "describes_behavior:unverifiable": 1
+      },
+      "reasons": [],
+      "receipt_sha256": "4505570a89813cab82315b8abbaeffc244bfb849da7309cf2b537fec717352b8",
+      "url": "https://github.com/mitsuhiko/insta/pull/750"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "misaligned",
+      "claim_status": {
+        "supported": 6,
+        "unverifiable": 3
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 123,
+        "added_tests": 3,
+        "deps": 0,
+        "files": 19,
+        "modified_ids": 212,
+        "removed_ids": 5
+      },
+      "gate": "CONSISTENT",
+      "label": "misaligned",
+      "ledger_rejected": {},
+      "ledger_units": 418,
+      "paper_heuristic": "aligned",
+      "pr_id": "2975165913",
+      "pred_status": {
+        "changes_file:supported": 6,
+        "describes_behavior:unverifiable": 3
+      },
+      "reasons": [],
+      "receipt_sha256": "7c8039730736003ff0e68fecfa51c90cf8d7ee87e033890012dcb1b854c297c7",
+      "url": "https://github.com/INCATools/ontology-access-kit/pull/837"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 1
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 0,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 1,
+        "modified_ids": 8,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 12,
+      "paper_heuristic": "aligned",
+      "pr_id": "2980205609",
+      "pred_status": {
+        "describes_behavior:unverifiable": 1
+      },
+      "reasons": [],
+      "receipt_sha256": "ec33324389c7bb6a01503ae6b8d01cb3ad3e5ad0e1832a5ffdecd0ee2217aa68",
+      "url": "https://github.com/PRQL/prql/pull/5247"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 10
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 13,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 1,
+        "modified_ids": 10,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 31,
+      "paper_heuristic": "aligned",
+      "pr_id": "2986431376",
+      "pred_status": {
+        "describes_behavior:unverifiable": 10
+      },
+      "reasons": [],
+      "receipt_sha256": "86fe813adededd72f2de7006feccc24b083a66f57b79ac2a7577fcf049db6cb4",
+      "url": "https://github.com/zenml-io/zenml/pull/3531"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 1
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 2,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 1,
+        "modified_ids": 1,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 8,
+      "paper_heuristic": "aligned",
+      "pr_id": "3037457814",
+      "pred_status": {
+        "describes_behavior:unverifiable": 1
+      },
+      "reasons": [],
+      "receipt_sha256": "7c98c9a38733dbc8712bb901617acca117b080e133b5a20d0da4d264c54bc9dc",
+      "url": "https://github.com/TensorBlock/awesome-mcp-servers/pull/18"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "supported": 1,
+        "unverifiable": 3
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 9,
+        "added_tests": 7,
+        "deps": 0,
+        "files": 1,
+        "modified_ids": 0,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 26,
+      "paper_heuristic": "aligned",
+      "pr_id": "3047699666",
+      "pred_status": {
+        "adds_test:supported": 1,
+        "describes_behavior:unverifiable": 3
+      },
+      "reasons": [],
+      "receipt_sha256": "8e482732ebb538e19ef4376d2f2a82af7157c20bb58ebd46a441db326ede072e",
+      "url": "https://github.com/liam-hq/liam/pull/1610"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 2
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 3,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 1,
+        "modified_ids": 4,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "partial",
+      "ledger_rejected": {},
+      "ledger_units": 13,
+      "paper_heuristic": "aligned",
+      "pr_id": "3069923749",
+      "pred_status": {
+        "describes_behavior:unverifiable": 2
+      },
+      "reasons": [],
+      "receipt_sha256": "8c4ae96821847ef1b35fbe7f9b774fcdfac4f2e0b6f3d6a90984b8b001a664a0",
+      "url": "https://github.com/mitsuhiko/insta/pull/773"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 5,
+        "supported": 1,
+        "unverifiable": 1
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 0,
+        "added_tests": 0,
+        "deps": 4,
+        "files": 2,
+        "modified_ids": 14,
+        "removed_ids": 0
+      },
+      "gate": "INCONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 25,
+      "paper_heuristic": "aligned",
+      "pr_id": "3070160046",
+      "pred_status": {
+        "changes_dependency:insufficient_evidence": 5,
+        "changes_dependency:supported": 1,
+        "describes_behavior:unverifiable": 1
+      },
+      "reasons": [
+        "unsupported 5/6"
+      ],
+      "receipt_sha256": "0b675dfaa555c8a6ddbde18aff806c6e8b714a565b6e48f8ee558874cf16449e",
+      "url": "https://github.com/PRQL/prql/pull/5290"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 7
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 22,
+        "added_tests": 0,
+        "deps": 20,
+        "files": 98,
+        "modified_ids": 500,
+        "removed_ids": 53
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 952,
+      "paper_heuristic": "aligned",
+      "pr_id": "3078006902",
+      "pred_status": {
+        "describes_behavior:unverifiable": 7
+      },
+      "reasons": [],
+      "receipt_sha256": "2732d3d0bf4731105d7d63b160ebf6702ebb6df57430ea6aaebeb4b6ab1d6589",
+      "url": "https://github.com/spacelift-io/spacectl/pull/324"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 4,
+        "supported": 10,
+        "unverifiable": 47
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 500,
+        "added_tests": 10,
+        "deps": 8,
+        "files": 55,
+        "modified_ids": 296,
+        "removed_ids": 14
+      },
+      "gate": "CONSISTENT",
+      "label": "partial",
+      "ledger_rejected": {},
+      "ledger_units": 1136,
+      "paper_heuristic": "aligned",
+      "pr_id": "3079303421",
+      "pred_status": {
+        "adds_identifier:supported": 4,
+        "adds_test:insufficient_evidence": 3,
+        "changes_file:insufficient_evidence": 1,
+        "changes_file:supported": 6,
+        "describes_behavior:unverifiable": 47
+      },
+      "reasons": [],
+      "receipt_sha256": "b68aeb4e5101566bac20ef8039bfd8163456bf017c23a5eabb587674a589b70d",
+      "url": "https://github.com/giselles-ai/giselle/pull/909"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 4,
+        "supported": 6,
+        "unverifiable": 24
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 54,
+        "added_tests": 0,
+        "deps": 4,
+        "files": 13,
+        "modified_ids": 41,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 126,
+      "paper_heuristic": "aligned",
+      "pr_id": "3098972655",
+      "pred_status": {
+        "changes_dependency:supported": 1,
+        "changes_file:insufficient_evidence": 4,
+        "changes_file:supported": 5,
+        "describes_behavior:unverifiable": 24
+      },
+      "reasons": [],
+      "receipt_sha256": "b51e1f6a5bd6db4f38b04102e99cf43a238edcc3199a42bd7824eb5486d95669",
+      "url": "https://github.com/nrwl/nx/pull/31380"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "misaligned",
+      "claim_status": {
+        "insufficient_evidence": 3,
+        "unverifiable": 2
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 464,
+        "added_tests": 29,
+        "deps": 0,
+        "files": 20,
+        "modified_ids": 88,
+        "removed_ids": 0
+      },
+      "gate": "INCONSISTENT",
+      "label": "misaligned",
+      "ledger_rejected": {},
+      "ledger_units": 621,
+      "paper_heuristic": "aligned",
+      "pr_id": "3111420697",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 1,
+        "changes_file:insufficient_evidence": 2,
+        "describes_behavior:unverifiable": 2
+      },
+      "reasons": [
+        "unsupported 3/3"
+      ],
+      "receipt_sha256": "147038112bd34c8815dca13548538089aeb9093c27a1b12c41fa34af2646c86a",
+      "url": "https://github.com/fishaudio/fish-speech/pull/985"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 3
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 1,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 2,
+        "modified_ids": 13,
+        "removed_ids": 1
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 24,
+      "paper_heuristic": "aligned",
+      "pr_id": "3114327280",
+      "pred_status": {
+        "describes_behavior:unverifiable": 3
+      },
+      "reasons": [],
+      "receipt_sha256": "5a734b5a5c93767344e7b3eae16536ac69926cffc2bdd0be63a260d4a9e2e00d",
+      "url": "https://github.com/modelcontextprotocol/modelcontextprotocol/pull/639"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "supported": 1,
+        "unverifiable": 5
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 8,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 7,
+        "modified_ids": 68,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 104,
+      "paper_heuristic": "aligned",
+      "pr_id": "3119417980",
+      "pred_status": {
+        "adds_identifier:supported": 1,
+        "describes_behavior:unverifiable": 5
+      },
+      "reasons": [],
+      "receipt_sha256": "8ec7b3ac09dccf320dd0494cea7feeae38a18fdc27551299b8f872cac6683b84",
+      "url": "https://github.com/CoderGamester/mcp-unity/pull/44"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 12
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 69,
+        "added_tests": 8,
+        "deps": 0,
+        "files": 4,
+        "modified_ids": 31,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 121,
+      "paper_heuristic": "aligned",
+      "pr_id": "3124372773",
+      "pred_status": {
+        "describes_behavior:unverifiable": 12
+      },
+      "reasons": [],
+      "receipt_sha256": "1fe4793c504d748ffea1b50a9cfbd2a2c7b821eaaa8650745e8549ee4aa26e8f",
+      "url": "https://github.com/busser/tfautomv/pull/108"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 4,
+        "unverifiable": 22
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 109,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 6,
+        "modified_ids": 91,
+        "removed_ids": 1
+      },
+      "gate": "INCONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 246,
+      "paper_heuristic": "aligned",
+      "pr_id": "3127930821",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 4,
+        "describes_behavior:unverifiable": 22
+      },
+      "reasons": [
+        "unsupported 4/4"
+      ],
+      "receipt_sha256": "c5537b3f4ffb53b736ca73f4ffea1f02edef0ca7c84f901a0d4ceb99aec0ffe7",
+      "url": "https://github.com/wvlet/wvlet/pull/980"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 1,
+        "unverifiable": 1
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 4,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 2,
+        "modified_ids": 4,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "partial",
+      "ledger_rejected": {},
+      "ledger_units": 25,
+      "paper_heuristic": "aligned",
+      "pr_id": "3132739442",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 1,
+        "describes_behavior:unverifiable": 1
+      },
+      "reasons": [],
+      "receipt_sha256": "0ef1a07e76d182b4779ea88d9c8296c430306ab5f1e0c1e8fae6877edf8a0f88",
+      "url": "https://github.com/proximafusion/vmecpp/pull/340"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 3,
+        "supported": 2,
+        "unverifiable": 4
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 5,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 7,
+        "modified_ids": 45,
+        "removed_ids": 0
+      },
+      "gate": "INCONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 100,
+      "paper_heuristic": "aligned",
+      "pr_id": "3132983801",
+      "pred_status": {
+        "adds_identifier:supported": 2,
+        "describes_behavior:unverifiable": 4,
+        "removes_identifier:insufficient_evidence": 3
+      },
+      "reasons": [
+        "unsupported 3/5"
+      ],
+      "receipt_sha256": "7ea46efe90be8362367db6346f91513418244afecdbdc3b0f8fa104719b79d0c",
+      "url": "https://github.com/proximafusion/vmecpp/pull/341"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 1,
+        "supported": 12,
+        "unverifiable": 6
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 200,
+        "added_tests": 25,
+        "deps": 0,
+        "files": 6,
+        "modified_ids": 72,
+        "removed_ids": 7
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 321,
+      "paper_heuristic": "aligned",
+      "pr_id": "3135266974",
+      "pred_status": {
+        "adds_identifier:supported": 4,
+        "adds_test:supported": 2,
+        "changes_file:supported": 6,
+        "describes_behavior:unverifiable": 6,
+        "removes_identifier:insufficient_evidence": 1
+      },
+      "reasons": [],
+      "receipt_sha256": "d171d77a5fe871454ef1ee332e8f2c0cbb2159dd61fb3838a94a4db8641fff0f",
+      "url": "https://github.com/bayesianbandits/bayesianbandits/pull/170"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 1,
+        "supported": 1,
+        "unverifiable": 8
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 336,
+        "added_tests": 42,
+        "deps": 2,
+        "files": 54,
+        "modified_ids": 364,
+        "removed_ids": 4
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 931,
+      "paper_heuristic": "aligned",
+      "pr_id": "3138027382",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 1,
+        "adds_test:supported": 1,
+        "describes_behavior:unverifiable": 8
+      },
+      "reasons": [],
+      "receipt_sha256": "e4b7e6bcf7c2b4d13e3ffa06dfc2d91a070646b0e1170d3a20ebc712169f4baf",
+      "url": "https://github.com/Shopify/roast/pull/244"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 9,
+        "supported": 3,
+        "unverifiable": 6
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 500,
+        "added_tests": 35,
+        "deps": 0,
+        "files": 126,
+        "modified_ids": 316,
+        "removed_ids": 419
+      },
+      "gate": "INCONSISTENT",
+      "label": "partial",
+      "ledger_rejected": {},
+      "ledger_units": 1743,
+      "paper_heuristic": "aligned",
+      "pr_id": "3138264959",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 3,
+        "changes_file:supported": 3,
+        "describes_behavior:unverifiable": 6,
+        "modifies_identifier:insufficient_evidence": 4,
+        "removes_identifier:insufficient_evidence": 2
+      },
+      "reasons": [
+        "unsupported 9/12"
+      ],
+      "receipt_sha256": "18af630a01bbf6cd7fad76b181beef71650135e34c194f9f0a86b67ca125ce33",
+      "url": "https://github.com/evmts/tevm-monorepo/pull/1831"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 2,
+        "supported": 3,
+        "unverifiable": 20
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 105,
+        "added_tests": 0,
+        "deps": 6,
+        "files": 11,
+        "modified_ids": 74,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "partial",
+      "ledger_rejected": {},
+      "ledger_units": 204,
+      "paper_heuristic": "aligned",
+      "pr_id": "3146561196",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 2,
+        "changes_file:supported": 3,
+        "describes_behavior:unverifiable": 20
+      },
+      "reasons": [],
+      "receipt_sha256": "16cb8697cd1cdb60f19cfc991edcc8b08a051f62dba0aedaf2f426073240300b",
+      "url": "https://github.com/modelcontextprotocol/inspector/pull/511"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 1,
+        "supported": 4,
+        "unverifiable": 7
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 103,
+        "added_tests": 0,
+        "deps": 6,
+        "files": 15,
+        "modified_ids": 129,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "partial",
+      "ledger_rejected": {},
+      "ledger_units": 274,
+      "paper_heuristic": "aligned",
+      "pr_id": "3152317896",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 1,
+        "changes_dependency:supported": 1,
+        "changes_file:supported": 3,
+        "describes_behavior:unverifiable": 7
+      },
+      "reasons": [],
+      "receipt_sha256": "c65c9d8911ee6c6bce526a3e79d7662641a95fa3c46b81d33a434163b7a8600e",
+      "url": "https://github.com/ithacaxyz/porto/pull/470"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 8
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 4,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 1,
+        "modified_ids": 9,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 20,
+      "paper_heuristic": "aligned",
+      "pr_id": "3155322770",
+      "pred_status": {
+        "describes_behavior:unverifiable": 8
+      },
+      "reasons": [],
+      "receipt_sha256": "22bf6ad7d58dca6962c65d947e0484597c63dfa406043b51a55bc86ee758355b",
+      "url": "https://github.com/JonasKruckenberg/k23/pull/480"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "supported": 15,
+        "unverifiable": 17
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 260,
+        "added_tests": 57,
+        "deps": 0,
+        "files": 43,
+        "modified_ids": 94,
+        "removed_ids": 1
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 576,
+      "paper_heuristic": "aligned",
+      "pr_id": "3158802702",
+      "pred_status": {
+        "adds_identifier:supported": 15,
+        "describes_behavior:unverifiable": 17
+      },
+      "reasons": [],
+      "receipt_sha256": "4e466c1b3b112aa5ff0646d77a2aa993ab382e0802232952ed1a271ddef10512",
+      "url": "https://github.com/Shopify/roast/pull/285"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 2,
+        "unverifiable": 12
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 63,
+        "added_tests": 147,
+        "deps": 0,
+        "files": 48,
+        "modified_ids": 180,
+        "removed_ids": 92
+      },
+      "gate": "INCONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 798,
+      "paper_heuristic": "aligned",
+      "pr_id": "3166880168",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 1,
+        "describes_behavior:unverifiable": 12,
+        "removes_identifier:insufficient_evidence": 1
+      },
+      "reasons": [
+        "unsupported 2/2"
+      ],
+      "receipt_sha256": "91ec0ae6bd8ab3f7c214280e92651ae49780c936d720bfda4c3054866c1e8c5a",
+      "url": "https://github.com/liam-hq/liam/pull/2143"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "supported": 1,
+        "unverifiable": 6
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 4,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 2,
+        "modified_ids": 16,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 30,
+      "paper_heuristic": "aligned",
+      "pr_id": "3175209026",
+      "pred_status": {
+        "changes_file:supported": 1,
+        "describes_behavior:unverifiable": 6
+      },
+      "reasons": [],
+      "receipt_sha256": "8726717c63ec128ec2e340ef3b92fb7f659b077aaf309db6fee6959a2ba92d99",
+      "url": "https://github.com/mlflow/mlflow/pull/16449"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 1,
+        "supported": 2,
+        "unverifiable": 26
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 2,
+        "added_tests": 138,
+        "deps": 0,
+        "files": 33,
+        "modified_ids": 118,
+        "removed_ids": 90
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 585,
+      "paper_heuristic": "aligned",
+      "pr_id": "3177654490",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 1,
+        "describes_behavior:unverifiable": 26,
+        "removes_identifier:supported": 2
+      },
+      "reasons": [],
+      "receipt_sha256": "641a2d422c0d36513c95d3d3186246eaa80a595281c46381473b9d05b9616dce",
+      "url": "https://github.com/liam-hq/liam/pull/2224"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "contradicted": 1,
+        "insufficient_evidence": 4,
+        "supported": 3,
+        "unverifiable": 8
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 81,
+        "added_tests": 20,
+        "deps": 8,
+        "files": 13,
+        "modified_ids": 282,
+        "removed_ids": 192
+      },
+      "gate": "INCONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 667,
+      "paper_heuristic": "aligned",
+      "pr_id": "3186370783",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 1,
+        "adds_identifier:supported": 1,
+        "describes_behavior:unverifiable": 8,
+        "lines_deleted_count:contradicted": 1,
+        "modifies_identifier:insufficient_evidence": 1,
+        "removes_identifier:insufficient_evidence": 2,
+        "removes_identifier:supported": 2
+      },
+      "reasons": [
+        "contradicted 1",
+        "unsupported 5/8"
+      ],
+      "receipt_sha256": "e7dec6522e615d5693f7d27716e924902b65dd4f96d7bd5bc6a3a599e7790dfe",
+      "url": "https://github.com/amantus-ai/vibetunnel/pull/134"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 7
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 57,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 3,
+        "modified_ids": 19,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 88,
+      "paper_heuristic": "aligned",
+      "pr_id": "3190199796",
+      "pred_status": {
+        "describes_behavior:unverifiable": 7
+      },
+      "reasons": [],
+      "receipt_sha256": "c45749ca056810847a29ad04491b3ddb7069f2dcdd26d0d71563cc99ecb4a8aa",
+      "url": "https://github.com/yoshiko-pg/difit/pull/9"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 3,
+        "supported": 1,
+        "unverifiable": 17
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 6,
+        "added_tests": 2,
+        "deps": 0,
+        "files": 4,
+        "modified_ids": 0,
+        "removed_ids": 0
+      },
+      "gate": "INCONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 22,
+      "paper_heuristic": "aligned",
+      "pr_id": "3194483657",
+      "pred_status": {
+        "changes_file:insufficient_evidence": 3,
+        "changes_file:supported": 1,
+        "describes_behavior:unverifiable": 17
+      },
+      "reasons": [
+        "unsupported 3/4"
+      ],
+      "receipt_sha256": "f4971169f52e6c53a12da6acdeb3fdb1fde2f5daa1ad615052a9d06194ebd6f9",
+      "url": "https://github.com/liam-hq/liam/pull/2305"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 8
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 301,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 22,
+        "modified_ids": 8,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 417,
+      "paper_heuristic": "aligned",
+      "pr_id": "3196885081",
+      "pred_status": {
+        "describes_behavior:unverifiable": 8
+      },
+      "reasons": [],
+      "receipt_sha256": "f91ec8985629eefc46b3dcafee3943b173d15822459e36f19e28d04f8874de40",
+      "url": "https://github.com/SuperClaude-Org/SuperClaude_Framework/pull/69"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 1
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 4,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 1,
+        "modified_ids": 0,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 10,
+      "paper_heuristic": "aligned",
+      "pr_id": "3197644488",
+      "pred_status": {
+        "describes_behavior:unverifiable": 1
+      },
+      "reasons": [],
+      "receipt_sha256": "3edf276cd34a5842d944dba4c096c32e591e458da206816a2ade53fcc17d6ab8",
+      "url": "https://github.com/d-kuro/gwq/pull/30"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 7
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 91,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 60,
+        "modified_ids": 13,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 326,
+      "paper_heuristic": "aligned",
+      "pr_id": "3199623142",
+      "pred_status": {
+        "describes_behavior:unverifiable": 7
+      },
+      "reasons": [],
+      "receipt_sha256": "d26a915aa61dc276c1a9157c081241330fcfb77ea4e4b0c9d07b6dbfe9ac5704",
+      "url": "https://github.com/modelcontextprotocol/modelcontextprotocol/pull/906"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "misaligned",
+      "claim_status": {
+        "insufficient_evidence": 13,
+        "unverifiable": 43
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 0,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 0,
+        "modified_ids": 0,
+        "removed_ids": 0
+      },
+      "gate": "INCONSISTENT",
+      "label": "misaligned",
+      "ledger_rejected": {},
+      "ledger_units": 3,
+      "paper_heuristic": "misaligned",
+      "pr_id": "3204772289",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 2,
+        "changes_dependency:insufficient_evidence": 1,
+        "changes_file:insufficient_evidence": 10,
+        "describes_behavior:unverifiable": 43
+      },
+      "reasons": [
+        "unsupported 13/13",
+        "empty_diff"
+      ],
+      "receipt_sha256": "ea88ba67a05b560edcd49e0f321cb843ef8242bff36ba6830096fb1966ac840a",
+      "url": "https://github.com/teddynote-lab/langconnect-client/pull/3"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 1,
+        "supported": 2,
+        "unverifiable": 3
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 16,
+        "added_tests": 3,
+        "deps": 0,
+        "files": 3,
+        "modified_ids": 13,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "partial",
+      "ledger_rejected": {},
+      "ledger_units": 40,
+      "paper_heuristic": "aligned",
+      "pr_id": "3206405036",
+      "pred_status": {
+        "adds_test:supported": 1,
+        "changes_file:supported": 1,
+        "describes_behavior:unverifiable": 3,
+        "modifies_identifier:insufficient_evidence": 1
+      },
+      "reasons": [],
+      "receipt_sha256": "0d7e8b1babbb74901c019d8eaea3128aa70134b92e3bc3d35286a873138bc84e",
+      "url": "https://github.com/fireship-io/flamethrower/pull/95"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 22
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 339,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 8,
+        "modified_ids": 0,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 364,
+      "paper_heuristic": "aligned",
+      "pr_id": "3206405282",
+      "pred_status": {
+        "describes_behavior:unverifiable": 22
+      },
+      "reasons": [],
+      "receipt_sha256": "e2ffddf36ccf76049a8ba20012a50ea33772f7edf3b0d94ab627a6730ad533a5",
+      "url": "https://github.com/fireship-io/flamethrower/pull/96"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 5
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 351,
+        "added_tests": 64,
+        "deps": 0,
+        "files": 9,
+        "modified_ids": 68,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 522,
+      "paper_heuristic": "aligned",
+      "pr_id": "3206510254",
+      "pred_status": {
+        "describes_behavior:unverifiable": 5
+      },
+      "reasons": [],
+      "receipt_sha256": "0d65e682a8e614de3acafcec6eb7eb8c48945a628de1aab5c78f557eb63d389b",
+      "url": "https://github.com/Effect-TS/effect-smol/pull/235"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 2
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 3,
+        "added_tests": 4,
+        "deps": 0,
+        "files": 300,
+        "modified_ids": 1,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 1211,
+      "paper_heuristic": "aligned",
+      "pr_id": "3210688776",
+      "pred_status": {
+        "describes_behavior:unverifiable": 2
+      },
+      "reasons": [],
+      "receipt_sha256": "cfe3a44fcbba313883acfdf62b3f0bcd48f778a562b9e32152944b905f9bf386",
+      "url": "https://github.com/amantus-ai/vibetunnel/pull/263"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 7
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 1,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 2,
+        "modified_ids": 25,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 38,
+      "paper_heuristic": "aligned",
+      "pr_id": "3210837112",
+      "pred_status": {
+        "describes_behavior:unverifiable": 7
+      },
+      "reasons": [],
+      "receipt_sha256": "375118109ffc55ccef4ede52011dd5d8ac6ec240c0c7752450b311c1e1b5f1ab",
+      "url": "https://github.com/tier4/scenario_simulator_v2/pull/1643"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 6
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 91,
+        "added_tests": 27,
+        "deps": 0,
+        "files": 13,
+        "modified_ids": 160,
+        "removed_ids": 3
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 323,
+      "paper_heuristic": "aligned",
+      "pr_id": "3212218608",
+      "pred_status": {
+        "describes_behavior:unverifiable": 6
+      },
+      "reasons": [],
+      "receipt_sha256": "2cf5c5534566bf23cdf3bdead66747e9c273ac0ec423d0de2cb3d37f4abd7a14",
+      "url": "https://github.com/kubernetes-sigs/cloud-provider-azure/pull/9250"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "contradicted": 14,
+        "insufficient_evidence": 143,
+        "supported": 12,
+        "unverifiable": 89
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 130,
+        "added_tests": 46,
+        "deps": 0,
+        "files": 64,
+        "modified_ids": 500,
+        "removed_ids": 70
+      },
+      "gate": "INCONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 991,
+      "paper_heuristic": "aligned",
+      "pr_id": "3214782537",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 12,
+        "adds_identifier:supported": 1,
+        "adds_test:insufficient_evidence": 10,
+        "changes_file:insufficient_evidence": 112,
+        "changes_file:supported": 11,
+        "describes_behavior:unverifiable": 89,
+        "files_changed_count:contradicted": 1,
+        "lines_added_count:contradicted": 11,
+        "lines_deleted_count:contradicted": 2,
+        "modifies_identifier:insufficient_evidence": 9
+      },
+      "reasons": [
+        "contradicted 14",
+        "unsupported 157/169"
+      ],
+      "receipt_sha256": "9ca1d85aa33f957823c25b4306619318d69ec12e20e124bdb44af88050c80294",
+      "url": "https://github.com/onetimesecret/onetimesecret/pull/1538"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 47
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 68,
+        "added_tests": 24,
+        "deps": 0,
+        "files": 5,
+        "modified_ids": 70,
+        "removed_ids": 5
+      },
+      "gate": "CONSISTENT",
+      "label": "partial",
+      "ledger_rejected": {},
+      "ledger_units": 196,
+      "paper_heuristic": "aligned",
+      "pr_id": "3214876564",
+      "pred_status": {
+        "describes_behavior:unverifiable": 47
+      },
+      "reasons": [],
+      "receipt_sha256": "8b2f80f0a816a8c3c3679b41363af3c2f8abfea76f7f694a92bbd4e185a99eff",
+      "url": "https://github.com/elizaOS/eliza/pull/5490"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 9
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 4,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 1,
+        "modified_ids": 0,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 10,
+      "paper_heuristic": "aligned",
+      "pr_id": "3215868710",
+      "pred_status": {
+        "describes_behavior:unverifiable": 9
+      },
+      "reasons": [],
+      "receipt_sha256": "dc6265ad11e323bb60f71dfd605c9ee937e2cf546aa7bdeab54008c0977ee949",
+      "url": "https://github.com/liam-hq/liam/pull/2454"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 1,
+        "unverifiable": 7
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 83,
+        "added_tests": 65,
+        "deps": 0,
+        "files": 90,
+        "modified_ids": 500,
+        "removed_ids": 85
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 1020,
+      "paper_heuristic": "aligned",
+      "pr_id": "3219102497",
+      "pred_status": {
+        "changes_dependency:insufficient_evidence": 1,
+        "describes_behavior:unverifiable": 7
+      },
+      "reasons": [],
+      "receipt_sha256": "13bece6fe6b9e025d983a9e3506b50130cfd337d8ee2f15b14ec36c427bd092c",
+      "url": "https://github.com/pyvista/pyvista/pull/7692"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 10
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 44,
+        "added_tests": 23,
+        "deps": 0,
+        "files": 12,
+        "modified_ids": 96,
+        "removed_ids": 47
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 301,
+      "paper_heuristic": "aligned",
+      "pr_id": "3222101465",
+      "pred_status": {
+        "describes_behavior:unverifiable": 10
+      },
+      "reasons": [],
+      "receipt_sha256": "e3b2e329bc854d8bf2ed3eff3f289e40333484d583e43e954d6011cef4cf3d7a",
+      "url": "https://github.com/liam-hq/liam/pull/2520"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 1,
+        "supported": 6,
+        "unverifiable": 39
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 32,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 7,
+        "modified_ids": 60,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 102,
+      "paper_heuristic": "aligned",
+      "pr_id": "3226434542",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 1,
+        "adds_identifier:supported": 2,
+        "changes_file:supported": 4,
+        "describes_behavior:unverifiable": 39
+      },
+      "reasons": [],
+      "receipt_sha256": "48043a85037f5095e0a677fe1a9e658426277a8ce6ff4145be6e757825aadc0f",
+      "url": "https://github.com/luohy15/y-router/pull/2"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 9
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 500,
+        "added_tests": 276,
+        "deps": 26,
+        "files": 177,
+        "modified_ids": 500,
+        "removed_ids": 500
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 2812,
+      "paper_heuristic": "aligned",
+      "pr_id": "3226475067",
+      "pred_status": {
+        "describes_behavior:unverifiable": 9
+      },
+      "reasons": [],
+      "receipt_sha256": "5380a3e202df1b00f6e034a0891ae192483af188863ff5bba688beeb0abc9aaa",
+      "url": "https://github.com/Deepractice/PromptX/pull/179"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 14
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 500,
+        "added_tests": 276,
+        "deps": 26,
+        "files": 177,
+        "modified_ids": 500,
+        "removed_ids": 500
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 2812,
+      "paper_heuristic": "aligned",
+      "pr_id": "3226500911",
+      "pred_status": {
+        "describes_behavior:unverifiable": 14
+      },
+      "reasons": [],
+      "receipt_sha256": "b0e799e80229b797f6fdcab1ff0bc79ed3c473a0c8da3e1e0dbb8776fe09ebcb",
+      "url": "https://github.com/Deepractice/PromptX/pull/180"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 8
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 12,
+        "added_tests": 11,
+        "deps": 0,
+        "files": 14,
+        "modified_ids": 109,
+        "removed_ids": 500
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 706,
+      "paper_heuristic": "aligned",
+      "pr_id": "3229710961",
+      "pred_status": {
+        "describes_behavior:unverifiable": 8
+      },
+      "reasons": [],
+      "receipt_sha256": "674265dabb514f165d5cd4bd7ea97dc3d5c5b5ddf3d58806f1c8c460fec7ffce",
+      "url": "https://github.com/typedef-ai/fenic/pull/81"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "supported": 15,
+        "unverifiable": 5
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 500,
+        "added_tests": 17,
+        "deps": 12,
+        "files": 94,
+        "modified_ids": 357,
+        "removed_ids": 158
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 1331,
+      "paper_heuristic": "aligned",
+      "pr_id": "3234102722",
+      "pred_status": {
+        "adds_identifier:supported": 6,
+        "changes_file:supported": 9,
+        "describes_behavior:unverifiable": 5
+      },
+      "reasons": [],
+      "receipt_sha256": "d9ea5c64cfd798012ff7e04dd52b8558eca75c42c58f042a6175b8a15f2d1dda",
+      "url": "https://github.com/ruvnet/claude-flow/pull/318"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 3,
+        "supported": 7,
+        "unverifiable": 10
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 500,
+        "added_tests": 95,
+        "deps": 22,
+        "files": 96,
+        "modified_ids": 500,
+        "removed_ids": 121
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 1592,
+      "paper_heuristic": "aligned",
+      "pr_id": "3235103212",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 3,
+        "adds_test:supported": 5,
+        "changes_file:supported": 2,
+        "describes_behavior:unverifiable": 10
+      },
+      "reasons": [],
+      "receipt_sha256": "2c816726fbd8264332339b6ebaf6f619e2a14f04a68952947c4c564da59c965b",
+      "url": "https://github.com/mlflow/mlflow/pull/16758"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 30
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 53,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 9,
+        "modified_ids": 10,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 95,
+      "paper_heuristic": "aligned",
+      "pr_id": "3241861541",
+      "pred_status": {
+        "describes_behavior:unverifiable": 30
+      },
+      "reasons": [],
+      "receipt_sha256": "0e900850e72387bac1720045e2a0f1c5e890721ee5233635569bb70c3b92b309",
+      "url": "https://github.com/friendsofhyperf/components/pull/877"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 18
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 58,
+        "added_tests": 44,
+        "deps": 0,
+        "files": 21,
+        "modified_ids": 136,
+        "removed_ids": 10
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 316,
+      "paper_heuristic": "aligned",
+      "pr_id": "3245456977",
+      "pred_status": {
+        "describes_behavior:unverifiable": 18
+      },
+      "reasons": [],
+      "receipt_sha256": "d2f9dd0338cc60dd63d586f7f649d8cfa409067054b9c06207acdce67f6c9f12",
+      "url": "https://github.com/promptfoo/promptfoo/pull/4998"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "supported": 2,
+        "unverifiable": 6
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 5,
+        "added_tests": 3,
+        "deps": 0,
+        "files": 5,
+        "modified_ids": 48,
+        "removed_ids": 6
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 84,
+      "paper_heuristic": "aligned",
+      "pr_id": "3245466752",
+      "pred_status": {
+        "adds_identifier:supported": 1,
+        "describes_behavior:unverifiable": 6,
+        "removes_identifier:supported": 1
+      },
+      "reasons": [],
+      "receipt_sha256": "ba84f60aa403d9c9f1e7fdad6b2962c49287aed3a3b4dd33fda2b45f32635ff5",
+      "url": "https://github.com/jlowin/fastmcp/pull/1185"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 2
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 23,
+        "added_tests": 3,
+        "deps": 0,
+        "files": 4,
+        "modified_ids": 42,
+        "removed_ids": 9
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 94,
+      "paper_heuristic": "aligned",
+      "pr_id": "3246950577",
+      "pred_status": {
+        "describes_behavior:unverifiable": 2
+      },
+      "reasons": [],
+      "receipt_sha256": "c321a9a27cb4b4e2ab9f0dcad4659ec17a90bdb28e8551299c413ce2bf60d74a",
+      "url": "https://github.com/pdm-project/pdm/pull/3575"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 2,
+        "unverifiable": 10
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 255,
+        "added_tests": 11,
+        "deps": 0,
+        "files": 4,
+        "modified_ids": 130,
+        "removed_ids": 18
+      },
+      "gate": "INCONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 461,
+      "paper_heuristic": "aligned",
+      "pr_id": "3250080019",
+      "pred_status": {
+        "adds_test:insufficient_evidence": 2,
+        "describes_behavior:unverifiable": 10
+      },
+      "reasons": [
+        "unsupported 2/2"
+      ],
+      "receipt_sha256": "31203e749604a844ced7d78cd86d4e107b915c5f471d0d6b366dc92ca4a7b9f7",
+      "url": "https://github.com/apache/pulsar/pull/24542"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 5,
+        "supported": 11,
+        "unverifiable": 6
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 215,
+        "added_tests": 19,
+        "deps": 0,
+        "files": 20,
+        "modified_ids": 235,
+        "removed_ids": 1
+      },
+      "gate": "CONSISTENT",
+      "label": "partial",
+      "ledger_rejected": {},
+      "ledger_units": 569,
+      "paper_heuristic": "aligned",
+      "pr_id": "3251544513",
+      "pred_status": {
+        "adds_identifier:insufficient_evidence": 3,
+        "adds_identifier:supported": 4,
+        "adds_test:supported": 1,
+        "changes_file:supported": 6,
+        "describes_behavior:unverifiable": 6,
+        "removes_identifier:insufficient_evidence": 2
+      },
+      "reasons": [],
+      "receipt_sha256": "0886a62db2f0383d5db6ad1deaa2a8411d3f25c4bc25e8c8af72ced6c83791fc",
+      "url": "https://github.com/livestorejs/livestore/pull/497"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 4
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 0,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 11,
+        "modified_ids": 25,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 49,
+      "paper_heuristic": "aligned",
+      "pr_id": "3265118634",
+      "pred_status": {
+        "describes_behavior:unverifiable": 4
+      },
+      "reasons": [],
+      "receipt_sha256": "29a47e4e5ca4dfd82c408ff2eb2d53beb930a26f4156f9647b573fafa3324269",
+      "url": "https://github.com/classmethod/tsumiki/pull/2"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 1,
+        "supported": 5,
+        "unverifiable": 16
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 238,
+        "added_tests": 167,
+        "deps": 0,
+        "files": 127,
+        "modified_ids": 500,
+        "removed_ids": 66
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 1491,
+      "paper_heuristic": "aligned",
+      "pr_id": "3271045504",
+      "pred_status": {
+        "changes_file:supported": 5,
+        "describes_behavior:unverifiable": 16,
+        "removes_identifier:insufficient_evidence": 1
+      },
+      "reasons": [],
+      "receipt_sha256": "0b4124721faafb33a4d18d42bdb912bb277c2c2bc11fd1a6181725d934aebf71",
+      "url": "https://github.com/RevenueCat/purchases-ios/pull/5427"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 16
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 40,
+        "added_tests": 0,
+        "deps": 2,
+        "files": 12,
+        "modified_ids": 102,
+        "removed_ids": 9
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 185,
+      "paper_heuristic": "aligned",
+      "pr_id": "3271081741",
+      "pred_status": {
+        "describes_behavior:unverifiable": 16
+      },
+      "reasons": [],
+      "receipt_sha256": "8e808a05d27b6b6696af8cd705c762b4eff37c4244ee86e4c55790250b8079e6",
+      "url": "https://github.com/ruvnet/claude-flow/pull/490"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 23
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 94,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 6,
+        "modified_ids": 141,
+        "removed_ids": 15
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 271,
+      "paper_heuristic": "aligned",
+      "pr_id": "3272275087",
+      "pred_status": {
+        "describes_behavior:unverifiable": 23
+      },
+      "reasons": [],
+      "receipt_sha256": "26da1e22688095e9a6034299e71c89884c7f193a41e679570a63298bca7fd018",
+      "url": "https://github.com/Wei-Shaw/claude-relay-service/pull/114"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "unverifiable": 4
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 13,
+        "added_tests": 0,
+        "deps": 0,
+        "files": 1,
+        "modified_ids": 23,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 42,
+      "paper_heuristic": "aligned",
+      "pr_id": "3273243547",
+      "pred_status": {
+        "describes_behavior:unverifiable": 4
+      },
+      "reasons": [],
+      "receipt_sha256": "4a3ed65bf71e35a51d3698f10036193ad0c0c04cbf434a7f1e5181b22e89b2b9",
+      "url": "https://github.com/jdx/mise/pull/5828"
+    },
+    {
+      "agent": "Claude_Code",
+      "binary_label": "aligned",
+      "claim_status": {
+        "insufficient_evidence": 1,
+        "supported": 3,
+        "unverifiable": 7
+      },
+      "draft_rejected": {},
+      "error": null,
+      "facts": {
+        "added_ids": 82,
+        "added_tests": 3,
+        "deps": 0,
+        "files": 8,
+        "modified_ids": 63,
+        "removed_ids": 0
+      },
+      "gate": "CONSISTENT",
+      "label": "aligned",
+      "ledger_rejected": {},
+      "ledger_units": 176,
+      "paper_heuristic": "aligned",
+      "pr_id": "3275134373",
+      "pred_status": {
+        "adds_identifier:supported": 1,
+        "adds_test:insufficient_evidence": 1,
+        "changes_file:supported": 1,
+        "describes_behavior:unverifiable": 7,
+        "modifies_identifier:supported": 1
+      },
+      "reasons": [],
+      "receipt_sha256": "009f4fdc49155cb64776556760b34dd17dbdbe93c2df480f3790e518a5cd5c79",
+      "url": "https://github.com/jdx/mise/pull/5836"
+    }
+  ],
+  "summary": {
+    "claim_status": {
+      "contradicted": 15,
+      "insufficient_evidence": 222,
+      "supported": 144,
+      "unverifiable": 833
+    },
+    "draft_rejected": {
+      "string_required": 3
+    },
+    "errors": 0,
+    "gate_v4_vocab2": {
+      "misaligned": {
+        "f1": 0.2667,
+        "fn": 1,
+        "fp": 10,
+        "fp_rate": 0.1449,
+        "fp_rate_ci95": [
+          0.0807,
+          0.2466
+        ],
+        "n": 72,
+        "neg": 69,
+        "pos": 3,
+        "precision": 0.1667,
+        "precision_ci95": [
+          0.047,
+          0.448
+        ],
+        "recall": 0.6667,
+        "recall_ci95": [
+          0.2077,
+          0.9385
+        ],
+        "tn": 59,
+        "tp": 2
+      },
+      "partial_o_misaligned": {
+        "f1": 0.24,
+        "fn": 10,
+        "fp": 9,
+        "fp_rate": 0.1525,
+        "fp_rate_ci95": [
+          0.0824,
+          0.2652
+        ],
+        "n": 72,
+        "neg": 59,
+        "pos": 13,
+        "precision": 0.25,
+        "precision_ci95": [
+          0.0889,
+          0.5323
+        ],
+        "recall": 0.2308,
+        "recall_ci95": [
+          0.0818,
+          0.5026
+        ],
+        "tn": 50,
+        "tp": 3
+      }
+    },
+    "labels": {
+      "aligned": 59,
+      "misaligned": 3,
+      "partial": 10
+    },
+    "n": 72,
+    "ok": 72,
+    "paper_heuristic": {
+      "misaligned": {
+        "f1": 0.5,
+        "fn": 2,
+        "fp": 0,
+        "fp_rate": 0.0,
+        "fp_rate_ci95": [
+          0.0,
+          0.0527
+        ],
+        "n": 72,
+        "neg": 69,
+        "pos": 3,
+        "precision": 1.0,
+        "precision_ci95": [
+          0.2065,
+          1.0
+        ],
+        "recall": 0.3333,
+        "recall_ci95": [
+          0.0615,
+          0.7923
+        ],
+        "tn": 69,
+        "tp": 1
+      },
+      "partial_o_misaligned": {
+        "f1": 0.1429,
+        "fn": 12,
+        "fp": 0,
+        "fp_rate": 0.0,
+        "fp_rate_ci95": [
+          0.0,
+          0.0611
+        ],
+        "n": 72,
+        "neg": 59,
+        "pos": 13,
+        "precision": 1.0,
+        "precision_ci95": [
+          0.2065,
+          1.0
+        ],
+        "recall": 0.0769,
+        "recall_ci95": [
+          0.0137,
+          0.3331
+        ],
+        "tn": 59,
+        "tp": 1
+      }
+    },
+    "pred_status": {
+      "adds_identifier:insufficient_evidence": 40,
+      "adds_identifier:supported": 45,
+      "adds_test:insufficient_evidence": 16,
+      "adds_test:supported": 11,
+      "changes_dependency:insufficient_evidence": 7,
+      "changes_dependency:supported": 3,
+      "changes_file:insufficient_evidence": 132,
+      "changes_file:supported": 79,
+      "describes_behavior:unverifiable": 833,
+      "files_changed_count:contradicted": 1,
+      "lines_added_count:contradicted": 11,
+      "lines_deleted_count:contradicted": 3,
+      "modifies_identifier:insufficient_evidence": 15,
+      "modifies_identifier:supported": 1,
+      "removes_identifier:insufficient_evidence": 12,
+      "removes_identifier:supported": 5
+    }
+  },
+  "vocabulary": {
+    "fingerprint": "620ebd71c7dda399cb8b90e5ac038a2a2cf510782a86202b79b75c8d84900d2c",
+    "name": "code_change",
+    "version": "2.0"
+  }
+}

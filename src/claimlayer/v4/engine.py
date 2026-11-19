@@ -1057,13 +1057,13 @@ class EvidenceLayer:
         return ev.as_basis(), None
 
     # ------------------------------------------------------------------ queries
-    def _query(self, query):
+    def _query(self, query, *, validity='filter'):
         if isinstance(query, dict):
             query = StructuredQuery(**query)
         if not isinstance(query, StructuredQuery):
             raise TypeError('Use StructuredQuery or its dictionary; interpret natural language before asking')
-        return replace(query, entity=self.vocabulary.entity(query.entity),
-                       as_of=query.as_of or datetime.now(timezone.utc).isoformat())
+        as_of = query.as_of if (query.as_of is not None or validity == 'ignore') else datetime.now(timezone.utc).isoformat()
+        return replace(query, entity=self.vocabulary.entity(query.entity), as_of=as_of)
 
     def ask(self, query, *, conditions='report', assertion_kinds=None, validity='filter'):
         """Resolve, list or aggregate over eligible units. Never invokes a model.
@@ -1080,7 +1080,7 @@ class EvidenceLayer:
         if validity not in {'filter', 'ignore'}:
             raise ValueError("validity must be 'filter' (as_of) or 'ignore' (document review across periods)")
         try:
-            query = self._query(query)
+            query = self._query(query, validity=validity)
             spec = self.vocabulary.predicate(query.predicate)
         except UnmappedProposal as exc:
             return self._issue({'status': 'invalid_query', 'abstain': True, 'reason': exc.as_dict(), 'results': []})

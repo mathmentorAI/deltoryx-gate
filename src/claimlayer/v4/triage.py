@@ -268,8 +268,11 @@ def draft_vocabulary(ledger: EvidenceLayer, *, max_entities: int = 200, per_pred
         entity, predicate = unit.proposition['entity'], unit.proposition['predicate']
         overall[entity] += 1
         by_predicate.setdefault(predicate, Counter())[entity] += 1
-    entities = [e for e, _ in overall.most_common(max_entities)]
-    hints = {p: [e for e, _ in c.most_common(per_predicate)] for p, c in by_predicate.items()}
+    entities = [e for e, _ in sorted(overall.items(), key=lambda kv: (-kv[1], kv[0]))[:max_entities]]
+    hints = {
+        p: [e for e, _ in sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))[:per_predicate]]
+        for p, c in sorted(by_predicate.items())
+    }
     return with_entities(ledger.vocabulary, entities, hints)
 
 

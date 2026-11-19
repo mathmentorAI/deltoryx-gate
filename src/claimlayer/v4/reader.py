@@ -547,9 +547,10 @@ class LLMProposalReader:
             except Exception as exc:
                 diagnostics = copy.deepcopy(getattr(exc, 'diagnostics', None))
                 truncated = any(a.get('finish_reason') == 'length' for a in (diagnostics or {}).get('attempts', []))
-                if truncated and size > 1:
+                missing_parent_window = isinstance(exc, KeyError) and diagnostics is None
+                if (truncated or missing_parent_window) and size > 1:
                     pending[:0] = [(first, size // 2), (first + size // 2, size - size // 2)]
-                    calls.append({'window': label, 'split': 'truncated'})
+                    calls.append({'window': label, 'split': 'truncated' if truncated else 'missing_parent_window'})
                     continue
                 errors.append({'window': label, 'error_type': type(exc).__name__, 'diagnostics': diagnostics})
                 continue

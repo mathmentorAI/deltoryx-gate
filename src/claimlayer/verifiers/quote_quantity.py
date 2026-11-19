@@ -36,7 +36,7 @@ _QUOTE_MAP = str.maketrans(
 
 _ZERO_WIDTH_RE = re.compile(r"[\u00ad\u200b\u200c\u200d\ufeff]")
 _LINEBREAK_HYPHEN_RE = re.compile(
-    r"([a-zA-ZáéíóúñüÁÉÍÓÚÑÜ])-\s*\n\s*([a-zA-ZáéíóúñüÁÉÍÓÚÑÜ])"
+    r"([a-zA-ZÀ-ÖØ-öø-ÿ0-9])-\s*\n\s*([a-zA-ZÀ-ÖØ-öø-ÿ0-9])"
 )
 
 _BULLET_BLOCKLIST_PREV_RE = re.compile(
@@ -116,10 +116,10 @@ def _canonicalize_bullets(text: str) -> str:
     return "".join(out)
 
 
-def _canonicalize_layout_text(text: str) -> str:
-    """Canonicalize typography, whitespace, punctuation/number spaces, and bullets to a layout-invariant form."""
+def _canonicalize_layout_text_with_provenance(text: str) -> tuple[str, list[dict[str, str]]]:
+    """Canonicalize typography, spacing, bullets, and equivalent quantity notations with provenance."""
     if not text:
-        return ""
+        return "", []
     s = re.sub(r"\u00ad(?=[ \t]*\r?\n)", "-", text)
     s = re.sub(r"(?<=[A-Za-z0-9])\u2014(?=[A-Za-z0-9])", " - ", s)
     s = s.translate(_QUOTE_MAP)
@@ -128,7 +128,52 @@ def _canonicalize_layout_text(text: str) -> str:
     s = re.sub(r"\s+", " ", s).strip()
     s = _canonicalize_punctuation_and_numbers(s)
     s = _canonicalize_bullets(s)
-    return re.sub(r"\s+", " ", s).strip()
+    s, prov = canonicalize_quantity_notations_with_provenance(s)
+    return re.sub(r"\s+", " ", s).strip(), prov
+
+
+def _canonicalize_layout_text(text: str) -> str:
+    """Canonicalize typography, whitespace, punctuation/number spaces, bullets, and quantity notations."""
+    canon, _ = _canonicalize_layout_text_with_provenance(text)
+    return canon
+
+
+def _build_line_tolerant_search_regex(norm_quote: str) -> str:
+    """Build a regex matching canonical *norm_quote* against line-wrapped/separated-$ text."""
+    parts: list[str] = []
+    i = 0
+    n = len(norm_quote)
+    while i < n:
+        ch = norm_quote[i]
+        if ch == " ":
+            parts.append(r"\s+")
+            i += 1
+            continue
+        if norm_quote.startswith("US$", i) and i + 3 < n and norm_quote[i + 3].isdigit():
+            parts.append(r"US\$\s*")
+            i += 3
+            continue
+        if ch in ("$", "€", "£") and i + 1 < n and norm_quote[i + 1].isdigit():
+            parts.append(re.escape(ch) + r"\s*")
+            i += 1
+            continue
+        if ch in (",", ";", ":", ")", "]", "%"):
+            parts.append(r"[ \t]*" + re.escape(ch))
+            if ch == "," and i > 0 and norm_quote[i - 1].isdigit() and i + 1 < n and norm_quote[i + 1].isdigit():
+                parts.append(r"[ \t]*")
+            i += 1
+            continue
+        if ch in ("(", "["):
+            parts.append(re.escape(ch) + r"[ \t]*")
+            i += 1
+            continue
+        if ch == "." and i > 0 and i + 1 < n and norm_quote[i - 1].isdigit() and norm_quote[i + 1].isdigit():
+            parts.append(r"[ \t]*\.[ \t]*")
+            i += 1
+            continue
+        parts.append(re.escape(ch))
+        i += 1
+    return "".join(parts)
 
 # English and Spanish compound number words
 _ONES_EN: dict[str, int] = {
@@ -525,7 +570,8 @@ _SQUASHED_SCALE_WORDS: dict[str, Decimal] = {
 }
 
 _PAREN_PREFIX_SQUASHED_RE = re.compile(
-    r"^(?P<pre>(?:amounts?|dollars?|usdollars?|usd|eur|gbp|euros?|pounds?|[$€£])+)?"
+    r"^(?:unaudited|audited|condensed|consolidated)*"
+    r"(?P<pre>(?:amounts?|dollars?|usdollars?|usd|eur|gbp|euros?|pounds?|[$€£])+)?"
     r"(?P<prep>in|en)?"
     r"(?P<sym>[$€£])?"
     r"(?:(?P<scale_w>thousands?|millions?|billions?|miles|millones)|(?P<zeros>0{3,9})s?)"
@@ -538,11 +584,11 @@ _BANNER_SCALE_DECL_RE = re.compile(
     r"(?:(?:amounts?|dollars?|u\.?s\.?\s*dollars?|usd|eur|gbp|euros?|pounds?|[$€£])\s+(?:in|en)\s+[$€£]?(?P<scale_b>thousands|millions|billions|miles|millones)\b"
     r"|\b(?:in|en)\s+[$€£]?(?P<scale_i>thousands|millions|billions|miles|millones)\b"
     r"(?:\s+(?:of|de)\s+(?:U\.S\.\s+)?(?:dollars?|euros?|pounds?))?)"
-    r"(?:\s*[,;]\s*except[^\n.;]{1,140})?",
+    r"(?:\s*[,;]\s*except[^\n.;]{1,140}(?:\n[^\n.;]{1,80})?)?",
     re.IGNORECASE,
 )
 
-_PAREN_BLOCK_RE = re.compile(r"\(([^()\n]{2,180})\)")
+_PAREN_BLOCK_RE = re.compile(r"\(([^()]{2,220})\)")
 _ROW_PER_SHARE_OR_PAR_RE = re.compile(
     r"\b(?:per\b(?:\s+[a-z0-9\-]+){0,5}\s+(?:shares?|units?|ads|adss)|"
     r"per[-\s]+(?:share|unit|ads)|"
@@ -623,7 +669,10 @@ def _find_table_scale_headers(text: str) -> list[_TableScaleHeaderSpec]:
     paren_spans: list[tuple[int, int]] = []
 
     for m in _PAREN_BLOCK_RE.finditer(text):
-        parsed = _parse_paren_inner_scale(m.group(1))
+        inner_raw = m.group(1)
+        if "\n\n" in inner_raw or re.search(r"\n[ \t]*\n", inner_raw):
+            continue
+        parsed = _parse_paren_inner_scale(re.sub(r"\s+", " ", inner_raw))
         if parsed is None:
             continue
         scale, cur, has_ctx, exc_ps, exc_pv, exc_pct, exc_sh = parsed
@@ -934,13 +983,13 @@ def _collect_hyphen_lexical_sets(texts: list[str] | tuple[str, ...]) -> tuple[fr
         if not raw:
             continue
         cleaned = raw.translate(_QUOTE_MAP)
-        # Skip line-break hyphens when discovering genuine inline lexical hyphens.
-        for m in re.finditer(r"\b([A-Za-z]{2,})-([A-Za-z]{2,})\b", cleaned):
+        # Skip line-break hyphens when discovering genuine inline lexical hyphens (include accented letters & digits).
+        for m in re.finditer(r"(?<![A-Za-zÀ-ÖØ-öø-ÿ0-9])([A-Za-zÀ-ÖØ-öø-ÿ0-9]{2,})-([A-Za-zÀ-ÖØ-öø-ÿ0-9]{2,})(?![A-Za-zÀ-ÖØ-öø-ÿ0-9])", cleaned):
             between = cleaned[m.end(1) : m.start(2)]
             if "\n" not in between and "\r" not in between:
                 hyphenated.add((m.group(1).lower(), m.group(2).lower()))
         # Standalone inline unhyphenated words (exclude sides adjacent to a hyphen).
-        for m in re.finditer(r"(?<![A-Za-z-])([A-Za-z]{4,})(?![A-Za-z-])", cleaned):
+        for m in re.finditer(r"(?<![A-Za-zÀ-ÖØ-öø-ÿ-])([A-Za-zÀ-ÖØ-öø-ÿ]{4,})(?![A-Za-zÀ-ÖØ-öø-ÿ-])", cleaned):
             joined.add(m.group(1).lower())
     return frozenset(hyphenated), frozenset(joined)
 
@@ -995,6 +1044,9 @@ def normalize_span(
     known_hyphenated, known_joined = _collect_hyphen_lexical_sets(vocab_inputs)
 
     def _replace_lb(m: re.Match[str]) -> str:
+        # Preserve hyphen directly when either side is a digit ("30-\nday", "2024-\n2025").
+        if not (m.group(1).isalpha() and m.group(2).isalpha()):
+            return f"{m.group(1)}-{m.group(2)}"
         # Expand to full adjacent ASCII word tokens around the hyphen for lexical check.
         start = m.start()
         end = m.end()
@@ -1003,8 +1055,8 @@ def normalize_span(
         while end < len(pre_text) and pre_text[end].isalpha():
             end += 1
         seg = pre_text[start:end]
-        lm = re.match(r"([A-Za-z]+)", seg)
-        rm = re.search(r"([A-Za-z]+)$", seg)
+        lm = re.match(r"([A-Za-zÀ-ÖØ-öø-ÿ]+)", seg)
+        rm = re.search(r"([A-Za-zÀ-ÖØ-öø-ÿ]+)$", seg)
         if lm and rm and _should_preserve_linebreak_hyphen(lm.group(1), rm.group(1), known_hyphenated, known_joined):
             return f"{m.group(1)}-{m.group(2)}"
         return f"{m.group(1)}{m.group(2)}"
@@ -1098,23 +1150,32 @@ def _detect_candidate_furniture_indices(lines: list[dict[str, object]]) -> dict[
             continue
         if _SECTION_HEADER_ONLY_RE.match(stripped) or _OUTLINE_ITEM_PREFIX_RE.match(stripped):
             continue
-        if re.search(r"[A-Za-z]-$", stripped):
+        if re.search(r"[A-Za-zÀ-ÖØ-öø-ÿ0-9]-$", stripped):
             continue
+        # Do not treat a prose wrap continuation whose previous line ended mid-word ("word-") or mid-sentence as PDF furniture unless bounded by \f.
+        if idx > 0 and not prev_ff and not next_ff:
+            prev_s = str(lines[idx - 1]["stripped"])
+            if prev_s and re.search(r"[A-Za-zÀ-ÖØ-öø-ÿ0-9]-$", prev_s):
+                continue
         if stripped.startswith("|") and re.search(r"\|\s*[$€£]?\d", stripped):
             continue
         words = stripped.split()
-        has_banner_syntax = bool(
+        has_explicit_banner_syntax = bool(
             "|" in stripped
             or " — " in stripped
             or " - " in stripped
             or " -- " in stripped
             or "©" in stripped
-            or "#" in stripped
             or stripped.isupper()
             or re.search(r"\bpage\b", stripped, re.IGNORECASE)
-            or (len(words) <= 6 and not stripped.endswith("."))
         )
-        if not (isolated or has_banner_syntax):
+        # Short repeated lines without explicit banner syntax must be visually isolated (blank lines / form-feed)
+        # and free of inline currency figures so repeating clause fragments at narrow wrap widths are never stripped.
+        has_currency_figure = bool(re.search(r"[$€£]\s*\d", stripped))
+        short_isolated_header = bool(
+            isolated and len(words) <= 6 and not stripped.endswith(".") and not has_currency_figure
+        )
+        if not (has_explicit_banner_syntax or short_isolated_header or (isolated and not has_currency_figure)):
             continue
         skeleton = re.sub(r"\s+", " ", re.sub(r"\d+", "#", stripped.lower())).strip()
         if len(re.sub(r"[^a-z#]", "", skeleton)) < 3:
@@ -1471,7 +1532,7 @@ def _normalize_pdf_ocr_with_map(
     j = 0
     while j < m:
         ch, orig_s, orig_e = stage1[j]
-        if ch == "-" and stage2 and stage2[-1][0].isalpha():
+        if ch == "-" and stage2 and stage2[-1][0].isalnum():
             k = j + 1
             while k < m and stage1[k][0] in (" ", "\t"):
                 k += 1
@@ -1479,28 +1540,51 @@ def _normalize_pdf_ocr_with_map(
                 k += 1
                 while k < m and stage1[k][0] in (" ", "\t"):
                     k += 1
-                if k < m and stage1[k][0].isalpha():
+                if k < m and stage1[k][0].isalnum():
+                    left_prev_alpha = stage2[-1][0].isalpha()
                     next_ch = stage1[k][0]
+                    right_next_alpha = next_ch.isalpha()
+                    # Numeric or alphanumeric line-break hyphens ("30-\nday", "2024-\n2025", "77aaa-\n77bbbb")
+                    # always preserve the hyphen directly with no inserted space.
+                    if not (left_prev_alpha and right_next_alpha):
+                        stage2.append(("-", orig_s, orig_e))
+                        j = k
+                        continue
+                    l_idx = len(stage2) - 1
+                    l_chars: list[str] = []
+                    while l_idx >= 0 and stage2[l_idx][0].isalpha():
+                        l_chars.append(stage2[l_idx][0])
+                        l_idx -= 1
+                    left_word = "".join(reversed(l_chars))
+                    r_idx = k
+                    r_chars: list[str] = []
+                    while r_idx < m and stage1[r_idx][0].isalpha():
+                        r_chars.append(stage1[r_idx][0])
+                        r_idx += 1
+                    right_word = "".join(r_chars)
                     all_caps_wrap = (
                         next_ch.isupper()
                         and len(stage2) >= 2
                         and stage2[-1][0].isupper()
                         and stage2[-2][0].isupper()
                     )
-                    if next_ch.islower() or all_caps_wrap:
-                        l_idx = len(stage2) - 1
-                        l_chars: list[str] = []
-                        while l_idx >= 0 and stage2[l_idx][0].isalpha():
-                            l_chars.append(stage2[l_idx][0])
-                            l_idx -= 1
-                        left_word = "".join(reversed(l_chars))
-                        r_idx = k
-                        r_chars: list[str] = []
-                        while r_idx < m and stage1[r_idx][0].isalpha():
-                            r_chars.append(stage1[r_idx][0])
-                            r_idx += 1
-                        right_word = "".join(r_chars)
+                    title_compound_wrap = (
+                        next_ch.isupper()
+                        and bool(left_word)
+                        and (
+                            (left_word.lower(), right_word.lower()) in eff_hyphenated
+                            or left_word.lower() in _LEXICAL_HYPHEN_LEFT_PREFIXES
+                            or (
+                                left_word[0].isupper()
+                                and any(c.islower() for c in left_word[1:])
+                                and (left_word + right_word).lower() not in eff_joined
+                            )
+                        )
+                    )
+                    if next_ch.islower() or all_caps_wrap or title_compound_wrap:
                         if _should_preserve_linebreak_hyphen(left_word, right_word, eff_hyphenated, eff_joined):
+                            stage2.append(("-", orig_s, orig_e))
+                        elif title_compound_wrap and (left_word + right_word).lower() not in eff_joined:
                             stage2.append(("-", orig_s, orig_e))
                         j = k
                         continue
@@ -1582,6 +1666,108 @@ def _count_phrase_in_norm_body(key_text: str, body_text: str) -> int:
     return len(re.findall(r"(?<![a-z0-9])" + re.escape(key_text) + r"(?![a-z0-9])", body_text, re.IGNORECASE))
 
 
+_HEADING_SMALL_WORDS = frozenset(
+    {"a", "an", "and", "as", "at", "by", "for", "in", "of", "on", "or", "the", "to", "with", "y", "de", "del", "la", "el", "los", "las"}
+)
+_HEADING_MARKER_PREFIX_RE = re.compile(
+    r"^(?P<lead>[ \t]*(?:#{1,6}[ \t]*)?)(?P<marker>(?:\d+(?:\.\d+)*\.?[ \t]+)?[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ \t&/\-]{2,48}?)(?P<colon>[ \t]*:)(?=[ \t]+\S|[ \t]*$)"
+)
+
+
+def _is_typographic_heading_text(text: str) -> bool:
+    """True iff *text* is set as a heading: ALL CAPS, or Title Case on every significant word."""
+    letters = [c for c in text if c.isalpha()]
+    if len(letters) < 3:
+        return False
+    if all(c.isupper() for c in letters):
+        return True
+    words = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ'\-]*", text)
+    significant = [w for w in words if w.lower() not in _HEADING_SMALL_WORDS]
+    return bool(significant) and all(w[0].isupper() for w in significant)
+
+
+def _heading_candidates(text: str) -> list[tuple[int, int, str, str]]:
+    """Return `(start, end, case_insensitive_key, raw_form)` for heading lines / heading-marker prefixes.
+
+    Only typographic headings qualify (short line or `MARKER:` prefix, starting with a letter/digit, set
+    in ALL CAPS or Title Case). Body prose lines never qualify, so body casing is never folded.
+    """
+    out: list[tuple[int, int, str, str]] = []
+    pos = 0
+    for raw_ln in text.splitlines(keepends=True):
+        line = raw_ln.rstrip("\r\n")
+        ln_start = pos
+        pos += len(raw_ln)
+        stripped = line.strip()
+        if not stripped:
+            continue
+        lead = len(line) - len(line.lstrip())
+        body = stripped.lstrip("#").strip()
+        first = body[:1]
+        if not first or not (first.isalpha() or first.isdigit() or first == "§"):
+            continue
+        whole_ok = (
+            len(stripped) <= 80
+            and len(stripped.split()) <= 12
+            and not stripped.endswith((".", ",", ";"))
+            and _is_typographic_heading_text(re.sub(r"^[\d.\s§]+", "", body))
+        )
+        if whole_ok:
+            s = ln_start + lead
+            e = ln_start + lead + len(stripped)
+            key = re.sub(r"\s+", " ", stripped.lower()).rstrip(" :")
+            out.append((s, e, key, stripped))
+            continue
+        m = _HEADING_MARKER_PREFIX_RE.match(line)
+        if m:
+            marker = m.group("marker").strip()
+            if len(marker.split()) <= 5 and _is_typographic_heading_text(re.sub(r"^[\d.\s]+", "", marker)):
+                s = ln_start + m.start("marker")
+                e = ln_start + m.end("marker")
+                key = re.sub(r"\s+", " ", marker.lower())
+                out.append((s, e, key, marker))
+    return out
+
+
+def _upper_same_length(text: str) -> str:
+    return "".join(c.upper() if len(c.upper()) == 1 else c for c in text)
+
+
+def joint_fold_heading_case(primary_text: str, secondary_text: str) -> tuple[str, str, list[dict[str, str]]]:
+    """Decide heading casing jointly for both versions (length-preserving, offsets unchanged).
+
+    Rule: a heading line or `MARKER:` prefix whose text matches a heading in the other version
+    case-insensitively but with a different casing (e.g. ``WITNESSETH:`` vs ``Witnesseth:``,
+    ``1. COVENANTS`` vs ``1. Covenants``) is rendered in upper case in BOTH versions, so heading
+    recognition and section alignment are identical on both sides and a heading-only case change is
+    not a divergence. Body prose is never folded: a defined-term case change inside a clause
+    (``"Affiliate"`` vs ``"affiliate"``) remains a detected textual divergence.
+    """
+    if not primary_text or not secondary_text:
+        return primary_text, secondary_text, []
+    p_c = _heading_candidates(primary_text)
+    s_c = _heading_candidates(secondary_text)
+    forms: dict[str, set[str]] = {}
+    p_keys = {k for _, _, k, _ in p_c}
+    s_keys = {k for _, _, k, _ in s_c}
+    for _, _, k, raw in (*p_c, *s_c):
+        forms.setdefault(k, set()).add(re.sub(r"\s+", " ", raw).rstrip(" :"))
+    differing = {k for k in (p_keys & s_keys) if len(forms.get(k, ())) > 1}
+    if not differing:
+        return primary_text, secondary_text, []
+
+    def _apply(text: str, cands: list[tuple[int, int, str, str]]) -> str:
+        chars = list(text)
+        for s, e, k, _ in cands:
+            if k in differing:
+                seg = _upper_same_length(text[s:e])
+                chars[s:e] = list(seg)
+        return "".join(chars)
+
+    prov = [{"rule": "header_case_folding", "from": " | ".join(sorted(forms[k])), "to": k.upper()} for k in sorted(differing)]
+    return _apply(primary_text, p_c), _apply(secondary_text, s_c), prov
+
+
 def _normalize_pair_with_maps(
     primary_text: str,
     secondary_text: str,
@@ -1594,6 +1780,8 @@ def _normalize_pair_with_maps(
     tuple[str, list[int], list[int], tuple[dict[str, object], ...]],
 ]:
     """Normalize a primary/secondary text pair with symmetric furniture exclusion and shared hyphen vocab."""
+    # Joint, length-preserving heading-case decision (offsets into the raw texts remain valid).
+    primary_text, secondary_text, _ = joint_fold_heading_case(primary_text, secondary_text)
     known_hyph, known_joined = _collect_hyphen_lexical_sets((primary_text, secondary_text))
     p_override: dict[int, str] | None = None
     s_override: dict[int, str] | None = None
@@ -1922,19 +2110,136 @@ _ALL_NUMBER_WORDS = sorted(
     | set(_ONES_ES)
     | set(_TENS_ES)
     | set(_HUNDREDS_ES)
-    | {"hundred", "thousand", "mil", "and", "y"},
+    | {"hundred", "thousand", "mil"},
     key=len,
     reverse=True,
 )
+_ALL_NUMBER_TAIL_WORDS = sorted(set(_ALL_NUMBER_WORDS) | {"and", "y"}, key=len, reverse=True)
 
 _COMPOUND_WORD_QTY_RE = re.compile(
     r"(?<![a-zA-ZáéíóúñüÁÉÍÓÚÑÜ\-])"
-    r"(?P<phrase>(?:" + "|".join(_ALL_NUMBER_WORDS) + r")(?:[\s\-]+(?:" + "|".join(_ALL_NUMBER_WORDS) + r"))*)"
+    r"(?P<phrase>(?:" + "|".join(_ALL_NUMBER_WORDS) + r")(?:[\s\-]+(?:" + "|".join(_ALL_NUMBER_TAIL_WORDS) + r"))*)"
     r"(?:\s*\((?P<paren_num>\d+)\))?"
     r"(?:\s+(?P<scale>mil\s+millones|billions?|millions?|millones|mill[oó]n|thousands?|miles|mil))?"
     r"(?:\s+|\s*-\s*)(?:(?:de|of)\s+)?(?P<unit>" + _UNIT_PATTERN + r")",
     re.IGNORECASE,
 )
+
+_PAREN_NUM_WORD_RE = re.compile(
+    r"(?<![a-zA-ZáéíóúñüÁÉÍÓÚÑÜ\-])"
+    r"(?P<phrase>(?:" + "|".join(_ALL_NUMBER_WORDS) + r")(?:[\s\-]+(?:" + "|".join(_ALL_NUMBER_TAIL_WORDS) + r"))*)"
+    r"\s*\((?P<paren_num>\d+)\)",
+    re.IGNORECASE,
+)
+
+_STANDALONE_WORD_QTY_CANON_RE = re.compile(
+    r"(?<![a-zA-ZáéíóúñüÁÉÍÓÚÑÜ0-9\-])"
+    r"(?P<phrase>(?:" + "|".join(_ALL_NUMBER_WORDS) + r")(?:[\s\-]+(?:" + "|".join(_ALL_NUMBER_TAIL_WORDS) + r"))*)"
+    r"(?P<sep>\s+)(?=(?:"
+    r"(?:mil\s+millones|billions?|millions?|millones|mill[oó]n|thousands?|miles)\b|"
+    r"(?:business|working|banking|trading|calendar|fiscal)?\s*(?:days?|weeks?|months?|years?|hours?|d[ií]as?|semanas?|mes(?:es)?|a[ñn]os?|horas?)\b|"
+    r"per\s+cent\.?|percent\b|por\s+ciento\b|%|basis\s+points?|bps\b|dollars?|d[oó]lares?|euros?|pounds?|libras?"
+    r"))",
+    re.IGNORECASE,
+)
+
+
+def detect_internal_quantity_conflicts(text: str) -> list[dict[str, object]]:
+    """Detect internal written-vs-parenthetical numeral discrepancies such as 'thirty (40) days'."""
+    if not text:
+        return []
+    conflicts: list[dict[str, object]] = []
+    for m in _PAREN_NUM_WORD_RE.finditer(text):
+        word_val = _parse_word_number_phrase(m.group("phrase"))
+        if word_val is None:
+            continue
+        paren_val = int(m.group("paren_num"))
+        if word_val != paren_val:
+            conflicts.append(
+                {
+                    "kind": "word_paren_mismatch",
+                    "raw": m.group(0),
+                    "word_value": word_val,
+                    "paren_value": paren_val,
+                    "span": [m.start(), m.end()],
+                }
+            )
+    return conflicts
+
+
+def canonicalize_quantity_notations_with_provenance(
+    text: str,
+) -> tuple[str, list[dict[str, str]]]:
+    """Symmetrically normalize equivalent quantity notations while recording rule provenance.
+
+    Rules normalized symmetrically:
+    - ``thousands_separator``: comma thousands present vs absent (``1,000,000`` -> ``1000000``), preserving decimals.
+    - ``percent_notation``: ``5 percent`` / ``5 per cent`` / ``5 %`` -> ``5%``.
+    - ``word_paren_number``: matching ``thirty (30)`` -> ``30`` and ``thirty days`` -> ``30 days``;
+      contradictory forms such as ``thirty (40)`` are NEVER collapsed so they always remain flagged.
+    """
+    if not text:
+        return "", []
+    prov: list[dict[str, str]] = []
+    s = text
+
+    # 1. Equivalent written + parenthetical numeral "thirty (30)" -> "30" (skip contradictions like "thirty (40)")
+    def _rep_wp(m: re.Match[str]) -> str:
+        word_val = _parse_word_number_phrase(m.group("phrase"))
+        paren_val = int(m.group("paren_num"))
+        if word_val is not None and word_val == paren_val:
+            canon = str(paren_val)
+            prov.append({"rule": "word_paren_number", "from": m.group(0), "to": canon})
+            return canon
+        return m.group(0)
+
+    s = _PAREN_NUM_WORD_RE.sub(_rep_wp, s)
+
+    # 2. Standalone word number directly quantifying a typed unit or scale ("thirty days" -> "30 days")
+    def _rep_word_qty(m: re.Match[str]) -> str:
+        phrase = m.group("phrase")
+        word_val = _parse_word_number_phrase(phrase)
+        if word_val is None:
+            return m.group(0)
+        # Keep non-trivial written numerals ("one" only when followed by a unit, avoid "a"/"one of")
+        low_p = phrase.strip().lower()
+        if low_p in {"one", "un", "uno", "una"} and not re.search(r"\d", text):
+            # Only canonicalize "one"/"un" if unambiguous unit check; still safe before days/months/years/percent/dollars
+            pass
+        canon = str(word_val)
+        prov.append({"rule": "word_number_unit", "from": phrase, "to": canon})
+        return f"{canon}{m.group('sep')}"
+
+    s = _STANDALONE_WORD_QTY_CANON_RE.sub(_rep_word_qty, s)
+
+    # 3. Percent notation: "5 percent" / "5 per cent" / "5 %" -> "5%"
+    def _rep_pct(m: re.Match[str]) -> str:
+        canon_pct = f"{m.group('num')}%"
+        if m.group(0).strip() != canon_pct:
+            prov.append({"rule": "percent_notation", "from": m.group(0), "to": canon_pct})
+        return canon_pct
+
+    s = re.sub(
+        r"(?P<num>\b\d+(?:,\d{3})*(?:\.\d+)?|\b\d+(?:\.\d+)?)\s*(?:per\s+cent\.?(?!\w)|percent\b|%)",
+        _rep_pct,
+        s,
+        flags=re.IGNORECASE,
+    )
+
+    # 4. Thousands separator presence/absence ("1,000,000" -> "1000000", "$1,250.50" -> "$1250.50")
+    has_euro_decimal_pattern = bool(re.search(r"\b\d+\.\d{3}(?:,\d{1,2})?\b", s))
+
+    def _rep_thousands(m: re.Match[str]) -> str:
+        raw_tok = m.group(0)
+        # Do not alter single-comma European decimal like "1,250 euros" in dot-grouped EU text
+        if has_euro_decimal_pattern and raw_tok.count(",") == 1 and "." not in raw_tok:
+            return raw_tok
+        stripped = raw_tok.replace(",", "")
+        prov.append({"rule": "thousands_separator", "from": raw_tok, "to": stripped})
+        return stripped
+
+    s = re.sub(r"(?<![0-9.,])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![0-9,])", _rep_thousands, s)
+    return s, prov
 
 
 def _extract_table_header_currency(header_snippet: str) -> str | None:
@@ -1996,7 +2301,10 @@ def _detect_contextual_table_spec(
     norm_quote = normalize_span(quote)
     if not norm_quote:
         return None
-    location = re.search(re.escape(norm_quote).replace(r"\ ", r"\s+"), normalized_source, re.IGNORECASE)
+    tolerant_pat = _build_line_tolerant_search_regex(norm_quote)
+    location = re.search(tolerant_pat, normalized_source, re.IGNORECASE)
+    if not location:
+        location = re.search(re.escape(norm_quote).replace(r"\ ", r"\s+"), normalized_source, re.IGNORECASE)
     if not location:
         return None
     offset = location.start()
@@ -2013,12 +2321,19 @@ def _detect_contextual_table_spec(
     if _has_blocking_table_boundary(between):
         return None
     hdr_raw_snippet = normalized_source[spec.hdr_start : spec.hdr_end].strip()
-    is_table_banner = spec.is_parenthetical or bool(
-        normalized_source[max(0, spec.hdr_start - 120) : spec.hdr_end].strip()
-        and (
-            "$" in hdr_raw_snippet
-            or "USD" in normalized_source[max(0, spec.hdr_start - 80) : spec.hdr_end]
-            or re.match(r"^(?:amounts?|dollars?|usd|eur|gbp|[$€£])\b", hdr_raw_snippet, re.IGNORECASE)
+    is_table_banner = (
+        spec.is_parenthetical
+        or spec.exclude_per_share
+        or spec.exclude_par_value
+        or spec.exclude_percentages
+        or spec.exclude_shares
+        or bool(
+            re.search(
+                r"\b(?:amounts?|dollars?|usd|eur|gbp|[$€£]|in\s+(?:thousands|millions|billions)|"
+                r"(?:thousands|millions|billions)\s*(?:,|\bexcept))\b",
+                hdr_raw_snippet,
+                re.IGNORECASE,
+            )
         )
     )
     looks_like_prose_sentence = (
@@ -2122,16 +2437,44 @@ def _line_has_table_data_number(norm_line: str) -> bool:
     return bool(_DATA_NUMBER_IN_LINE_RE.search(cleaned))
 
 
+def _scale_header_line_indices(norm_lines: list[str]) -> set[int]:
+    """Indices of lines belonging to a (possibly multi-line) table-scale header declaration."""
+    joined = "\n".join(norm_lines)
+    specs = _find_table_scale_headers(joined)
+    if not specs:
+        return set()
+    starts: list[int] = []
+    pos = 0
+    for ln in norm_lines:
+        starts.append(pos)
+        pos += len(ln) + 1
+    out: set[int] = set()
+    for i, st in enumerate(starts):
+        en = st + len(norm_lines[i])
+        if any(sp.hdr_start < en and st < sp.span_end for sp in specs):
+            out.add(i)
+    return out
+
+
 def _scan_row_group_state(lines: list[str]) -> tuple[str, str]:
     """Return `(active_group_label, combined_group_and_pending_label)` after walking *lines*."""
     group_label = ""
     pending_labels: list[str] = []
-    for ln in lines:
-        s = ln.strip()
-        if not s:
+    blank_run = 0
+    hdr_idx = _scale_header_line_indices([x.strip() for x in lines])
+    for li, ln in enumerate(lines):
+        if li in hdr_idx:
             pending_labels.clear()
             group_label = ""
             continue
+        s = ln.strip()
+        if not s:
+            blank_run += 1
+            if blank_run >= 2:
+                pending_labels.clear()
+                group_label = ""
+            continue
+        blank_run = 0
         if s in {"$", "€", "£"}:
             continue
         if _find_table_scale_headers(s):
@@ -2172,12 +2515,28 @@ def _build_norm_line_context(raw_text: str, norm_text: str) -> list[tuple[int, i
     cursor = 0
     group_label = ""
     pending_labels: list[str] = []
+    blank_run = 0
 
-    for raw_ln in raw_text.splitlines():
+    raw_lines_all = raw_text.splitlines()
+    hdr_idx = _scale_header_line_indices([normalize_span(x) for x in raw_lines_all])
+    for li, raw_ln in enumerate(raw_lines_all):
         nln = normalize_span(raw_ln)
-        if not nln:
+        if li in hdr_idx and nln:
+            found_h = norm_text.find(nln, cursor)
+            h_start = found_h if found_h >= 0 else min(cursor, len(norm_text))
+            h_end = min(len(norm_text), h_start + len(nln))
+            cursor = h_end
+            out.append((h_start, h_end, ""))
             pending_labels.clear()
+            group_label = ""
             continue
+        if not nln:
+            blank_run += 1
+            if blank_run >= 2:
+                pending_labels.clear()
+                group_label = ""
+            continue
+        blank_run = 0
         found = norm_text.find(nln, cursor)
         if found >= 0:
             start = found
@@ -2418,15 +2777,20 @@ def extract_quantities(
         word_val = _parse_word_number_phrase(m.group("phrase"))
         if word_val is None:
             continue
-        mag = Decimal(word_val)
         scale_raw = m.group("scale")
-        if scale_raw:
-            scale_key = re.sub(r"\s+", " ", scale_raw.strip().lower())
-            mag *= _SCALE_FACTORS.get(scale_key, Decimal("1"))
+        scale_mult = _SCALE_FACTORS.get(re.sub(r"\s+", " ", scale_raw.strip().lower()), Decimal("1")) if scale_raw else Decimal("1")
         unit = canonicalize_unit(m.group("unit"))
         span = (m.start(), m.end())
+        mag = Decimal(word_val) * scale_mult
         occupied_spans.append(span)
         results.append(ParsedQuantity(magnitude=mag.normalize(), unit=unit, span=span))
+        # Negative control: never hide a contradicting parenthetical numeral such as "thirty (40) days".
+        paren_raw = m.group("paren_num")
+        if paren_raw is not None:
+            paren_val = int(paren_raw)
+            if paren_val != word_val:
+                paren_mag = Decimal(paren_val) * scale_mult
+                results.append(ParsedQuantity(magnitude=paren_mag.normalize(), unit=unit, span=span))
 
     # 5. Numeric quantities
     for m in _NUMERIC_QUANTITY_RE.finditer(scrubbed):
@@ -2601,10 +2965,35 @@ def segment_sentences_with_spans(text: str, base_offset: int = 0) -> list[tuple[
 
 
 _TABLE_PARENS_NOTE_RE = re.compile(
-    r"\(\s*(?:(?:amounts?|dollars?|usd|eur|gbp|[$€£])\s+)?(?:in|en)\s+"
-    r"(?:thousands|millions|billions|miles|millones)\b[^()\n]{0,100}\)",
+    r"\(\s*(?:(?:unaudited|audited|condensed|consolidated|amounts?|dollars?|usd|eur|gbp|[$€£])[\s\-–—,]*)?"
+    r"(?:(?:in|en)\s+)?"
+    r"(?:thousands|millions|billions|miles|millones)\b[^()]{0,220}\)",
     re.IGNORECASE,
 )
+
+
+def _scrub_table_scale_header_clauses(text: str) -> str:
+    """Remove table-scale declaration banners (and their 'except ...' row-classification clauses)."""
+    if not text:
+        return ""
+    scrubbed = _TABLE_PARENS_NOTE_RE.sub(" ", text)
+    # Strip any remaining detected table scale header spans (e.g. unparenthesized banners with 'except ...').
+    headers = _find_table_scale_headers(scrubbed)
+    if headers:
+        chars = list(scrubbed)
+        for sp in headers:
+            for k in range(max(0, sp.hdr_start), min(len(chars), sp.span_end)):
+                chars[k] = " "
+        scrubbed = "".join(chars)
+    # Also strip trailing/isolated table classification exception phrase right after scale words.
+    scrubbed = re.sub(
+        r"\bexcept\s+(?:per[- ]share|per[- ]common[- ]share|percentages?|ratios?|par\s+value|"
+        r"(?:number\s+of\s+)?shares(?:\s+in\s+(?:thousands|millions))?)\b[^.;\n]*",
+        " ",
+        scrubbed,
+        flags=re.IGNORECASE,
+    )
+    return scrubbed
 
 
 def _has_truncated_sentence_qualifier(
@@ -2618,7 +3007,10 @@ def _has_truncated_sentence_qualifier(
     q_end = -1
     if raw_source:
         line_source = "\n".join(normalize_span(line) for line in raw_source.splitlines())
-        loc = re.search(re.escape(norm_quote).replace(r"\ ", r"\s+"), line_source, re.IGNORECASE)
+        tolerant_pat = _build_line_tolerant_search_regex(norm_quote)
+        loc = re.search(tolerant_pat, line_source, re.IGNORECASE)
+        if not loc:
+            loc = re.search(re.escape(norm_quote).replace(r"\ ", r"\s+"), line_source, re.IGNORECASE)
         if loc:
             search_text = line_source
             q_start, q_end = loc.start(), loc.end()
@@ -2630,21 +3022,20 @@ def _has_truncated_sentence_qualifier(
 
     sent_start, sent_end = _enclosing_sentence_bounds(search_text, q_start, q_end)
 
-    # Do not let a blank line (\n\n) earlier in a block or a parenthetical "(in millions, except ...)" banner
-    # pretend to negate/modify a subsequent table row or separate paragraph.
+    # Do not let a blank line (\n\n) or a scale header ("except per share data / except percentages")
+    # pretend to negate/modify a governed monetary row.
     raw_leading = search_text[sent_start:q_start]
     if "\n" in raw_leading:
-        # Stop at blank line breaks even if no punctuation separates a header from rows
         parts_blank = re.split(r"\n\s*\n", raw_leading)
         raw_leading = parts_blank[-1]
-    leading_clause = _TABLE_PARENS_NOTE_RE.sub(" ", raw_leading).strip()
+    leading_clause = _scrub_table_scale_header_clauses(raw_leading).strip(" .,:;-—\t\n")
     if leading_clause and _TRUNCATED_QUALIFIER_RE.search(leading_clause):
         return leading_clause
 
     raw_trailing = search_text[q_end:sent_end]
     if "\n" in raw_trailing:
         raw_trailing = re.split(r"\n\s*\n", raw_trailing)[0]
-    trailing_clause = raw_trailing.strip()
+    trailing_clause = _scrub_table_scale_header_clauses(raw_trailing).strip(" .,:;-—\t\n")
     if trailing_clause and _TRAILING_EXCEPTION_RE.search(trailing_clause):
         return trailing_clause
 
@@ -2729,22 +3120,70 @@ def _score_subclause_match(clause_text: str, phrases: list[str], tokens: set[str
     return score
 
 
+def _extract_target_period_year(assertion: Assertion) -> str | None:
+    """Return unique 4-digit period year explicitly named in assertion subject/predicate/condition."""
+    probe = re.sub(r"[_\-]+", " ", f"{assertion.subject or ''} {assertion.predicate or ''} {assertion.condition or ''}")
+    years = re.findall(r"(?<![A-Za-z0-9])((?:19|20)\d{2})(?![A-Za-z0-9])", probe)
+    uniq = sorted(set(years))
+    return uniq[0] if len(uniq) == 1 else None
+
+
+def _extract_table_header_years(ref_text: str, source_text: str | None, col_count: int) -> list[str]:
+    """Find column period year header list matching *col_count* above the table row."""
+    if col_count < 2:
+        return []
+    candidate_lines: list[str] = []
+    if "\n" in ref_text:
+        candidate_lines.extend(ref_text.splitlines()[:-1])
+    if source_text:
+        norm_src_lines = [normalize_span(ln) for ln in source_text.splitlines()]
+        norm_ref_first = normalize_span(ref_text.splitlines()[0] if "\n" in ref_text else ref_text)
+        row_idx = -1
+        for i, ln in enumerate(norm_src_lines):
+            if norm_ref_first and norm_ref_first.lower() in ln.lower():
+                row_idx = i
+                break
+        if row_idx < 0:
+            # Fallback match on stripped source window
+            joined_src = "\n".join(norm_src_lines)
+            m = re.search(_build_line_tolerant_search_regex(normalize_span(ref_text)), joined_src, re.IGNORECASE)
+            if m:
+                row_idx = joined_src[: m.start()].count("\n")
+        if row_idx > 0:
+            candidate_lines = norm_src_lines[max(0, row_idx - 12) : row_idx] + candidate_lines
+
+    for ln in reversed(candidate_lines):
+        yrs = re.findall(r"(?<![A-Za-z0-9])((?:19|20)\d{2})(?![A-Za-z0-9])", ln)
+        # Preserve left-to-right column order; only treat as column header if exact match on distinct columns
+        if len(yrs) == col_count and len(set(yrs)) == col_count:
+            return yrs
+    return []
+
+
 def _check_multi_quantity_subject_binding(
     assertion: Assertion,
     vq: ParsedQuantity,
     same_unit_quote_quantities: list[ParsedQuantity],
     reference_text: str | None = None,
+    source_text: str | None = None,
 ) -> bool:
     """When a quote contains multiple distinct quantities of the same unit (and not a single range),
-    bind *vq* to the sub-clause matching `(assertion.subject, assertion.predicate)`."""
+    bind *vq* to the sub-clause or column period matching `(assertion.subject, assertion.predicate)`."""
     non_range = [qq for qq in same_unit_quote_quantities if not qq.is_range_endpoint]
     distinct_mags = {qq.magnitude for qq in non_range}
     if len(distinct_mags) <= 1:
         return True
 
     ref_text = reference_text if reference_text is not None else assertion.quote
+    sorted_nr = sorted(non_range, key=lambda q: q.span[0])
+    target_year = _extract_target_period_year(assertion)
+    if target_year is not None:
+        hdr_years = _extract_table_header_years(ref_text, source_text, len(sorted_nr))
+        if hdr_years and target_year in hdr_years:
+            col_idx = hdr_years.index(target_year)
+            return vq.matches(sorted_nr[col_idx])
+
     if "\n" not in ref_text.strip() and not re.search(r"[;]", ref_text):
-        sorted_nr = sorted(non_range, key=lambda q: q.span[0])
         prefix_txt = ref_text[: sorted_nr[0].span[0]]
         trailing_txt = ref_text[sorted_nr[0].span[0] :]
         if (
@@ -3238,6 +3677,22 @@ def verify_quote_and_quantities(
                                 message="The proposed rate uses a different time denominator from the citation.",
                                 remediation="Preserve the rate period; annualization requires an explicit conversion policy."))
         val_quantities = extract_quantities(assertion.value, explicit_unit=assertion.unit, es_context=is_es)
+        internal_conflicts = detect_internal_quantity_conflicts(reference_text)
+        if internal_conflicts and val_quantities:
+            conflict_desc = ", ".join(str(c["raw"]) for c in internal_conflicts[:3])
+            issues.append(
+                Issue(
+                    code="QUANTITY_MISMATCH",
+                    disposition="RETRY",
+                    assertion_id=assertion.id,
+                    subject=assertion.subject,
+                    predicate=assertion.predicate,
+                    message=(
+                        f"Source text contains conflicting written vs. parenthetical numeral ({conflict_desc}) in '{source.id}'."
+                    ),
+                    remediation="Resolve the internal contradiction between the written-out number and parenthetical digit before verifying.",
+                )
+            )
         raw_quote_quantities = extract_quantities(
             reference_text,
             table_scale=table_scale,
@@ -3308,6 +3763,7 @@ def verify_quote_and_quantities(
                     vq,
                     same_unit_in_quote,
                     reference_text=reference_text,
+                    source_text=source.text,
                 ):
                     issues.append(
                         Issue(

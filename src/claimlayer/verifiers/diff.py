@@ -15,9 +15,12 @@ from typing import Any
 from claimlayer.models import Policy, Source, normalize_key
 from claimlayer.verifiers.quote_quantity import (
     _canonicalize_layout_text,
+    _canonicalize_layout_text_with_provenance,
     _normalize_pair_with_maps,
+    detect_internal_quantity_conflicts,
     extract_dates,
     extract_quantities,
+    joint_fold_heading_case,
 )
 
 _CROSS_REF_CONTINUATION_RE = re.compile(
@@ -89,8 +92,11 @@ class SectionComparisonReport:
     exclusion_symmetric: bool = True
     exclusion_asymmetry: bool = False
     exclusion_symmetry_check: Mapping[str, Any] = None  # type: ignore[assignment]
+    normalization_provenance: Mapping[str, Any] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
+        if self.normalization_provenance is None:
+            object.__setattr__(self, "normalization_provenance", {"primary": [], "secondary": [], "joint": []})
         if self.exclusion_symmetry_check is None:
             object.__setattr__(
                 self,
@@ -115,6 +121,7 @@ class SectionComparisonReport:
             "exclusion_symmetric": bool(self.exclusion_symmetric),
             "exclusion_asymmetry": bool(self.exclusion_asymmetry),
             "exclusion_symmetry_check": dict(self.exclusion_symmetry_check),
+            "normalization_provenance": {k: list(v) for k, v in dict(self.normalization_provenance).items()},
         }
 
 
@@ -445,12 +452,42 @@ def extract_divergent_sections_with_coverage(
                     )
                 )
 
-    p_canon = _canonicalize_layout_text(p_norm)
-    s_canon = _canonicalize_layout_text(s_norm)
+    p_canon, p_prov = _canonicalize_layout_text_with_provenance(p_norm)
+    s_canon, s_prov = _canonicalize_layout_text_with_provenance(s_norm)
+    _, _, joint_prov = joint_fold_heading_case(primary.text, secondary.text)
+    norm_provenance = {"primary": p_prov, "secondary": s_prov, "joint": joint_prov}
+
+    # Negative control (P2.5): a written-vs-parenthetical numeral contradiction ("thirty (40) days")
+    # is ALWAYS flagged, in either version, regardless of the counterpart.
+    for doc_id, norm_txt, sp_s, sp_e, raw_len, is_pri in (
+        (primary.id, p_norm, p_starts, p_ends, len(primary.text), True),
+        (secondary.id, s_norm, s_starts, s_ends, len(secondary.text), False),
+    ):
+        for ic in detect_internal_quantity_conflicts(norm_txt):
+            cs, ce = ic["span"]
+            mapped = _map_norm_span(sp_s, sp_e, (int(cs), int(ce)), raw_len)
+            divergences.append(
+                SectionDivergence(
+                    section_key="internal_quantity_conflict",
+                    section_label=f"Internal Quantity Discrepancy ({ic['raw']})",
+                    primary_source_id=primary.id,
+                    secondary_source_id=secondary.id,
+                    primary_quantities=(f"{ic['word_value']}!={ic['paren_value']}",) if is_pri else (),
+                    secondary_quantities=() if is_pri else (f"{ic['word_value']}!={ic['paren_value']}",),
+                    reason=(
+                        f"Written-vs-parenthetical numeral discrepancy '{ic['raw']}' "
+                        f"({ic['word_value']} != {ic['paren_value']}) in '{doc_id}'."
+                    ),
+                    primary_span=mapped if is_pri else None,
+                    secondary_span=None if is_pri else mapped,
+                )
+            )
+
     p_norm_all_key = normalize_key(p_canon)
     s_norm_all_key = normalize_key(s_canon)
     if (
-        not p_uncov
+        not divergences
+        and not p_uncov
         and not s_uncov
         and p_canon == s_canon
         and _quantity_tokens(p_canon) == _quantity_tokens(s_canon)
@@ -466,6 +503,7 @@ def extract_divergent_sections_with_coverage(
             exclusion_symmetric=excl_sym,
             exclusion_asymmetry=excl_asym,
             exclusion_symmetry_check=excl_check,
+            normalization_provenance=norm_provenance,
         )
 
     # Unsegmented pair (both lack headers)
@@ -499,6 +537,7 @@ def extract_divergent_sections_with_coverage(
             exclusion_symmetric=excl_sym,
             exclusion_asymmetry=excl_asym,
             exclusion_symmetry_check=excl_check,
+            normalization_provenance=norm_provenance,
         )
 
     matched_sec_keys: set[str] = set()
@@ -658,6 +697,7 @@ def extract_divergent_sections_with_coverage(
         exclusion_symmetric=excl_sym,
         exclusion_asymmetry=excl_asym,
         exclusion_symmetry_check=excl_check,
+        normalization_provenance=norm_provenance,
     )
 
 

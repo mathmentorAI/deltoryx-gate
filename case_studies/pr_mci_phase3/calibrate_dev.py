@@ -318,8 +318,19 @@ def _fast_verdict(feat: Mapping[str, Any], th: VerdictThresholds) -> str:
     if inc:
         return "INCONSISTENT"
     rev = False
-    if th.review_on_single_unsupported_or_phantom and (n_phan >= 1 or n_lunsup >= 1):
-        rev = True
+    if th.review_on_single_unsupported_or_phantom:
+        if (
+            n_phan >= th.review_k_phantom
+            and tot_beh > 0
+            and (n_phan / tot_beh) >= th.review_theta_phantom
+        ):
+            rev = True
+        if (
+            n_lunsup >= th.review_k_lit
+            and tot_lit > 0
+            and (n_lunsup / tot_lit) >= th.review_theta_lit
+        ):
+            rev = True
     if feat["draft_rejected_sum"] > 0 and (sc["literal_supported"] + sc["derived_supported"] == 0):
         rev = True
     if (
@@ -470,7 +481,7 @@ def main() -> None:
     n3_prs = _read("aidev_dev_n3_mutation.jsonl")
 
     m1 = p3.ResilientCachedModel(None, args.pass1_cache)
-    m2 = p3.ResilientCachedModel(None, args.pass2_cache)
+    m2 = p3.ResilientCachedModel(None, args.pass2_cache, allow_pass3_replay_miss_as_empty=True)
 
     print("Loading & replaying cached AIDev-Dev completions once...")
     orig_by_id = {str(p["pr_id"]): p for p in orig_prs}
@@ -509,37 +520,41 @@ def main() -> None:
     )
     pass1_clean_orig_ids = {r["pr_id"] for r in base_lit_rows if r["verdict"] != "INCONSISTENT"}
 
-    # Grid search strictly on N2_hard (positives) vs originals (negatives); N1 & N3 NEVER touch calibration
+    # Stage A: Strict (INCONSISTENT) grid search on N2_hard (positives) vs originals (negatives); N1 & N3 NEVER touch calibration
     rel_grid = [
-        RelevanceConfig(min_specific_anchors=msa, require_target_match_when_present=rtm, require_category_compat=True)
+        RelevanceConfig(
+            min_specific_anchors=msa,
+            require_target_match_when_present=rtm,
+            require_category_compat=True,
+            pass3_require_target_grounded_in_claim=True,
+        )
         for msa in (2, 1)
         for rtm in (True,)
     ]
-    th_grid = [
+    strict_th_grid = [
         VerdictThresholds(
             k_phantom=kp,
             theta_phantom=tp,
             singleton_phantom_inconsistent=sp,
             k_lit=kl,
             theta_lit=tl,
-            review_on_single_unsupported_or_phantom=rev_sup,
-            review_on_all_unruled_hypothesis=rh,
+            review_on_single_unsupported_or_phantom=True,
+            review_on_all_unruled_hypothesis=False,
             include_i5=True,
             i5_understated_min_share=ush,
         )
-        for kp, tp, sp, kl, tl, rev_sup, rh, ush in itertools.product(
+        for kp, tp, sp, kl, tl, ush in itertools.product(
             (1, 2, 3, 4),
             (0.34, 0.50, 0.67, 0.75, 0.85),
             (True, False),
             (2, 3, 4, 5, 6, 8),
             (0.50, 0.67, 0.75, 0.80, 0.90),
-            (True, False),
-            (False,),
             (0.75, 0.85, 0.90, 0.95),
         )
     ]
 
     candidates: list[dict[str, Any]] = []
+    cached_revs: dict[tuple[int, bool, bool], tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]] = {}
     parity_checked = False
     for rel_cfg in rel_grid:
         rev_orig = _reverify_behaviors_with_relevance(art_orig, rel_cfg, include_ablations=False)
@@ -548,19 +563,40 @@ def main() -> None:
 
         feat_o = _precompute_verdict_inputs(rev_orig)
         feat_n2 = _precompute_verdict_inputs(rev_n2)
+        cached_revs[(rel_cfg.min_specific_anchors, rel_cfg.require_target_match_when_present, rel_cfg.pass3_require_target_grounded_in_claim)] = (
+            rev_orig,
+            rev_n2,
+            feat_o,
+            feat_n2,
+            n2_leak,
+        )
         if not parity_checked:
-            th_default = VerdictThresholds()
-            exact_o = _eval_verdicts(rev_orig, th_default, mode="d_full")
-            mismatches = sum(
-                1 for ft, ex in zip(feat_o, exact_o) if _fast_verdict(ft, th_default) != ex["verdict"]
-            )
-            assert mismatches == 0, f"_fast_verdict parity failure: {mismatches} mismatches on originals"
+            for th_check in (
+                VerdictThresholds(),
+                VerdictThresholds(
+                    k_phantom=3,
+                    theta_phantom=0.75,
+                    k_lit=5,
+                    theta_lit=0.80,
+                    review_k_phantom=2,
+                    review_theta_phantom=0.34,
+                    review_k_lit=3,
+                    review_theta_lit=0.50,
+                    review_on_all_unruled_hypothesis=False,
+                    i5_understated_min_share=0.95,
+                ),
+            ):
+                exact_o = _eval_verdicts(rev_orig, th_check, mode="d_full")
+                mismatches = sum(
+                    1 for ft, ex in zip(feat_o, exact_o) if _fast_verdict(ft, th_check) != ex["verdict"]
+                )
+                assert mismatches == 0, f"_fast_verdict parity failure: {mismatches} mismatches on originals"
             parity_checked = True
 
         orig_p1_clean_mask = [ft["pr_id"] in pass1_clean_orig_ids for ft in feat_o]
         orig_p1_clean_cnt = max(1, sum(1 for c in orig_p1_clean_mask if c))
 
-        for th in th_grid:
+        for th in strict_th_grid:
             verdicts_o = [_fast_verdict(ft, th) for ft in feat_o]
             verdicts_n2 = [_fast_verdict(ft, th) for ft in feat_n2]
 
@@ -568,7 +604,7 @@ def main() -> None:
                 [v == "INCONSISTENT" for v in verdicts_n2],
                 [v == "INCONSISTENT" for v in verdicts_o],
             )
-            m_broad = _binary_op_metrics(
+            m_broad_default = _binary_op_metrics(
                 [v in ("INCONSISTENT", "REVIEW") for v in verdicts_n2],
                 [v in ("INCONSISTENT", "REVIEW") for v in verdicts_o],
             )
@@ -579,12 +615,9 @@ def main() -> None:
 
             meets_fpr = m_strict["fpr"] <= 0.10
             meets_leak = n2_leak["strict_leakage_rate"] <= 0.10
-            # Decision 1 exact criterion: maximize F1_strict on (N2_hard vs originals) subject to FPR_strict <= 10%
             obj = (
                 (100.0 if (meets_fpr and meets_leak) else (50.0 if meets_fpr else 0.0))
                 + 10.0 * m_strict["f1"]
-                + 1.0 * m_broad["f1"]
-                - 2.0 * n2_leak["broad_leakage_rate"]
                 - 5.0 * n2_leak["strict_leakage_rate"]
                 - 0.5 * m_strict["fpr"]
             )
@@ -596,7 +629,7 @@ def main() -> None:
                     "relevance_config": rel_cfg.to_dict(),
                     "thresholds": th.to_dict(),
                     "strict_op_inconsistent": m_strict,
-                    "broad_op_inconsistent_or_review": m_broad,
+                    "broad_op_default_review": m_broad_default,
                     "orig_pass1_clean_fpr_inconsistent": round(orig_p1_clean_inc, 4),
                     "n2_strict_leakage_rate": n2_leak["strict_leakage_rate"],
                     "n2_broad_leakage_rate": n2_leak["broad_leakage_rate"],
@@ -608,16 +641,124 @@ def main() -> None:
             c["meets_fpr_10pct"] and c["meets_n2_strict_leak_10pct"],
             c["meets_fpr_10pct"],
             c["strict_op_inconsistent"]["f1"],
-            c["broad_op_inconsistent_or_review"]["f1"],
             -c["n2_strict_leakage_rate"],
-            -c["n2_broad_leakage_rate"],
             -c["strict_op_inconsistent"]["fpr"],
+            -c["n2_broad_leakage_rate"],
         ),
         reverse=True,
     )
-    best = candidates[0]
-    best_rel = RelevanceConfig(**best["relevance_config"])
-    best_th = VerdictThresholds(**best["thresholds"])
+    best_strict = candidates[0]
+    best_rel = RelevanceConfig(**best_strict["relevance_config"])
+    strict_th_dict = dict(best_strict["thresholds"])
+
+    # Stage B: Decoupled Broad (INCONSISTENT + REVIEW) optimization under pre-fixed FPR(originals) <= 25%
+    _, _, feat_o_best, feat_n2_best, _ = cached_revs[
+        (best_rel.min_specific_anchors, best_rel.require_target_match_when_present, best_rel.pass3_require_target_grounded_in_claim)
+    ]
+    orig_p1_clean_mask = [ft["pr_id"] in pass1_clean_orig_ids for ft in feat_o_best]
+    orig_p1_clean_cnt = max(1, sum(1 for c in orig_p1_clean_mask if c))
+
+    review_candidates_param_tuples: list[tuple[bool, int, float, int, float, bool]] = []
+    for rh in (False, True):
+        review_candidates_param_tuples.append((False, 99, 1.0, 99, 1.0, rh))
+        for rkp, rtp, rkl, rtl in itertools.product(
+            (1, 2, 3, 4, 99),
+            (0.0, 0.25, 0.34, 0.50, 0.67, 0.75),
+            (1, 2, 3, 4, 5, 99),
+            (0.0, 0.25, 0.34, 0.50, 0.67, 0.75),
+        ):
+            # Collapse unreachable (k=99, non-0.0 theta) duplicates
+            if rkp == 99 and rtp != 0.0:
+                continue
+            if rkl == 99 and rtl != 0.0:
+                continue
+            review_candidates_param_tuples.append((True, rkp, rtp, rkl, rtl, rh))
+
+    broad_candidates: list[dict[str, Any]] = []
+    for rev_sup, rkp, rtp, rkl, rtl, rh in review_candidates_param_tuples:
+        th_b = VerdictThresholds(
+            **{
+                **strict_th_dict,
+                "review_on_single_unsupported_or_phantom": rev_sup,
+                "review_k_phantom": rkp,
+                "review_theta_phantom": rtp,
+                "review_k_lit": rkl,
+                "review_theta_lit": rtl,
+                "review_on_all_unruled_hypothesis": rh,
+            }
+        )
+        v_o = [_fast_verdict(ft, th_b) for ft in feat_o_best]
+        v_n2 = [_fast_verdict(ft, th_b) for ft in feat_n2_best]
+        m_broad = _binary_op_metrics(
+            [v in ("INCONSISTENT", "REVIEW") for v in v_n2],
+            [v in ("INCONSISTENT", "REVIEW") for v in v_o],
+        )
+        m_strict_chk = _binary_op_metrics(
+            [v == "INCONSISTENT" for v in v_n2],
+            [v == "INCONSISTENT" for v in v_o],
+        )
+        broad_candidates.append(
+            {
+                "meets_broad_fpr_25pct": m_broad["fpr"] <= 0.25,
+                "review_params": {
+                    "review_on_single_unsupported_or_phantom": rev_sup,
+                    "review_k_phantom": rkp,
+                    "review_theta_phantom": rtp,
+                    "review_k_lit": rkl,
+                    "review_theta_lit": rtl,
+                    "review_on_all_unruled_hypothesis": rh,
+                },
+                "broad_op_inconsistent_or_review": m_broad,
+                "strict_op_inconsistent": m_strict_chk,
+                "thresholds": th_b.to_dict(),
+            }
+        )
+
+    broad_candidates.sort(
+        key=lambda c: (
+            c["meets_broad_fpr_25pct"],
+            c["broad_op_inconsistent_or_review"]["f1"],
+            c["broad_op_inconsistent_or_review"]["recall"],
+            -c["broad_op_inconsistent_or_review"]["fpr"],
+            -c["review_params"]["review_k_phantom"],
+            -c["review_params"]["review_k_lit"],
+        ),
+        reverse=True,
+    )
+    best_broad = broad_candidates[0]
+    best_th = VerdictThresholds(**best_broad["thresholds"])
+
+    # Compute Broad FPR vs F1 Pareto curve across caps
+    pareto_caps = (0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50, 0.75)
+    broad_pareto_curve: list[dict[str, Any]] = []
+    for cap in pareto_caps:
+        elig = [c for c in broad_candidates if c["broad_op_inconsistent_or_review"]["fpr"] <= cap]
+        if not elig:
+            broad_pareto_curve.append({"fpr_cap": cap, "reachable": False})
+        else:
+            top_c = max(
+                elig,
+                key=lambda c: (
+                    c["broad_op_inconsistent_or_review"]["f1"],
+                    c["broad_op_inconsistent_or_review"]["recall"],
+                    -c["broad_op_inconsistent_or_review"]["fpr"],
+                ),
+            )
+            broad_pareto_curve.append(
+                {
+                    "fpr_cap": cap,
+                    "reachable": True,
+                    "broad_op_inconsistent_or_review": top_c["broad_op_inconsistent_or_review"],
+                    "review_params": top_c["review_params"],
+                }
+            )
+
+    best = {
+        **best_strict,
+        "thresholds": best_th.to_dict(),
+        "broad_op_inconsistent_or_review": best_broad["broad_op_inconsistent_or_review"],
+        "meets_broad_fpr_25pct": best_broad["meets_broad_fpr_25pct"],
+    }
 
     # Full evaluation across all 4 tiers & all 5 ablations under chosen frozen config
     fin_orig = _reverify_behaviors_with_relevance(art_orig, best_rel)
@@ -712,6 +853,51 @@ def main() -> None:
         }
     heur_report["n2_vs_originals"] = _binary_op_metrics(heur_by_split["n2_hard"], heur_by_split["originals"])
 
+    rel_unhardened = RelevanceConfig(
+        min_specific_anchors=best_rel.min_specific_anchors,
+        require_target_match_when_present=best_rel.require_target_match_when_present,
+        require_category_compat=best_rel.require_category_compat,
+        pass3_require_target_grounded_in_claim=False,
+    )
+
+    def _summarize_pass3_effect(revs_map: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+        out_eff: dict[str, Any] = {}
+        for tname, r_list in revs_map.items():
+            rr_claims = [c for a in r_list for c in a["beh_d"] if c.get("reread_attempted")]
+            inj_rr = [c for c in rr_claims if c.get("_is_injected")]
+            sc_rr = collections.Counter(c["status"] for c in rr_claims)
+            sc_inj = collections.Counter(c["status"] for c in inj_rr)
+            out_eff[tname] = {
+                "reread_attempted_claims": len(rr_claims),
+                "derived_supported": sc_rr.get("derived_supported", 0),
+                "hypothesis_with_verified_premises": sc_rr.get("hypothesis_with_verified_premises", 0),
+                "no_premises_in_diff": sc_rr.get("no_premises_in_diff", 0),
+                "premise_contradicted": sc_rr.get("premise_contradicted", 0),
+                "injected_reread_claims": len(inj_rr),
+                "injected_leaked_any_premise": sc_inj.get("derived_supported", 0) + sc_inj.get("hypothesis_with_verified_premises", 0),
+                "injected_leaked_derived": sc_inj.get("derived_supported", 0),
+            }
+        return out_eff
+
+    pass3_reread_effect = {
+        "before_target_grounding_guard": _summarize_pass3_effect(
+            {
+                "originals": _reverify_behaviors_with_relevance(art_orig, rel_unhardened, include_ablations=False),
+                "n1_easy_50": _reverify_behaviors_with_relevance(art_n1, rel_unhardened, include_ablations=False),
+                "n2_hard": _reverify_behaviors_with_relevance(art_n2, rel_unhardened, include_ablations=False),
+                "n3_mutation": _reverify_behaviors_with_relevance(art_n3, rel_unhardened, include_ablations=False),
+            }
+        ),
+        "after_target_grounding_guard": _summarize_pass3_effect(
+            {
+                "originals": fin_orig,
+                "n1_easy_50": fin_n1,
+                "n2_hard": fin_n2,
+                "n3_mutation": fin_n3,
+            }
+        ),
+    }
+
     payload = {
         "calibration_scope": "N2_hard (positives) vs originals (negatives) only on AIDev-Dev; N1 (50) and N3 (200) reported only",
         "operating_point_protocol": {
@@ -724,6 +910,12 @@ def main() -> None:
             "calibration_summary": {
                 k: v for k, v in best.items() if k not in ("relevance_config", "thresholds")
             },
+        },
+        "broad_pareto_curve": broad_pareto_curve,
+        "pass3_reread_effect": pass3_reread_effect,
+        "pass3_replay_cache_misses": {
+            "uncached_claims_count": len(m2.pass3_replay_miss_claims),
+            "uncached_prs_count": len({c.split("::beh::", 1)[0] for c in m2.pass3_replay_miss_claims}),
         },
         "top_5_grid_candidates": candidates[:5],
         "originals_inconsistent_d_full": d_full_orig_inc_records,

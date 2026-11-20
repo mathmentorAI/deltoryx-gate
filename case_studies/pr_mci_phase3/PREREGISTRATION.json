@@ -103,65 +103,515 @@
     }
   },
   "dev_calibration_snapshot": {
+    "ablations_n2_vs_originals": {
+      "a_literal": {
+        "broad_inconsistent_or_review": {
+          "f1": 0.315,
+          "fn": 144,
+          "fp": 30,
+          "fpr": 0.15,
+          "precision": 0.5714,
+          "recall": 0.2174,
+          "tn": 170,
+          "tp": 40
+        },
+        "originals_derived_supported": 0,
+        "originals_hypothesis_with_verified_premises": 0,
+        "originals_no_premises_in_diff": 0,
+        "strict_inconsistent": {
+          "f1": 0.1909,
+          "fn": 163,
+          "fp": 15,
+          "fpr": 0.075,
+          "precision": 0.5833,
+          "recall": 0.1141,
+          "tn": 185,
+          "tp": 21
+        }
+      },
+      "b_graph_no_rules": {
+        "broad_inconsistent_or_review": {
+          "f1": 0.4887,
+          "fn": 108,
+          "fp": 51,
+          "fpr": 0.255,
+          "precision": 0.5984,
+          "recall": 0.413,
+          "tn": 149,
+          "tp": 76
+        },
+        "originals_derived_supported": 0,
+        "originals_hypothesis_with_verified_premises": 861,
+        "originals_no_premises_in_diff": 224,
+        "strict_inconsistent": {
+          "f1": 0.2435,
+          "fn": 156,
+          "fp": 18,
+          "fpr": 0.09,
+          "precision": 0.6087,
+          "recall": 0.1522,
+          "tn": 182,
+          "tp": 28
+        }
+      },
+      "c_graph_rules_no_reread": {
+        "broad_inconsistent_or_review": {
+          "f1": 0.5238,
+          "fn": 96,
+          "fp": 64,
+          "fpr": 0.32,
+          "precision": 0.5789,
+          "recall": 0.4783,
+          "tn": 136,
+          "tp": 88
+        },
+        "originals_derived_supported": 200,
+        "originals_hypothesis_with_verified_premises": 576,
+        "originals_no_premises_in_diff": 309,
+        "strict_inconsistent": {
+          "f1": 0.2424,
+          "fn": 156,
+          "fp": 19,
+          "fpr": 0.095,
+          "precision": 0.5957,
+          "recall": 0.1522,
+          "tn": 181,
+          "tp": 28
+        }
+      },
+      "d_full": {
+        "broad_inconsistent_or_review": {
+          "f1": 0.4805,
+          "fn": 110,
+          "fp": 50,
+          "fpr": 0.25,
+          "precision": 0.5968,
+          "recall": 0.4022,
+          "tn": 150,
+          "tp": 74
+        },
+        "originals_derived_supported": 211,
+        "originals_hypothesis_with_verified_premises": 650,
+        "originals_no_premises_in_diff": 224,
+        "strict_inconsistent": {
+          "f1": 0.2564,
+          "fn": 154,
+          "fp": 20,
+          "fpr": 0.1,
+          "precision": 0.6,
+          "recall": 0.163,
+          "tn": 180,
+          "tp": 30
+        }
+      },
+      "e_full_no_i5": {
+        "broad_inconsistent_or_review": {
+          "f1": 0.4787,
+          "fn": 111,
+          "fp": 48,
+          "fpr": 0.24,
+          "precision": 0.6033,
+          "recall": 0.3967,
+          "tn": 152,
+          "tp": 73
+        },
+        "originals_derived_supported": 211,
+        "originals_hypothesis_with_verified_premises": 650,
+        "originals_no_premises_in_diff": 224,
+        "strict_inconsistent": {
+          "f1": 0.2435,
+          "fn": 156,
+          "fp": 18,
+          "fpr": 0.09,
+          "precision": 0.6087,
+          "recall": 0.1522,
+          "tn": 182,
+          "tp": 28
+        }
+      }
+    },
     "broad_n2_vs_originals": {
-      "f1": 0.6613,
-      "fn": 21,
-      "fp": 146,
-      "fpr": 0.73,
-      "precision": 0.5275,
-      "recall": 0.8859,
-      "tn": 54,
-      "tp": 163
+      "f1": 0.4805,
+      "fn": 110,
+      "fp": 50,
+      "fpr": 0.25,
+      "precision": 0.5968,
+      "recall": 0.4022,
+      "tn": 150,
+      "tp": 74
+    },
+    "broad_pareto_curve": [
+      {
+        "broad_op_inconsistent_or_review": {
+          "f1": 0.2785,
+          "fn": 151,
+          "fp": 20,
+          "fpr": 0.1,
+          "precision": 0.6226,
+          "recall": 0.1793,
+          "tn": 180,
+          "tp": 33
+        },
+        "fpr_cap": 0.1,
+        "reachable": true,
+        "review_params": {
+          "review_k_lit": 2,
+          "review_k_phantom": 99,
+          "review_on_all_unruled_hypothesis": false,
+          "review_on_single_unsupported_or_phantom": true,
+          "review_theta_lit": 0.67,
+          "review_theta_phantom": 0.0
+        }
+      },
+      {
+        "broad_op_inconsistent_or_review": {
+          "f1": 0.3602,
+          "fn": 137,
+          "fp": 30,
+          "fpr": 0.15,
+          "precision": 0.6104,
+          "recall": 0.2554,
+          "tn": 170,
+          "tp": 47
+        },
+        "fpr_cap": 0.15,
+        "reachable": true,
+        "review_params": {
+          "review_k_lit": 3,
+          "review_k_phantom": 4,
+          "review_on_all_unruled_hypothesis": false,
+          "review_on_single_unsupported_or_phantom": true,
+          "review_theta_lit": 0.34,
+          "review_theta_phantom": 0.75
+        }
+      },
+      {
+        "broad_op_inconsistent_or_review": {
+          "f1": 0.4296,
+          "fn": 123,
+          "fp": 39,
+          "fpr": 0.195,
+          "precision": 0.61,
+          "recall": 0.3315,
+          "tn": 161,
+          "tp": 61
+        },
+        "fpr_cap": 0.2,
+        "reachable": true,
+        "review_params": {
+          "review_k_lit": 2,
+          "review_k_phantom": 3,
+          "review_on_all_unruled_hypothesis": false,
+          "review_on_single_unsupported_or_phantom": true,
+          "review_theta_lit": 0.34,
+          "review_theta_phantom": 0.75
+        }
+      },
+      {
+        "broad_op_inconsistent_or_review": {
+          "f1": 0.4805,
+          "fn": 110,
+          "fp": 50,
+          "fpr": 0.25,
+          "precision": 0.5968,
+          "recall": 0.4022,
+          "tn": 150,
+          "tp": 74
+        },
+        "fpr_cap": 0.25,
+        "reachable": true,
+        "review_params": {
+          "review_k_lit": 3,
+          "review_k_phantom": 3,
+          "review_on_all_unruled_hypothesis": false,
+          "review_on_single_unsupported_or_phantom": true,
+          "review_theta_lit": 0.25,
+          "review_theta_phantom": 0.0
+        }
+      },
+      {
+        "broad_op_inconsistent_or_review": {
+          "f1": 0.5212,
+          "fn": 98,
+          "fp": 60,
+          "fpr": 0.3,
+          "precision": 0.589,
+          "recall": 0.4674,
+          "tn": 140,
+          "tp": 86
+        },
+        "fpr_cap": 0.3,
+        "reachable": true,
+        "review_params": {
+          "review_k_lit": 2,
+          "review_k_phantom": 3,
+          "review_on_all_unruled_hypothesis": false,
+          "review_on_single_unsupported_or_phantom": true,
+          "review_theta_lit": 0.25,
+          "review_theta_phantom": 0.0
+        }
+      },
+      {
+        "broad_op_inconsistent_or_review": {
+          "f1": 0.5768,
+          "fn": 77,
+          "fp": 80,
+          "fpr": 0.4,
+          "precision": 0.5722,
+          "recall": 0.5815,
+          "tn": 120,
+          "tp": 107
+        },
+        "fpr_cap": 0.4,
+        "reachable": true,
+        "review_params": {
+          "review_k_lit": 2,
+          "review_k_phantom": 2,
+          "review_on_all_unruled_hypothesis": false,
+          "review_on_single_unsupported_or_phantom": true,
+          "review_theta_lit": 0.25,
+          "review_theta_phantom": 0.0
+        }
+      },
+      {
+        "broad_op_inconsistent_or_review": {
+          "f1": 0.6293,
+          "fn": 55,
+          "fp": 97,
+          "fpr": 0.485,
+          "precision": 0.5708,
+          "recall": 0.7011,
+          "tn": 103,
+          "tp": 129
+        },
+        "fpr_cap": 0.5,
+        "reachable": true,
+        "review_params": {
+          "review_k_lit": 2,
+          "review_k_phantom": 1,
+          "review_on_all_unruled_hypothesis": false,
+          "review_on_single_unsupported_or_phantom": true,
+          "review_theta_lit": 0.0,
+          "review_theta_phantom": 0.25
+        }
+      },
+      {
+        "broad_op_inconsistent_or_review": {
+          "f1": 0.6723,
+          "fn": 24,
+          "fp": 132,
+          "fpr": 0.66,
+          "precision": 0.5479,
+          "recall": 0.8696,
+          "tn": 68,
+          "tp": 160
+        },
+        "fpr_cap": 0.75,
+        "reachable": true,
+        "review_params": {
+          "review_k_lit": 1,
+          "review_k_phantom": 1,
+          "review_on_all_unruled_hypothesis": false,
+          "review_on_single_unsupported_or_phantom": true,
+          "review_theta_lit": 0.0,
+          "review_theta_phantom": 0.0
+        }
+      }
+    ],
+    "manual_audit_50_no_premises_originals": {
+      "claim_level_precision": 0.22,
+      "claim_level_precision_ci95_wilson": [
+        0.1275,
+        0.3524
+      ],
+      "gate_strictness_failure_count": 22,
+      "genuine_no_diff_support": 11,
+      "population_total": 224,
+      "reader_failure_count": 17,
+      "reader_or_gate_failure": 39,
+      "reader_or_gate_failure_rate": 0.78,
+      "sample_n": 50,
+      "sampling_policy": "Fixed random sample (random.Random(20261120).sample(..., 50)) over all 224 originals d_full no_premises_in_diff claims sorted by claim_id; zero thresholds modified afterwards.",
+      "subcategory_counts": {
+        "gate_abstract_target_mismatch": 2,
+        "gate_code_config_non_ascii_quote_rejected": 1,
+        "gate_code_config_quantity_mismatch": 3,
+        "gate_enclosing_method_not_in_quote": 6,
+        "gate_enclosing_signature_not_in_quote": 1,
+        "gate_mbt_wbtest_unrecognized_test_file": 1,
+        "gate_op_category_fixture_yaml_in_test_dir": 1,
+        "gate_op_category_singular_test_dir": 1,
+        "gate_op_category_yaml_docs_not_config": 1,
+        "gate_short_grammar_line": 1,
+        "gate_short_json_config_lines": 1,
+        "gate_short_struct_field_line": 2,
+        "gate_short_yaml_job_line": 1,
+        "genuine_absent_file_or_feature": 3,
+        "genuine_absent_symbol_or_envvar": 1,
+        "genuine_absent_symbol_or_prior_commit": 1,
+        "genuine_local_compile_check_not_in_diff": 1,
+        "genuine_manual_ui_verification_not_in_diff": 1,
+        "genuine_meta_statement_no_diff_line": 1,
+        "genuine_stale_envvar_and_regression_claim": 1,
+        "genuine_unprovable_runtime_equivalence": 1,
+        "genuine_unverified_motivation_absent_in_diff": 1,
+        "reader_escaped_tab_mismatch": 2,
+        "reader_mislabeled_documents_as_configures": 1,
+        "reader_misquoted_and_low_overlap": 1,
+        "reader_missed_in_large_diff": 3,
+        "reader_missed_line_with_target": 1,
+        "reader_multiline_fence_quote_mismatch": 1,
+        "reader_proposed_empty_for_present_code": 2,
+        "reader_proposed_empty_for_present_dep": 1,
+        "reader_quote_mismatch_on_renamed_doc": 1,
+        "reader_quote_whitespace_mismatch": 1,
+        "reader_span_mismatch_whitespace": 1,
+        "reader_wrong_op_project_version_bump": 1,
+        "reader_wrong_premise_quote": 1
+      }
     },
     "manual_audit_originals_inconsistent": {
-      "audit_corrected_fpr_excluding_real": 0.0722,
-      "audit_corrected_fpr_full_denom": 0.07,
+      "audit_corrected_fpr_excluding_real": 0.0674,
+      "audit_corrected_fpr_full_denom": 0.065,
       "category_counts": {
-        "false_alarm_dep_extractor_lockfile_and_semver_padding": 1,
-        "false_alarm_dep_extractor_on_non_manifest": 1,
-        "false_alarm_dep_extractor_package_version_field": 1,
-        "false_alarm_dep_substring_match_eslint": 1,
-        "false_alarm_execution_report_read_as_adds_test": 1,
-        "false_alarm_i5_checklist_or_not_required": 1,
-        "false_alarm_pass1_literal_extraction": 2,
+        "false_alarm_pass1_directory_paths_trailing_slash": 1,
+        "false_alarm_pass1_filename_and_prose_in_lit": 1,
+        "false_alarm_pass1_long_sentences_in_adds_test": 1,
+        "false_alarm_pass1_manual_test_plan_as_adds_test": 1,
+        "false_alarm_pass1_predicate_routing": 1,
         "false_alarm_pass1_predicate_routing_and_prefix": 1,
-        "false_alarm_pass1_rename_source_paths_and_comments": 1,
-        "false_alarm_pass2_grounding_and_dep_parser": 1,
-        "false_alarm_pass2_grounding_and_operation": 1,
-        "false_alarm_pass2_hunk_context_and_impact_bullets": 1,
-        "false_alarm_pass2_short_grammar_lines": 1,
+        "false_alarm_pass1_prose_suffixes_in_literals": 1,
+        "false_alarm_pass1_prose_test_descriptions": 1,
+        "false_alarm_pass1_prose_test_items": 1,
+        "false_alarm_pass1_yaml_inline_list_and_workflow_literal": 1,
+        "false_alarm_pass2_hunk_enclosing_function_and_impact": 1,
+        "false_alarm_pass2_single_file_rust_missed_hunks": 1,
+        "false_alarm_pass2_symptom_polarity_and_ui_checks": 1,
         "genuine_doc_only_claim_on_260_file_code_diff": 1,
         "genuine_missing_claimed_feature_and_files": 1,
         "genuine_nonexistent_files_and_unmentioned_scope": 1,
         "genuine_severe_unmentioned_scope": 2,
-        "genuine_stale_description_removed_commands": 1
+        "genuine_stale_description_removed_commands": 1,
+        "genuine_understated_counts_and_unmentioned_scope": 1
       },
-      "n_false_alarm": 14,
+      "n_false_alarm": 13,
       "n_flagged_inconsistent": 20,
       "n_originals": 200,
-      "n_real_inconsistency": 6,
-      "policy": "Decision 2 read-only audit of ALL 20 originals flagged INCONSISTENT under calibrated d_full; zero thresholds or rules modified afterwards.",
+      "n_real_inconsistency": 7,
+      "policy": "Complete read-only manual audit of ALL 20 originals flagged INCONSISTENT under v2-calibrated d_full; zero thresholds or rules modified afterwards.",
       "raw_fpr": 0.1
     },
-    "n2_broad_leakage_rate": 0.1376,
+    "n2_broad_leakage_rate": 0.1193,
     "n2_strict_leakage_rate": 0.0367,
-    "orig_pass1_clean_fpr_inconsistent": 0.0432,
-    "results_aidev_dev_sha256": "c12297711ebed951d5ad9856dbdbf07d9244ac648fbbb010cc3d735f9ab5a9c1",
+    "n3_v1_synthetic_dependency_disclosure": "17 of 53 N3 dependency_version_mismatch synthetic items in aidev_dev_n3_mutation.jsonl were originally constructed targeting bogus v1 extractions (version, openapi, MaxDisplayCount, cpu) eliminated by Bug 3; N3 mutation recall is reported verbatim over all 200 items alongside the per-subtype breakdown.",
+    "orig_pass1_clean_fpr_inconsistent": 0.0174,
+    "pass3_replay_cache_misses": {
+      "uncached_claims_count": 24,
+      "uncached_prs_count": 20
+    },
+    "pass3_reread_effect": {
+      "after_target_grounding_guard": {
+        "n1_easy_50": {
+          "derived_supported": 1,
+          "hypothesis_with_verified_premises": 22,
+          "injected_leaked_any_premise": 0,
+          "injected_leaked_derived": 0,
+          "injected_reread_claims": 18,
+          "no_premises_in_diff": 65,
+          "premise_contradicted": 0,
+          "reread_attempted_claims": 88
+        },
+        "n2_hard": {
+          "derived_supported": 10,
+          "hypothesis_with_verified_premises": 69,
+          "injected_leaked_any_premise": 1,
+          "injected_leaked_derived": 0,
+          "injected_reread_claims": 61,
+          "no_premises_in_diff": 195,
+          "premise_contradicted": 0,
+          "reread_attempted_claims": 274
+        },
+        "n3_mutation": {
+          "derived_supported": 10,
+          "hypothesis_with_verified_premises": 50,
+          "injected_leaked_any_premise": 1,
+          "injected_leaked_derived": 1,
+          "injected_reread_claims": 19,
+          "no_premises_in_diff": 178,
+          "premise_contradicted": 0,
+          "reread_attempted_claims": 238
+        },
+        "originals": {
+          "derived_supported": 11,
+          "hypothesis_with_verified_premises": 74,
+          "injected_leaked_any_premise": 0,
+          "injected_leaked_derived": 0,
+          "injected_reread_claims": 0,
+          "no_premises_in_diff": 150,
+          "premise_contradicted": 0,
+          "reread_attempted_claims": 235
+        }
+      },
+      "before_target_grounding_guard": {
+        "n1_easy_50": {
+          "derived_supported": 1,
+          "hypothesis_with_verified_premises": 18,
+          "injected_leaked_any_premise": 0,
+          "injected_leaked_derived": 0,
+          "injected_reread_claims": 18,
+          "no_premises_in_diff": 69,
+          "premise_contradicted": 0,
+          "reread_attempted_claims": 88
+        },
+        "n2_hard": {
+          "derived_supported": 14,
+          "hypothesis_with_verified_premises": 59,
+          "injected_leaked_any_premise": 3,
+          "injected_leaked_derived": 0,
+          "injected_reread_claims": 61,
+          "no_premises_in_diff": 201,
+          "premise_contradicted": 0,
+          "reread_attempted_claims": 274
+        },
+        "n3_mutation": {
+          "derived_supported": 14,
+          "hypothesis_with_verified_premises": 40,
+          "injected_leaked_any_premise": 1,
+          "injected_leaked_derived": 1,
+          "injected_reread_claims": 19,
+          "no_premises_in_diff": 184,
+          "premise_contradicted": 0,
+          "reread_attempted_claims": 238
+        },
+        "originals": {
+          "derived_supported": 15,
+          "hypothesis_with_verified_premises": 53,
+          "injected_leaked_any_premise": 0,
+          "injected_leaked_derived": 0,
+          "injected_reread_claims": 0,
+          "no_premises_in_diff": 167,
+          "premise_contradicted": 0,
+          "reread_attempted_claims": 235
+        }
+      }
+    },
+    "results_aidev_dev_sha256": "e2381329dbfed82d30c946efb167260e20e06ac5060a17fe850c937f00c20d36",
     "strict_n2_vs_originals": {
-      "f1": 0.2489,
-      "fn": 155,
+      "f1": 0.2564,
+      "fn": 154,
       "fp": 20,
       "fpr": 0.1,
-      "precision": 0.5918,
-      "recall": 0.1576,
+      "precision": 0.6,
+      "recall": 0.163,
       "tn": 180,
-      "tp": 29
+      "tp": 30
     }
   },
   "frozen_config": {
-    "calibration_criterion": "Lexicographic maximization on AIDev-Dev (N2_hard positives vs originals negatives) subject to raw originals strict FPR <= 10.0% and N2 strict leakage <= 10.0%; N1_50 and N3_mutation reported only, never calibrated.",
+    "calibration_criterion": "Two-stage lexicographic optimization on AIDev-Dev (N2_hard positives vs originals negatives) only; N1_50 and N3_mutation reported only. Stage A maximizes strict INCONSISTENT F1 subject to raw originals strict FPR <= 10.0% and N2 strict leakage <= 10.0%. Stage B freezes Stage A's RelevanceConfig and strict INCONSISTENT thresholds and maximizes broad (INCONSISTENT+REVIEW) F1 over decoupled REVIEW thresholds subject to raw originals broad FPR <= 25.0%.",
     "relevance_config": {
       "min_specific_anchors": 2,
+      "pass3_require_target_grounded_in_claim": true,
       "require_category_compat": true,
       "require_target_match_when_present": true
     },
@@ -172,13 +622,17 @@
       "i5_understated_min_enumerated": 2,
       "i5_understated_min_share": 0.95,
       "include_i5": true,
-      "k_lit": 5,
-      "k_phantom": 3,
+      "k_lit": 2,
+      "k_phantom": 4,
+      "review_k_lit": 3,
+      "review_k_phantom": 3,
       "review_on_all_unruled_hypothesis": false,
       "review_on_single_unsupported_or_phantom": true,
+      "review_theta_lit": 0.25,
+      "review_theta_phantom": 0.0,
       "singleton_phantom_inconsistent": true,
-      "theta_lit": 0.8,
-      "theta_phantom": 0.75
+      "theta_lit": 0.67,
+      "theta_phantom": 0.85
     }
   },
   "model_and_decoding": {
@@ -320,7 +774,7 @@
       "target_label_mapping": "PR-MCI 'misaligned' (positive) vs 'aligned | partial' (negative)"
     }
   },
-  "preregistration_version": "phase3-v1.0",
+  "preregistration_version": "phase3-v2.0",
   "prompts_and_digests": {
     "behavior_operations": [
       "implements",
@@ -592,5 +1046,13 @@
       "Per-agent stratified breakdown (Devin, OpenAI_Codex, Copilot, Cursor on Eval A; all 5 agents on Eval B)"
     ]
   },
-  "status": "FROZEN_BEFORE_EVAL_A_AND_EVAL_B"
+  "status": "FROZEN_BEFORE_EVAL_A_AND_EVAL_B",
+  "supersedes": {
+    "previous_library_commit": "a343156",
+    "previous_preregistration_commit": "8c29f2b",
+    "previous_preregistration_json_sha256": "46b3e18ecad62d8abff8f83f5d1a15683c4d038083a0d1779325e6867551250c",
+    "previous_preregistration_md_sha256": "94f4cad66ffe0f72be7673b3f172b785ba3bb39f6b9f058402825418b745e1fe",
+    "previous_version": "phase3-v1.0",
+    "rationale": "Final pre-Eval-A offline cleanup on AIDev-Dev only (zero live LLM calls, zero prompt edits, Evaluation A and B completely untouched): (1) fixed 7 generic ledger/extractor/rule implementation bugs uncovered in v1 audit; (2) added Pass-3 target-grounding guard (pass3_require_target_grounded_in_claim=True) preventing target spoofing in blind reread; (3) decoupled broad REVIEW triggers (review_k_phantom, review_theta_phantom, review_k_lit, review_theta_lit) and recalibrated INCONSISTENT+REVIEW on N2_hard vs originals under pre-fixed FPR <= 25% (bringing raw broad FPR from 73.0% to 25.0%); (4) added deterministic 50-claim no_premises_in_diff precision audit and updated 20-PR INCONSISTENT audit prior to final freeze."
+  }
 }

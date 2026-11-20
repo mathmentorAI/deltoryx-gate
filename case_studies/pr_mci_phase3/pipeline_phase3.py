@@ -46,6 +46,7 @@ from claimlayer.v4.domains.code_change_inference import (  # noqa: E402
     VerdictThresholds,
     build_typed_diff_ledger,
     compute_pr_verdict,
+    reconcile_phase3_literal_claim,
     repo_identifier_tokens,
     specific_tokens,
     verify_behavior_graph,
@@ -304,12 +305,16 @@ class ResilientCachedModel:
         extra_read_caches: Sequence[str] = (),
         max_outer_retries: int = 8,
         min_interval_sec: float = 1.2,
+        allow_pass3_replay_miss_as_empty: bool = False,
     ) -> None:
         self.model = model
         self.write_cache_path = write_cache_path
         self.max_outer_retries = max_outer_retries
         self.min_interval_sec = min_interval_sec
+        self.allow_pass3_replay_miss_as_empty = allow_pass3_replay_miss_as_empty
         self.cache: dict[str, dict[str, Any]] = {}
+        self.pass3_replay_miss_claims: set[str] = set()
+        self._pass3_by_pr_claim: dict[tuple[str, str], tuple[dict[str, Any], tuple[dict[str, Any], ...]]] = {}
         self._lock = threading.Lock()
         self._identity = model.identity if model is not None else {"provider": "replay"}
 
@@ -320,8 +325,18 @@ class ResilientCachedModel:
                         if not line.strip():
                             continue
                         rec = json.loads(line)
-                        self.cache[rec["key"]] = rec["result"]
+                        rec_res = rec["result"]
+                        self.cache[rec["key"]] = rec_res
                         self._identity = rec.get("identity", self._identity)
+                        if isinstance(rec_res, Mapping):
+                            out = rec_res.get("output")
+                            if isinstance(out, Mapping) and isinstance(out.get("reread_results"), list):
+                                rr_rej = tuple(dict(r) for r in (rec_res.get("reader_rejected") or ()) if isinstance(r, Mapping))
+                                for rr_ent in out["reread_results"]:
+                                    if isinstance(rr_ent, Mapping) and isinstance(rr_ent.get("claim_id"), str):
+                                        cid = rr_ent["claim_id"]
+                                        cid_pr = cid.split("::beh::", 1)[0]
+                                        self._pass3_by_pr_claim.setdefault((cid_pr, cid), (dict(rr_ent), rr_rej))
 
         if self.write_cache_path:
             os.makedirs(os.path.dirname(os.path.abspath(self.write_cache_path)), exist_ok=True)
@@ -354,6 +369,42 @@ class ResilientCachedModel:
         with self._lock:
             if key in self.cache:
                 return self.cache[key]
+            # Deterministic offline subset reassembly when prior audit fixes shrink Pass-3 candidate_claims
+            if (
+                self.model is None
+                and system == PASS3_REREAD_PROMPT
+                and isinstance(payload, Mapping)
+                and isinstance(payload.get("candidate_claims"), Sequence)
+            ):
+                req_pr = str(payload.get("pr_id") or "")
+                req_claims = payload["candidate_claims"]
+                if req_pr and req_claims:
+                    reassembled: list[dict[str, Any]] = []
+                    rej_merged: list[dict[str, Any]] = []
+                    seen_rej: set[str] = set()
+                    missing_any = False
+                    for rc in req_claims:
+                        rc_id = str(rc.get("claim_id") or "")
+                        hit = self._pass3_by_pr_claim.get((req_pr, rc_id))
+                        if hit is None:
+                            if not self.allow_pass3_replay_miss_as_empty:
+                                missing_any = True
+                                break
+                            self.pass3_replay_miss_claims.add(rc_id)
+                            reassembled.append({"claim_id": rc_id, "proposed_premises": []})
+                            continue
+                        ent_copy, rr_rej = hit
+                        reassembled.append(ent_copy)
+                        for r in rr_rej:
+                            rk = canonical(r)
+                            if rk not in seen_rej:
+                                seen_rej.add(rk)
+                                rej_merged.append(r)
+                    if not missing_any and len(reassembled) == len(req_claims):
+                        out_rep: dict[str, Any] = {"output": {"reread_results": reassembled}}
+                        if rej_merged:
+                            out_rep["reader_rejected"] = rej_merged
+                        return out_rep
         if self.model is None:
             raise KeyError(f"replay: missing call {key[:12]}")
 
@@ -550,13 +601,11 @@ def evaluate_pr_phase3(
                     behavior_seeds.append(val.strip())
                 continue
             raw_st = str(c.get("status") or "")
-            if raw_st == "error_escalated":
+            lit_st, recon_reason = reconcile_phase3_literal_claim(
+                pred, val, raw_st, typed_ledger, pr_text=draft
+            )
+            if lit_st == "error_escalated":
                 error_escalated_count += 1
-                lit_st = "error_escalated"
-            elif raw_st == "supported":
-                lit_st = "literal_supported"
-            else:
-                lit_st = "literal_unsupported"
             literal_claims.append(
                 {
                     "claim_id": f"{pr_id}::lit::{uid}",
@@ -564,6 +613,7 @@ def evaluate_pr_phase3(
                     "value": val,
                     "raw_status": raw_st,
                     "status": lit_st,
+                    "reconcile_reason": recon_reason,
                     "claim_receipt_sha256": _literal_claim_receipt(uid, pred, val, lit_st),
                 }
             )
@@ -939,14 +989,19 @@ def verify_replay_determinism(
     extra_pass1_caches: Sequence[str] = (),
     relevance_config: RelevanceConfig = RelevanceConfig(),
     thresholds: VerdictThresholds = VerdictThresholds(),
+    allow_pass3_replay_miss_as_empty: bool = False,
 ) -> dict[str, Any]:
     """Run twice in strict offline replay mode and assert bit-identical receipts."""
     m1_a = ResilientCachedModel(None, pass1_cache, extra_read_caches=extra_pass1_caches)
-    m2_a = ResilientCachedModel(None, pass2_cache)
+    m2_a = ResilientCachedModel(
+        None, pass2_cache, allow_pass3_replay_miss_as_empty=allow_pass3_replay_miss_as_empty
+    )
     run_a = run_batch(prs, pass1_model=m1_a, pass2_model=m2_a, workers=1, relevance_config=relevance_config, thresholds=thresholds)
 
     m1_b = ResilientCachedModel(None, pass1_cache, extra_read_caches=extra_pass1_caches)
-    m2_b = ResilientCachedModel(None, pass2_cache)
+    m2_b = ResilientCachedModel(
+        None, pass2_cache, allow_pass3_replay_miss_as_empty=allow_pass3_replay_miss_as_empty
+    )
     run_b = run_batch(prs, pass1_model=m1_b, pass2_model=m2_b, workers=1, relevance_config=relevance_config, thresholds=thresholds)
 
     for ra, rb in zip(run_a, run_b):
@@ -962,6 +1017,7 @@ def verify_replay_determinism(
     return {
         "verified_prs": len(run_a),
         "sample_digest": run_a[0]["ablations"]["d_full"]["pr_receipt_sha256"] if run_a else None,
+        "pass3_replay_miss_claims_count": len(m2_a.pass3_replay_miss_claims),
         "bit_identical": True,
     }
 
@@ -980,6 +1036,7 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--out", default="")
     ap.add_argument("--verify-replay", action="store_true")
+    ap.add_argument("--allow-pass3-replay-miss", action="store_true")
     ap.add_argument("--preregistration", default="", help="Optional path to frozen PREREGISTRATION.json")
     args = ap.parse_args()
 
@@ -1004,6 +1061,7 @@ def main() -> None:
             extra_pass1_caches=args.extra_pass1_cache,
             relevance_config=rel_cfg,
             thresholds=th_cfg,
+            allow_pass3_replay_miss_as_empty=args.allow_pass3_replay_miss,
         )
         out_vr: dict[str, Any] = {"verify_replay": vrep}
         if prereg_sha is not None:
@@ -1025,7 +1083,9 @@ def main() -> None:
         p2_m = ResilientCachedModel(base_m, args.pass2_cache)
     else:
         p1_m = ResilientCachedModel(None, args.pass1_cache, extra_read_caches=args.extra_pass1_cache)
-        p2_m = ResilientCachedModel(None, args.pass2_cache)
+        p2_m = ResilientCachedModel(
+            None, args.pass2_cache, allow_pass3_replay_miss_as_empty=args.allow_pass3_replay_miss
+        )
 
     rows = run_batch(
         prs,

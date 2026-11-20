@@ -224,11 +224,28 @@ _QUALIFIED_RE = re.compile(r"\b([A-Za-z_][\w]*(?:(?:\.|::|->)[A-Za-z_][\w]*)+)\b
 _HUNK_RE = re.compile(r"^@@[^@]*@@\s*(.*)$")
 
 _TEST_FILE_RE = re.compile(
-    r"(?i)(?:^|/)(?:tests?|specs?|__tests__)/|(?:_test|_tests|\.test|\.spec)\.[A-Za-z0-9]+$|"
-    r"Tests?\.(?:swift|java|kt|cs|go|py|ts|tsx|js|jsx|rs|rb)$"
+    r"(?i:(?:^|/)(?:tests?|specs?|__tests?__|_tests?)/|"
+    r"(?:^|/)test_[^/]+\.[A-Za-z0-9]+$|"
+    r"(?:_wbtest|_tests?|\.test|\.spec)\.[A-Za-z0-9]+$|"
+    r"(?:^|/)(?:conftest|tests?|unittest)\.(?:swift|java|kt|cs|go|py|ts|tsx|js|jsx|rs|rb|mbt)$|"
+    r"-tests?\.(?:swift|java|kt|cs|go|py|ts|tsx|js|jsx|rs|rb|mbt)$)|"
+    r"Tests?\.(?:swift|java|kt|cs|go|py|ts|tsx|js|jsx|rs|rb|mbt)$"
 )
 _TEST_FN_RE = re.compile(r"\b(?:def\s+(test_\w+)|func\s+(Test\w+)|fn\s+(test_\w+))")
 _TEST_JS_RE = re.compile(r"\b(?:it|test|describe)\(\s*['\"]([^'\"]{3,80})['\"]")
+_TEST_BLOCK_RE = re.compile(r'\b(?:async\s+)?test\s+"([^"]{3,120})"\s*\{')
+_SHORT_STRUCTURED_FILE_RE = re.compile(
+    r"(?i)\.(?:json|jsonc|json5|ya?ml|toml|jison|y|yy|yacc|g4|ebnf|bnf|peg|pegjs|pest|lex|antlr)$"
+)
+_GENERIC_PATH_ONLY_TOKENS: frozenset[str] = frozenset({
+    "assets", "backend", "bin", "cd", "ci", "cli", "cmd", "dev", "dist",
+    "frontend", "packages", "prod", "public", "resources", "shared",
+    "staging", "static", "templates", "third", "vendor", "web",
+})
+_SHORT_LINE_GENERIC_UPPER: frozenset[str] = frozenset({
+    "TRUE", "FALSE", "NULL", "NONE", "TODO", "HTTP", "HTTPS",
+    "JSON", "YAML", "TOML", "UTF8", "ASCII",
+})
 _DOCS_FILE_RE = re.compile(
     r"(?i)(?:^|/)(?:docs?|documentation)/|(?:^|/)readme(?:\.[^/]+)?$|(?:^|/)changelog(?:\.[^/]+)?$|"
     r"\.(?:md|mdx|rst|adoc|txt)$"
@@ -442,6 +459,49 @@ def _enclosing_hunk_header(doc_text: str, pos: int) -> str:
     return ""
 
 
+def _enclosing_hunk_context(doc_text: str, pos: int) -> str:
+    """Return context lines (` ` prefixed) strictly inside the enclosing `@@ ... @@` hunk containing *pos*."""
+    if not doc_text or pos < 0:
+        return ""
+    lines = doc_text.splitlines(keepends=True)
+    if not lines:
+        return ""
+    offset = 0
+    target_idx = len(lines) - 1
+    for i, raw_ln in enumerate(lines):
+        next_offset = offset + len(raw_ln)
+        if pos < next_offset:
+            target_idx = i
+            break
+        offset = next_offset
+
+    hunk_start: int | None = None
+    for i in range(target_idx, -1, -1):
+        if _HUNK_RE.match(lines[i]):
+            hunk_start = i
+            break
+
+    hunk_end = len(lines)
+    for i in range(target_idx + 1, len(lines)):
+        if _HUNK_RE.match(lines[i]):
+            hunk_end = i
+            break
+
+    if hunk_start is not None:
+        span_start = hunk_start + 1
+        span_end = hunk_end
+    else:
+        span_start = max(0, target_idx - 20)
+        span_end = min(hunk_end, target_idx + 21)
+
+    ctx_lines = [
+        ln[1:].strip()
+        for ln in lines[span_start:span_end]
+        if ln.startswith(" ") and ln.strip()
+    ]
+    return "\n".join(ctx_lines)
+
+
 def is_compound_identifier(token: str) -> bool:
     """Return True if *token* looks like a concrete multi-part symbol, path, or CLI flag."""
     t = token.strip("`\"'")
@@ -632,6 +692,8 @@ def _extract_tests(line: str) -> list[str]:
         tok = next(g for g in m.groups() if g)
         out.append(tok)
     for m in _TEST_JS_RE.finditer(line):
+        out.append(m.group(1))
+    for m in _TEST_BLOCK_RE.finditer(line):
         out.append(m.group(1))
     return out
 
@@ -1495,6 +1557,53 @@ def _target_grounded_in_claim(
     return hits >= max(1, (len(tgt_spec) + 1) // 2) and (hits / len(tgt_spec)) >= 0.5
 
 
+def _short_structured_line_anchors(
+    premise_file: str | None,
+    premise_quote: str,
+    *,
+    repo_tokens: frozenset[str] = frozenset(),
+) -> tuple[bool, set[str], set[str], set[str]]:
+    """Extract specific key/path/uppercase anchors for short (<2 token) JSON/YAML/grammar lines."""
+    q_body = (premise_quote or "").lstrip("+- ").strip()
+    if not (premise_file and _SHORT_STRUCTURED_FILE_RE.search(premise_file)) or "\n" in q_body:
+        return (False, set(), set(), set())
+    raw_line_words = [
+        w.strip("._-")
+        for w in re.findall(r"[A-Za-z_][A-Za-z0-9_.-]*", q_body)
+        if len(w.strip("._-")) >= 2
+    ]
+    line_spec4 = [
+        w
+        for w in raw_line_words
+        if len(w) >= 4 and w.lower() not in CODE_STOPWORDS and w.lower() not in repo_tokens
+    ]
+    is_short = (len(raw_line_words) < 2) or (len(raw_line_words) == 2 and len(line_spec4) < 2)
+    if not is_short:
+        return (False, set(), set(), set())
+
+    key_raw = specific_tokens(q_body, repo_tokens=repo_tokens, min_len=4)
+    key_anchors = set(key_raw) | {_stem_token(t, repo_tokens=repo_tokens) for t in key_raw}
+    path_raw = [
+        t
+        for t in specific_tokens(premise_file, repo_tokens=repo_tokens, min_len=4)
+        if t not in _GENERIC_PATH_ONLY_TOKENS
+    ]
+    path_anchors = set(path_raw) | {
+        s
+        for t in path_raw
+        for s in (_stem_token(t, repo_tokens=repo_tokens),)
+        if s not in _GENERIC_PATH_ONLY_TOKENS
+    }
+    exact_upper = {
+        w
+        for w in raw_line_words
+        if re.fullmatch(r"[A-Z][A-Z0-9_]{2,}", w)
+        and w not in _SHORT_LINE_GENERIC_UPPER
+        and w.lower() not in repo_tokens
+    }
+    return (True, key_anchors, path_anchors, exact_upper)
+
+
 def check_premise_relevance(
     *,
     claim_text: str,
@@ -1507,6 +1616,7 @@ def check_premise_relevance(
     repo_tokens: frozenset[str] = frozenset(),
     config: RelevanceConfig = RelevanceConfig(),
     hunk_header: str | None = None,
+    hunk_context: str | None = None,
     require_target_grounded_in_claim: bool = False,
 ) -> tuple[bool, str]:
     """Deterministic anti-N2 guard rejecting generic same-repo or stopword-only matches."""
@@ -1516,11 +1626,22 @@ def check_premise_relevance(
         return False, "INCOMPATIBLE_OPERATION_CATEGORY"
 
     prem_blob = " ".join(
-        x for x in (premise_file or "", hunk_header or "", premise_symbol or "", premise_quote or "") if x
+        x
+        for x in (
+            premise_file or "",
+            hunk_header or "",
+            hunk_context or "",
+            premise_symbol or "",
+            premise_quote or "",
+        )
+        if x
     )
     prem_specific_list = specific_tokens(prem_blob, repo_tokens=repo_tokens, min_len=3)
     prem_specific = set(prem_specific_list)
     prem_stems = {_stem_token(t, repo_tokens=repo_tokens) for t in prem_specific_list}
+    is_short_struct, short_key_anchors, short_path_anchors, short_exact_upper = (
+        _short_structured_line_anchors(premise_file, premise_quote, repo_tokens=repo_tokens)
+    )
 
     tgt_clean = (target or "").strip().strip("`\"'")
     tgt_spec = specific_tokens(tgt_clean, repo_tokens=repo_tokens, min_len=3)
@@ -1547,6 +1668,11 @@ def check_premise_relevance(
             return True, "TARGET_SPECIFIC_TOKEN_MATCH"
         if len(tgt_atomic_stems) >= 2 and len(shared_anchors) >= min(len(tgt_atomic_stems), config.min_specific_anchors):
             return True, "TARGET_MULTI_SPECIFIC_MATCH"
+        if is_short_struct:
+            if any(_has_boundary_aligned_match(tgt_clean, u) for u in short_exact_upper):
+                return True, "SHORT_STRUCTURED_KEY_MATCH"
+            if shared_anchors & (short_key_anchors | short_path_anchors):
+                return True, "SHORT_STRUCTURED_TARGET_MATCH"
         return False, "TARGET_NOT_IN_PREMISE"
 
     # Generic / missing target: rely on non-stopword, non-repo specific anchors in claim_text
@@ -1564,6 +1690,13 @@ def check_premise_relevance(
     overlap = (set(claim_spec) & prem_specific) | (claim_stems & prem_stems)
     if len(overlap) >= config.min_specific_anchors:
         return True, "MULTI_SPECIFIC_ANCHOR_MATCH"
+    if is_short_struct:
+        if any(_has_boundary_aligned_match(claim_text or "", u) for u in short_exact_upper):
+            return True, "SHORT_STRUCTURED_KEY_MATCH"
+        if overlap & short_key_anchors:
+            return True, "SHORT_STRUCTURED_KEY_MATCH"
+        if overlap & short_path_anchors:
+            return True, "SHORT_STRUCTURED_PATH_MATCH"
     return False, "INSUFFICIENT_SPECIFIC_OVERLAP"
 
 
@@ -2010,6 +2143,11 @@ def verify_behavior_graph(
             if matched_doc_id in ledger.raw_documents
             else ""
         )
+        hunk_ctx = (
+            _enclosing_hunk_context(ledger.raw_documents[matched_doc_id].text, ref.start)
+            if matched_doc_id in ledger.raw_documents
+            else ""
+        )
 
         # Check anti-N2 relevance guard (Pass-3 blind reread additionally requires target grounded in claim_text)
         rel_ok, rel_reason = check_premise_relevance(
@@ -2023,6 +2161,7 @@ def verify_behavior_graph(
             repo_tokens=repo_tokens,
             config=relevance_config,
             hunk_header=hunk_hdr,
+            hunk_context=hunk_ctx,
             require_target_grounded_in_claim=(
                 reread_attempted and relevance_config.pass3_require_target_grounded_in_claim
             ),

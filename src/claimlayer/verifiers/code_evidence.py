@@ -70,12 +70,22 @@ _CODE_DIM_QTY_RE = re.compile(
 )
 
 _CODE_TOKEN_RE = re.compile(
-    r"0[xX][0-9a-fA-F]+|(?<![A-Za-z0-9_.])-\d+(?:\.\d+)*|\d+(?:\.\d+)*|[A-Za-z_][A-Za-z0-9_]*"
+    r"(?<!\w)0[xX][0-9a-fA-F](?:[0-9a-fA-F_]*[0-9a-fA-F])?"
+    r"|(?<!\w)0[oO][0-7](?:[0-7_]*[0-7])?"
+    r"|(?<!\w)0[bB][01](?:[01_]*[01])?"
+    r"|(?<!\w)(?<!\d\.)\d+(?:[A-Za-z_]|[^\W\d_])\w*"
+    r"|(?<![A-Za-z0-9_.])-\d+(?:\.\d+)*"
+    r"|\d+(?:\.\d+)*"
+    r"|(?:[^\W\d_]|_)\w*"
 )
-_CALL_SUFFIX_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\(\)")
+_CALL_SUFFIX_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\(\)(?!(?:\.|::|->))")
 _PATH_COMPOUND_RE = re.compile(r"[A-Za-z0-9_@.-]+(?:/[A-Za-z0-9_@.-]+)+")
 _QUALIFIED_COMPOUND_RE = re.compile(
-    r"[A-Za-z_][A-Za-z0-9_]*(?:(?:\.|::|->)[A-Za-z_][A-Za-z0-9_]*)+"
+    r"(?<!\w)[A-Za-z_][A-Za-z0-9_]*(?:(?:\.|::|->)[A-Za-z_][A-Za-z0-9_]*)+"
+)
+_GENERIC_TYPE_COMPOUND_RE = re.compile(
+    r"(?:[A-Za-z_][A-Za-z0-9_]*(?:(?:\.|::|->)[A-Za-z_][A-Za-z0-9_]*)*(?:::)?)?"
+    r"<[A-Za-z_?*'&\[\]()](?:[^<>;&|=]|&(?!&)|\|(?!\|)|<[A-Za-z_?*'&\[\]()](?:[^<>;&|=]|&(?!&)|\|(?!\|))*>)*>"
 )
 _STANDALONE_SLASH_DATE_RE = re.compile(
     r"(?<![A-Za-z0-9_/.-])\d{1,2}/\d{1,2}/\d{2,4}(?![A-Za-z0-9_/.-])"
@@ -182,7 +192,7 @@ def _spans_overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
 
 def _unsigned_number_in_text(tok: str, text: str) -> bool:
     pat = re.compile(
-        r"(?<![A-Za-z0-9_])(?<!\d\.)" + re.escape(tok) + r"(?![A-Za-z0-9_])(?!\.\d)"
+        r"(?<!\w)(?<!\d\.)" + re.escape(tok) + r"(?!\w)(?!\.\d)"
     )
     for m in pat.finditer(text):
         pos = m.start()
@@ -194,7 +204,7 @@ def _unsigned_number_in_text(tok: str, text: str) -> bool:
 
 
 def _token_in_code_text(tok: str, text: str) -> bool:
-    if tok.startswith(("0x", "0X")):
+    if not all(ch.isdigit() or ch == "." for ch in tok.lstrip("-")):
         return _has_boundary_aligned_match(text, tok)
     if tok.startswith("-"):
         pat = re.compile(
@@ -424,6 +434,30 @@ def verify_code_config_evidence(
                 )
                 return issues
 
+    verified_generic_spans: list[tuple[int, int]] = []
+    for m in _GENERIC_TYPE_COMPOUND_RE.finditer(val_text):
+        comp = m.group(0)
+        if not (
+            _has_boundary_aligned_match(reference_text, comp)
+            or _has_boundary_aligned_match(ws_ref, comp)
+        ):
+            issues.append(
+                Issue(
+                    code="QUANTITY_MISMATCH",
+                    disposition="RETRY",
+                    assertion_id=assertion.id,
+                    subject=assertion.subject,
+                    predicate=assertion.predicate,
+                    message=(
+                        f"Generic type expression '{comp}' in '{assertion.value}' "
+                        f"is not grounded in cited quote '{assertion.quote[:80]}'."
+                    ),
+                    remediation=f"Ensure '{assertion.value}' appears verbatim in '{source.id}'.",
+                )
+            )
+            return issues
+        verified_generic_spans.append(m.span())
+
     token_matches = list(_CODE_TOKEN_RE.finditer(cleaned_val))
     if not token_matches:
         stripped_val = val_text.strip()
@@ -465,6 +499,8 @@ def verify_code_config_evidence(
                 return issues
 
     for op_m in _COMP_OP_RE.finditer(val_text):
+        if any(_spans_overlap(op_m.span(), gspan) for gspan in verified_generic_spans):
+            continue
         op = op_m.group(0)
         if not _operator_in_code_text(op, reference_text):
             issues.append(

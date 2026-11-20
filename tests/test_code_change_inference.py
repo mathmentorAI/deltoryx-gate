@@ -15,6 +15,7 @@ from claimlayer.v4.domains.code_change_inference import (
     build_code_diff_verifier_registry,
     build_typed_diff_ledger,
     check_premise_relevance,
+    classify_file_category,
     compute_pr_verdict,
     evaluate_i5_structural_signals,
     reconcile_phase3_literal_claim,
@@ -1838,6 +1839,276 @@ def test_decoupled_review_thresholds_in_compute_pr_verdict() -> None:
         thresholds=th_tuned,
     )
     assert v_tuned["verdict"] == "CONSISTENT"
+
+
+def test_same_hunk_context_relevance_positive_and_cross_hunk_negative() -> None:
+    """Enclosing same-hunk header and context lines validate relevance; different hunks stay rejected."""
+    patch = (
+        "@@ -10,6 +10,7 @@ func (e *Enforcer) EnableAcceptJsonRequest(v bool) {\n"
+        " // BuildRoleLinks rebuilds role inheritance relations.\n"
+        " func (e *Enforcer) BuildRoleLinks() error {\n"
+        " \tif e.rmMap == nil {\n"
+        "+\t\te.invalidateMatcherMap()\n"
+        " \t\treturn errors.New(\"nil\")\n"
+        " \t}\n"
+        " }\n"
+        "@@ -120,4 +121,5 @@ func (e *Enforcer) UnrelatedOtherHelper() {\n"
+        " \tif e.enabled {\n"
+        "+\t\te.auditLog()\n"
+        " \t}\n"
+        " }\n"
+    )
+    pr = _sample_pr(
+        title="Invalidate matcher map in BuildRoleLinks",
+        body="Calls e.invalidateMatcherMap() inside BuildRoleLinks.",
+        file_patches=[{"filename": "enforcer.go", "status": "modified", "patch": patch}],
+    )
+    ledger = build_typed_diff_ledger(pr)
+
+    res_same = verify_behavior_graph(
+        claim_id="hunk_pos_ctx",
+        claim_text="Invalidate matcher map in BuildRoleLinks()",
+        operation="implements",
+        target="BuildRoleLinks",
+        proposed_premises=[
+            {
+                "file": "enforcer.go",
+                "symbol_or_key": "invalidateMatcherMap",
+                "literal_quote": "+\t\te.invalidateMatcherMap()",
+            }
+        ],
+        ledger=ledger,
+    )
+    assert res_same["status"] == "hypothesis_with_verified_premises"
+
+    res_hdr = verify_behavior_graph(
+        claim_id="hunk_pos_hdr",
+        claim_text="Updates EnableAcceptJsonRequest helper",
+        operation="implements",
+        target="EnableAcceptJsonRequest",
+        proposed_premises=[
+            {
+                "file": "enforcer.go",
+                "symbol_or_key": "invalidateMatcherMap",
+                "literal_quote": "+\t\te.invalidateMatcherMap()",
+            }
+        ],
+        ledger=ledger,
+    )
+    assert res_hdr["status"] == "hypothesis_with_verified_premises"
+
+    res_diff_hunk = verify_behavior_graph(
+        claim_id="hunk_neg_other",
+        claim_text="BuildRoleLinks calls auditLog",
+        operation="implements",
+        target="BuildRoleLinks",
+        proposed_premises=[
+            {
+                "file": "enforcer.go",
+                "symbol_or_key": "auditLog",
+                "literal_quote": "+\t\te.auditLog()",
+            }
+        ],
+        ledger=ledger,
+    )
+    assert res_diff_hunk["status"] == "no_premises_in_diff"
+    assert res_diff_hunk["rejected_premises"][0]["reason"] == "rejected_irrelevant_premise:TARGET_NOT_IN_PREMISE"
+
+
+def test_short_structured_line_anchors_positive_and_negative_n2_guard() -> None:
+    """Short (<2 token) JSON/YAML/grammar lines allow a single specific key/path anchor without opening N2 leaks."""
+    pr = _sample_pr(
+        title="Configure GitHub Actions backend workflow, React JSX tsconfig, and parser keyword",
+        body="Sets up workflow and compiler config.",
+        file_patches=[
+            {
+                "filename": ".github/workflows/ci.yml",
+                "status": "added",
+                "patch": "@@ -0,0 +1,20 @@\n+  backend:\n+    runs-on: ubuntu-latest\n",
+            },
+            {
+                "filename": "templates/tsconfig.json",
+                "status": "added",
+                "patch": '@@ -0,0 +1,5 @@\n+    "jsx": "react-jsx",\n+    "strict": true\n',
+            },
+            {
+                "filename": "src/alasqlparser.jison",
+                "status": "modified",
+                "patch": "@@ -100,2 +100,4 @@ Column\n+\t| DELETED\n+\t| INSERTED\n",
+            },
+            {
+                "filename": "src/vendor/config.yaml",
+                "status": "modified",
+                "patch": "@@ -1,1 +1,2 @@\n+  enabled: true\n",
+            },
+            {
+                "filename": "src/github.py",
+                "status": "modified",
+                "patch": "@@ -1,1 +1,2 @@\n+x = 1\n",
+            },
+            {
+                "filename": "docs/notes.yaml",
+                "status": "modified",
+                "patch": '@@ -1,1 +1,2 @@\n+  description: "Adds custom timeout handling for legacy proxy"\n',
+            },
+        ],
+    )
+    ledger = build_typed_diff_ledger(pr)
+
+    res_yaml = verify_behavior_graph(
+        claim_id="short_yaml_pos",
+        claim_text="Set up github actions workflow",
+        operation="configures",
+        target="backend job",
+        proposed_premises=[{"file": ".github/workflows/ci.yml", "symbol_or_key": "backend", "literal_quote": "+  backend:"}],
+        ledger=ledger,
+    )
+    assert res_yaml["status"] == "hypothesis_with_verified_premises"
+
+    res_yaml_exact = verify_behavior_graph(
+        claim_id="short_yaml_exact_pos",
+        claim_text="Set up github actions backend workflow",
+        operation="configures",
+        target="backend",
+        proposed_premises=[{"file": ".github/workflows/ci.yml", "symbol_or_key": "backend", "literal_quote": "+  backend:"}],
+        ledger=ledger,
+    )
+    assert res_yaml_exact["status"] == "derived_supported"
+
+    res_json = verify_behavior_graph(
+        claim_id="short_json_pos",
+        claim_text="Configures React JSX compilation in tsconfig.json",
+        operation="configures",
+        target="tsconfig.json",
+        proposed_premises=[{"file": "templates/tsconfig.json", "symbol_or_key": "jsx", "literal_quote": '+    "jsx": "react-jsx",'}],
+        ledger=ledger,
+    )
+    assert res_json["status"] == "derived_supported"
+
+    res_jison = verify_behavior_graph(
+        claim_id="short_jison_pos",
+        claim_text="Supports the SQL keyword: DELETED",
+        operation="implements",
+        target="DELETED",
+        proposed_premises=[{"file": "src/alasqlparser.jison", "symbol_or_key": "DELETED", "literal_quote": "+\t| DELETED"}],
+        ledger=ledger,
+    )
+    assert res_jison["status"] == "hypothesis_with_verified_premises"
+
+    # Negatives: unrelated N2 claim, generic vendor path, non-structured source, multi-token YAML line
+    assert verify_behavior_graph(
+        claim_id="short_yaml_neg_n2",
+        claim_text="Add Redis caching to deployment pipeline",
+        operation="configures",
+        target="redis cache",
+        proposed_premises=[{"file": ".github/workflows/ci.yml", "symbol_or_key": "backend", "literal_quote": "+  backend:"}],
+        ledger=ledger,
+    )["status"] == "no_premises_in_diff"
+
+    for tgt_val in ("", "vendor pipeline"):
+        assert verify_behavior_graph(
+            claim_id=f"short_yaml_neg_generic_{len(tgt_val)}",
+            claim_text="Update vendor pipeline config settings for users",
+            operation="configures",
+            target=tgt_val,
+            proposed_premises=[{"file": "src/vendor/config.yaml", "symbol_or_key": "enabled", "literal_quote": "+  enabled: true"}],
+            ledger=ledger,
+        )["status"] == "no_premises_in_diff"
+
+    assert verify_behavior_graph(
+        claim_id="short_src_neg",
+        claim_text="Configure github integration",
+        operation="implements",
+        target="github integration",
+        proposed_premises=[{"file": "src/github.py", "symbol_or_key": "x", "literal_quote": "+x = 1"}],
+        ledger=ledger,
+    )["status"] == "no_premises_in_diff"
+
+    assert verify_behavior_graph(
+        claim_id="short_yaml_neg_multi",
+        claim_text="Support proxy authentication routing",
+        operation="configures",
+        target="",
+        proposed_premises=[{"file": "docs/notes.yaml", "symbol_or_key": "description", "literal_quote": '+  description: "Adds custom timeout handling for legacy proxy"'}],
+        ledger=ledger,
+    )["status"] == "no_premises_in_diff"
+
+
+def test_standard_test_file_patterns_positive_and_negative() -> None:
+    """Standard test directory/filename patterns classify as `'test'`, never matching non-test `src/` files."""
+    positive_paths = [
+        "packages/cli/__test__/__snapshots__/schema-level-examples-fdr.snap",
+        "packages/web/__tests__/Button.tsx",
+        "packages/contracts-bedrock/test/L1/ProtocolVersions.t.sol",
+        "src/tests/unit_helper.py",
+        "chia/_tests/core/full_node/test_full_node.py",
+        "src/executor_wbtest.mbt",
+        "pkg/cmd/refresh_test.go",
+        "src/retry_tests.py",
+        "tests_unit/test_retry.py",
+        "test_retry.py",
+        "components/Button.spec.ts",
+        "components/Button.test.tsx",
+        "Tests/AppTests.swift",
+        "blog/tests.py",
+        "coder-test/integration-test.ts",
+        "conftest.py",
+        "pkg/runtime/channels/unittest.go",
+    ]
+    for p in positive_paths:
+        assert classify_file_category(p) == "test", f"Expected 'test' for {p}"
+
+    negative_paths = [
+        ("src/contest.py", "src"),
+        ("src/attestation.ts", "src"),
+        ("src/latest_version.py", "src"),
+        ("src/specifier.rs", "src"),
+        ("src/test_utils/helper.py", "src"),
+        ("src/executor.mbt", "src"),
+        (".github/workflows/test.yml", "config"),
+        ("test.wav", "src"),
+        ("docs/testing.md", "docs"),
+        ("config/wbtest_config.yaml", "config"),
+    ]
+    for p, expected in negative_paths:
+        assert classify_file_category(p) == expected, f"Expected {expected!r} for {p}"
+
+    pr = _sample_pr(
+        title="Add MoonBit whitebox tests for validate_workspace_path_real",
+        body="Adds whitebox test coverage.",
+        file_patches=[
+            {
+                "filename": "src/executor_wbtest.mbt",
+                "status": "modified",
+                "patch": '@@ -1,1 +1,2 @@\n+async test "validate_workspace_path_real: accepts symlink" {\n+  assert_eq(true, true)\n+}\n',
+            },
+            {
+                "filename": "src/executor.mbt",
+                "status": "modified",
+                "patch": "@@ -1,1 +1,2 @@\n+pub fn validate_workspace_path_real() -> Bool {\n+  true\n+}\n",
+            },
+        ],
+    )
+    ledger = build_typed_diff_ledger(pr)
+    assert verify_behavior_graph(
+        claim_id="wbtest_pos",
+        claim_text="Adds unit tests for validate_workspace_path_real",
+        operation="adds_test_for",
+        target="validate_workspace_path_real",
+        proposed_premises=[{"file": "src/executor_wbtest.mbt", "symbol_or_key": "validate_workspace_path_real", "literal_quote": '+async test "validate_workspace_path_real: accepts symlink" {'}],
+        ledger=ledger,
+    )["status"] == "derived_supported"
+    res_neg = verify_behavior_graph(
+        claim_id="wbtest_neg_src",
+        claim_text="Adds tests for validate_workspace_path_real",
+        operation="adds_test_for",
+        target="validate_workspace_path_real",
+        proposed_premises=[{"file": "src/executor.mbt", "symbol_or_key": "validate_workspace_path_real", "literal_quote": "+pub fn validate_workspace_path_real() -> Bool {"}],
+        ledger=ledger,
+    )
+    assert res_neg["status"] == "no_premises_in_diff"
+    assert res_neg["rejected_premises"][0]["reason"] == "rejected_irrelevant_premise:INCOMPATIBLE_OPERATION_CATEGORY"
+
 
 
 

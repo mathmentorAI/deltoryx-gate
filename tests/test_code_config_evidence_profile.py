@@ -273,3 +273,173 @@ def test_default_legal_prose_profile_is_not_relaxed():
     )
     assert v_word.status == "RETRY"
     assert v_word.issues[0].code == "QUOTE_NOT_IN_SOURCE"
+
+
+def test_code_config_radix_literals_and_negative_substring_rejections():
+    from claimlayer.verifiers.code_evidence import is_code_config_assertion_self_consistent
+
+    # Positive: octal, binary, underscore hex, and digit-prefixed alphanumeric tokens
+    for src, q, val in [
+        ("+\terr = store.Chmod(privateKeyPath, 0o600)", "+\terr = store.Chmod(privateKeyPath, 0o600)", "0o600"),
+        ("+\terr = store.Chmod(privateKeyPath, 0O755)", "+\terr = store.Chmod(privateKeyPath, 0O755)", "store.Chmod(privateKeyPath, 0O755)"),
+        ("+const mask = 0b1010_0101;", "+const mask = 0b1010_0101;", "0b1010_0101"),
+        ("+const magic = 0xdead_beef;", "+const magic = 0xdead_beef;", "0xdead_beef"),
+        ('+  "dimension": "2D",', '+  "dimension": "2D",', '+  "dimension": "2D",'),
+        ("+    runs-on: ubuntu-24.04-16cores-public", "+    runs-on: ubuntu-24.04-16cores-public", "ubuntu-24.04-16cores-public"),
+        ('+  "2002:7f00:0001::",', '+  "2002:7f00:0001::",', "2002:7f00:0001::"),
+        ("+  - uses: WalletConnect/actions/github/cta-assistant@7a3ca8b03e62", "+  - uses: WalletConnect/actions/github/cta-assistant@7a3ca8b03e62", "WalletConnect/actions/github/cta-assistant@7a3ca8b03e62"),
+        ('+echo "Customize: ai-maestro.23blocks.com/plugin-builder.html"', '+echo "Customize: ai-maestro.23blocks.com/plugin-builder.html"', '+echo "Customize: ai-maestro.23blocks.com/plugin-builder.html"'),
+    ]:
+        led, res = _verify_single(source_text=src, quote=q, value=val)
+        assert res.status == "PASS", f"Expected PASS for {val!r}, got {res.issues}"
+        assert res.verify_receipt(ledger=led, allow_unkeyed=True) is True
+        assert is_code_config_assertion_self_consistent(
+            Assertion(subject="pull_request", predicate="diff_evidence", value=val, source_id="diff_src", quote=q)
+        ) is True
+
+    # Negative: prefix/substring truncation of radix & digit-prefixed tokens must fail strictly
+    for src, q, val in [
+        ("+err = store.Chmod(p, 0o600)", "+err = store.Chmod(p, 0o600)", "0o60"),
+        ("+err = store.Chmod(p, 0o600)", "+err = store.Chmod(p, 0o600)", "600"),
+        ("+const mask = 0b1010_0101;", "+const mask = 0b1010_0101;", "0b1010"),
+        ("+const magic = 0xdead_beef;", "+const magic = 0xdead_beef;", "0xdead"),
+        ('+  "dimension": "2D",', '+  "dimension": "2D",', "2"),
+        ('+  "dimension": "2D",', '+  "dimension": "2D",', "D"),
+        ("+    runs-on: ubuntu-24.04-16cores-public", "+    runs-on: ubuntu-24.04-16cores-public", "16"),
+        ("+  - uses: org/act@7a3ca8b03e62", "+  - uses: org/act@7a3ca8b03e62", "7a3ca8"),
+        ('+echo "ai-maestro.23blocks.com"', '+echo "ai-maestro.23blocks.com"', "blocks"),
+    ]:
+        _, res = _verify_single(source_text=src, quote=q, value=val)
+        assert res.status == "RETRY", f"Expected RETRY for substring {val!r} in {q!r}"
+        assert res.issues[0].code == "QUANTITY_MISMATCH"
+
+
+def test_code_config_generics_chained_calls_and_negative_mismatch():
+    from claimlayer.verifiers.code_evidence import is_code_config_assertion_self_consistent
+
+    # Positive: Rust/TS/C# generic type parameters and chained method calls
+    for src, q, val in [
+        (
+            '+Config::global().get_param::<bool>("GOOSE_SHOW_FULL_OUTPUT").unwrap_or(false)',
+            '+Config::global().get_param::<bool>("GOOSE_SHOW_FULL_OUTPUT").unwrap_or(false)',
+            '+Config::global().get_param::<bool>("GOOSE_SHOW_FULL_OUTPUT").unwrap_or(false)',
+        ),
+        (
+            '+Config::global().get_param::<bool>("GOOSE_SHOW_FULL_OUTPUT").unwrap_or(false)',
+            '+Config::global().get_param::<bool>("GOOSE_SHOW_FULL_OUTPUT").unwrap_or(false)',
+            "<bool>",
+        ),
+        (
+            "+log = directory.GetFiles().OrderByDescending(f => f.LastWriteTime).FirstOrDefault();",
+            "+log = directory.GetFiles().OrderByDescending(f => f.LastWriteTime).FirstOrDefault();",
+            "+log = directory.GetFiles().OrderByDescending(f => f.LastWriteTime).FirstOrDefault();",
+        ),
+        (
+            "+return getRefContext().measureText(text);",
+            "+return getRefContext().measureText(text);",
+            "+return getRefContext().measureText(text);",
+        ),
+        (
+            "+static SHOW_FULL_TOOL_OUTPUT: RefCell<bool> = RefCell::new(false);",
+            "+static SHOW_FULL_TOOL_OUTPUT: RefCell<bool> = RefCell::new(false);",
+            "RefCell<bool>",
+        ),
+        (
+            "fn convert(items: Vec<String>) -> Vec<Option<bool>>",
+            "fn convert(items: Vec<String>) -> Vec<Option<bool>>",
+            "Vec<String>",
+        ),
+        (
+            "fn convert(items: Vec<String>) -> Vec<Option<bool>>",
+            "fn convert(items: Vec<String>) -> Vec<Option<bool>>",
+            "Option<bool>",
+        ),
+        (
+            "fn convert(items: Vec<String>) -> Vec<Option<bool>>",
+            "fn convert(items: Vec<String>) -> Vec<Option<bool>>",
+            "Vec<Option<bool>>",
+        ),
+    ]:
+        led, res = _verify_single(source_text=src, quote=q, value=val)
+        assert res.status == "PASS", f"Expected PASS for {val!r}, got {res.issues}"
+        assert res.verify_receipt(ledger=led, allow_unkeyed=True) is True
+        assert is_code_config_assertion_self_consistent(
+            Assertion(subject="pull_request", predicate="diff_evidence", value=val, source_id="diff_src", quote=q)
+        ) is True
+
+    # Negative: wrong generic parameter, fake generic against comparison ops, flipped comparison
+    for src, q, val in [
+        ("fn convert(items: Vec<String>)", "fn convert(items: Vec<String>)", "Vec<i32>"),
+        ("let flag: bool = a < b && c > d;", "let flag: bool = a < b && c > d;", "a<bool>"),
+        ("let flag: bool = a < b && c > d;", "let flag: bool = a < b && c > d;", "<bool>"),
+        ("if (a < b) { return; }", "if (a < b) { return; }", "a > b"),
+    ]:
+        _, res = _verify_single(source_text=src, quote=q, value=val)
+        assert res.status == "RETRY", f"Expected RETRY for mismatched generic/op {val!r}"
+        assert res.issues[0].code == "QUANTITY_MISMATCH"
+
+
+def test_code_config_unicode_cjk_and_strict_substring_stem_fabricated_rejections():
+    from claimlayer.verifiers.code_evidence import is_code_config_assertion_self_consistent
+
+    # Positive: non-ASCII / CJK & Greek Unicode headings/identifiers are substantive verbatim citations
+    for src, q, val in [
+        ("+## 全局规则\n+- 代码注释使用中文", "+## 全局规则", "+## 全局规则"),
+        ("+## 全局规则\n+- 代码注释使用中文", "+- 代码注释使用中文", "代码注释使用中文"),
+        ("+Δspan = abs(p_src_span - c_src_span)", "+Δspan = abs(p_src_span - c_src_span)", "Δspan"),
+    ]:
+        led, res = _verify_single(source_text=src, quote=q, value=val)
+        assert res.status == "PASS", f"Expected PASS for Unicode {val!r}, got {res.issues}"
+        assert res.verify_receipt(ledger=led, allow_unkeyed=True) is True
+        assert is_code_config_assertion_self_consistent(
+            Assertion(subject="pull_request", predicate="diff_evidence", value=val, source_id="diff_src", quote=q)
+        ) is True
+
+    # Negative 1: CJK & Greek substrings rejected on word boundaries
+    for src, q, val in [
+        ("+## 全局规则", "+## 全局规则", "全局"),
+        ("+Δspan = abs(x)", "+Δspan = abs(x)", "span"),
+    ]:
+        _, res_sub = _verify_single(source_text=src, quote=q, value=val)
+        assert res_sub.status == "RETRY"
+        assert res_sub.issues[0].code == "QUANTITY_MISMATCH"
+
+    _, res_sub_q = _verify_single(source_text="+## 全局规则", quote="全局", value="全局")
+    assert res_sub_q.status == "RETRY"
+    assert res_sub_q.issues[0].code == "QUOTE_NOT_IN_SOURCE"
+
+    # Negative 2: ASCII substring and stemming remain rejected
+    _, res_ascii_sub = _verify_single(
+        source_text="+const address = getAddress();",
+        quote="+const address = getAddress();",
+        value="add",
+    )
+    assert res_ascii_sub.status == "RETRY"
+    assert res_ascii_sub.issues[0].code == "QUANTITY_MISMATCH"
+
+    _, res_stem = _verify_single(
+        source_text="+const running = true;",
+        quote="+const running = true;",
+        value="run",
+    )
+    assert res_stem.status == "RETRY"
+    assert res_stem.issues[0].code == "QUANTITY_MISMATCH"
+
+    # Negative 3: fabricated CJK quote and punctuation-only quote remain rejected
+    _, res_fab = _verify_single(
+        source_text="+## 全局规则",
+        quote="+## 全局配置",
+        value="+## 全局配置",
+    )
+    assert res_fab.status == "RETRY"
+    assert res_fab.issues[0].code == "QUOTE_NOT_IN_SOURCE"
+
+    for punct_q in ("---", "{", "()"):
+        _, res_punct = _verify_single(
+            source_text=f"diff\n{punct_q}\nend",
+            quote=punct_q,
+            value=punct_q,
+        )
+        assert res_punct.status == "RETRY"
+        assert res_punct.issues[0].code == "QUOTE_NOT_IN_SOURCE"
+

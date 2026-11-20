@@ -1,0 +1,1747 @@
+{
+  "dataset": "aidev_dev_originals (diagnostic-120-v1.0, seed=20261121, 0 overlap with audit_50)",
+  "epistemic_framing": "Measured against blind silver annotations produced by Claude (`silver: Claude`, independent of Nemotron and blind to blind_key.json/gate outputs), NOT final human labels. Human review of the 43 priority items in REVISION_HUMANA_prioritaria.md is required before public claims.",
+  "n2_anti_laxity": {
+    "n2_escalate_count": 1,
+    "n2_leakage": {
+      "broad_leakage_any_verified_premise": 14,
+      "broad_leakage_rate": 0.1284,
+      "catch_rate": 0.8073,
+      "caught_no_premise_or_contradicted": 88,
+      "matched_injected_claims": 109,
+      "prs_with_matched_injected_claim": 101,
+      "strict_leakage_derived_supported": 4,
+      "strict_leakage_rate": 0.0367,
+      "total_prs": 184
+    }
+  },
+  "point2_engine_ceiling": {
+    "accuracy_113_excl_meta": {
+      "ci95": [
+        0.9516,
+        0.9984
+      ],
+      "k": 112,
+      "n": 113,
+      "rate": 0.9912
+    },
+    "accuracy_120": {
+      "ci95": [
+        0.9543,
+        0.9985
+      ],
+      "k": 119,
+      "n": 120,
+      "rate": 0.9917
+    },
+    "confusion_matrix": {
+      "contradicted": {
+        "no_premises_in_diff": 1
+      },
+      "no_premises": {
+        "no_premises_in_diff": 6
+      },
+      "out_of_scope_meta": {
+        "unverifiable": 7
+      },
+      "supported": {
+        "derived_supported": 41,
+        "hypothesis_with_verified_premises": 65
+      }
+    },
+    "located_oracle_premises": 210,
+    "mismatch_items": [
+      {
+        "engine_state": "no_premises_in_diff",
+        "gold_operation": "other_behavior",
+        "item_id": "DIAG-041",
+        "silver_status": "contradicted"
+      }
+    ],
+    "monotonicity_check_unruled_derived_count": 0,
+    "n_total": 120,
+    "per_class_recall": {
+      "contradicted": {
+        "ci95": [
+          0.0,
+          0.7935
+        ],
+        "k": 0,
+        "n": 1,
+        "rate": 0.0
+      },
+      "no_premises": {
+        "ci95": [
+          0.6097,
+          1.0
+        ],
+        "k": 6,
+        "n": 6,
+        "rate": 1.0
+      },
+      "out_of_scope_meta": {
+        "ci95": [
+          0.6457,
+          1.0
+        ],
+        "k": 7,
+        "n": 7,
+        "rate": 1.0
+      },
+      "supported": {
+        "ci95": [
+          0.965,
+          1.0
+        ],
+        "k": 106,
+        "n": 106,
+        "rate": 1.0
+      }
+    },
+    "supported_state_by_gold_operation": {
+      "adds_test_for": {
+        "derived_supported": 7,
+        "hypothesis_with_verified_premises": 5
+      },
+      "configures": {
+        "derived_supported": 8,
+        "hypothesis_with_verified_premises": 8
+      },
+      "documents": {
+        "derived_supported": 14,
+        "hypothesis_with_verified_premises": 5
+      },
+      "implements": {
+        "derived_supported": 10,
+        "hypothesis_with_verified_premises": 39
+      },
+      "other_behavior": {
+        "hypothesis_with_verified_premises": 6
+      },
+      "updates_dependency": {
+        "derived_supported": 2,
+        "hypothesis_with_verified_premises": 2
+      }
+    },
+    "unlocated_oracle_premises": 0
+  },
+  "point3_verifier_after": {
+    "claim_level": {
+      "accuracy_120": {
+        "ci95": [
+          0.7105,
+          0.8547
+        ],
+        "k": 95,
+        "n": 120,
+        "rate": 0.7917
+      },
+      "all_rejected_supported_item_ids": [
+        "DIAG-002",
+        "DIAG-009",
+        "DIAG-013",
+        "DIAG-014",
+        "DIAG-020",
+        "DIAG-029",
+        "DIAG-031",
+        "DIAG-034",
+        "DIAG-045",
+        "DIAG-054",
+        "DIAG-059",
+        "DIAG-061",
+        "DIAG-072",
+        "DIAG-074",
+        "DIAG-080",
+        "DIAG-083",
+        "DIAG-084",
+        "DIAG-085",
+        "DIAG-093",
+        "DIAG-094",
+        "DIAG-100",
+        "DIAG-105",
+        "DIAG-113",
+        "DIAG-116"
+      ],
+      "confusion_matrix": {
+        "contradicted": {
+          "no_premises_in_diff": 1
+        },
+        "no_premises": {
+          "no_premises_in_diff": 6
+        },
+        "out_of_scope_meta": {
+          "unverifiable": 7
+        },
+        "supported": {
+          "derived_supported": 39,
+          "hypothesis_with_verified_premises": 43,
+          "no_premises_in_diff": 24
+        }
+      },
+      "supported_passed": {
+        "ci95": [
+          0.6852,
+          0.8429
+        ],
+        "k": 82,
+        "n": 106,
+        "rate": 0.7736
+      },
+      "supported_rejected_count": 24
+    },
+    "premise_level": {
+      "cause_categories": {
+        "cross_category_op:configures_on_src": 9,
+        "cross_category_op:configures_on_test": 1,
+        "cross_category_op:documents_on_src": 3,
+        "cross_category_op:documents_on_test": 2,
+        "cross_category_op:updates_dependency_on_docs": 1,
+        "cross_category_op:updates_dependency_on_src": 2,
+        "insufficient_overlap_or_short_line": 7,
+        "same_hunk_sibling_changed_line_target": 24,
+        "target_not_in_premise_line": 28
+      },
+      "passed": {
+        "ci95": [
+          0.5663,
+          0.6956
+        ],
+        "k": 133,
+        "n": 210,
+        "rate": 0.6333
+      },
+      "raw_rejection_reasons": {
+        "rejected_irrelevant_premise:INCOMPATIBLE_OPERATION_CATEGORY": 18,
+        "rejected_irrelevant_premise:INSUFFICIENT_SPECIFIC_OVERLAP": 7,
+        "rejected_irrelevant_premise:TARGET_NOT_IN_PREMISE": 52
+      },
+      "rejected": {
+        "ci95": [
+          0.3044,
+          0.4337
+        ],
+        "k": 77,
+        "n": 210,
+        "rate": 0.3667
+      },
+      "rejected_by_file_category": {
+        "config": 5,
+        "docs": 12,
+        "src": 46,
+        "test": 14
+      },
+      "rejected_by_gold_operation": {
+        "adds_test_for": 9,
+        "configures": 12,
+        "documents": 16,
+        "implements": 31,
+        "other_behavior": 5,
+        "updates_dependency": 4
+      },
+      "total_silver_premises": 210
+    }
+  },
+  "point3_verifier_before": {
+    "claim_level": {
+      "accuracy_120": {
+        "ci95": [
+          0.6567,
+          0.8116
+        ],
+        "k": 89,
+        "n": 120,
+        "rate": 0.7417
+      },
+      "all_rejected_supported_item_ids": [
+        "DIAG-002",
+        "DIAG-007",
+        "DIAG-008",
+        "DIAG-009",
+        "DIAG-013",
+        "DIAG-014",
+        "DIAG-015",
+        "DIAG-020",
+        "DIAG-029",
+        "DIAG-031",
+        "DIAG-034",
+        "DIAG-045",
+        "DIAG-054",
+        "DIAG-059",
+        "DIAG-061",
+        "DIAG-071",
+        "DIAG-072",
+        "DIAG-074",
+        "DIAG-077",
+        "DIAG-080",
+        "DIAG-083",
+        "DIAG-084",
+        "DIAG-085",
+        "DIAG-093",
+        "DIAG-094",
+        "DIAG-099",
+        "DIAG-100",
+        "DIAG-105",
+        "DIAG-113",
+        "DIAG-116"
+      ],
+      "confusion_matrix": {
+        "contradicted": {
+          "no_premises_in_diff": 1
+        },
+        "no_premises": {
+          "no_premises_in_diff": 6
+        },
+        "out_of_scope_meta": {
+          "unverifiable": 7
+        },
+        "supported": {
+          "derived_supported": 35,
+          "hypothesis_with_verified_premises": 41,
+          "no_premises_in_diff": 30
+        }
+      },
+      "supported_passed": {
+        "ci95": [
+          0.6248,
+          0.794
+        ],
+        "k": 76,
+        "n": 106,
+        "rate": 0.717
+      },
+      "supported_rejected_count": 30
+    },
+    "premise_level": {
+      "cause_categories": {
+        "code_config_literal_strictness": 12,
+        "cross_category_op:configures_on_src": 8,
+        "cross_category_op:configures_on_test": 1,
+        "cross_category_op:documents_on_src": 3,
+        "cross_category_op:documents_on_test": 2,
+        "cross_category_op:updates_dependency_on_docs": 1,
+        "cross_category_op:updates_dependency_on_src": 2,
+        "insufficient_overlap_or_short_line": 7,
+        "same_hunk_context_target": 3,
+        "same_hunk_sibling_changed_line_target": 23,
+        "target_not_in_premise_line": 26,
+        "test_path_pattern_miss": 2
+      },
+      "passed": {
+        "ci95": [
+          0.5038,
+          0.6365
+        ],
+        "k": 120,
+        "n": 210,
+        "rate": 0.5714
+      },
+      "raw_rejection_reasons": {
+        "code_config_rejected:QUANTITY_MISMATCH": 12,
+        "rejected_irrelevant_premise:INCOMPATIBLE_OPERATION_CATEGORY": 19,
+        "rejected_irrelevant_premise:INSUFFICIENT_SPECIFIC_OVERLAP": 7,
+        "rejected_irrelevant_premise:TARGET_NOT_IN_PREMISE": 52
+      },
+      "rejected": {
+        "ci95": [
+          0.3635,
+          0.4962
+        ],
+        "k": 90,
+        "n": 210,
+        "rate": 0.4286
+      },
+      "rejected_by_file_category": {
+        "config": 9,
+        "docs": 12,
+        "src": 55,
+        "test": 14
+      },
+      "rejected_by_gold_operation": {
+        "adds_test_for": 11,
+        "configures": 16,
+        "documents": 16,
+        "implements": 36,
+        "other_behavior": 5,
+        "updates_dependency": 6
+      },
+      "total_silver_premises": 210
+    }
+  },
+  "point4_reader": {
+    "baseline_pass2_only_verifier_after": {
+      "accuracy_120": {
+        "ci95": [
+          0.5022,
+          0.6754
+        ],
+        "k": 71,
+        "n": 120,
+        "rate": 0.5917
+      },
+      "claim_exact_line_recall_106": {
+        "ci95": [
+          0.4524,
+          0.6386
+        ],
+        "k": 58,
+        "n": 106,
+        "rate": 0.5472
+      },
+      "claim_file_recall_106": {
+        "ci95": [
+          0.7369,
+          0.8821
+        ],
+        "k": 87,
+        "n": 106,
+        "rate": 0.8208
+      },
+      "confusion_matrix": {
+        "contradicted": {
+          "no_premises_in_diff": 1
+        },
+        "no_premises": {
+          "no_premises_in_diff": 6
+        },
+        "out_of_scope_meta": {
+          "hypothesis_with_verified_premises": 1,
+          "no_premises_in_diff": 6
+        },
+        "supported": {
+          "derived_supported": 18,
+          "hypothesis_with_verified_premises": 47,
+          "no_premises_in_diff": 41
+        }
+      },
+      "label": "baseline_pass2_only_verifier_after",
+      "operation_accuracy_106": {
+        "ci95": [
+          0.6248,
+          0.794
+        ],
+        "k": 76,
+        "n": 106,
+        "rate": 0.717
+      },
+      "operation_accuracy_120": {
+        "ci95": [
+          0.5783,
+          0.7447
+        ],
+        "k": 80,
+        "n": 120,
+        "rate": 0.6667
+      },
+      "premise_exact_line_recall_210": {
+        "ci95": [
+          0.3225,
+          0.453
+        ],
+        "k": 81,
+        "n": 210,
+        "rate": 0.3857
+      },
+      "proposed_premises_total": 167,
+      "retrieval_exact_line_visibility_106": {
+        "ci95": [
+          0.7475,
+          0.8898
+        ],
+        "k": 88,
+        "n": 106,
+        "rate": 0.8302
+      },
+      "retrieval_file_visibility_106": {
+        "ci95": [
+          0.907,
+          0.9852
+        ],
+        "k": 102,
+        "n": 106,
+        "rate": 0.9623
+      },
+      "spurious_nonempty_on_negative_13": {
+        "ci95": [
+          0.0137,
+          0.3331
+        ],
+        "k": 1,
+        "n": 13,
+        "on_no_premises_6": 0,
+        "on_out_of_scope_meta_7": 1,
+        "rate": 0.0769,
+        "spurious_verified_prem_on_negative_13": 1
+      },
+      "supported_verified_e2e": {
+        "ci95": [
+          0.5181,
+          0.7004
+        ],
+        "k": 65,
+        "n": 106,
+        "rate": 0.6132
+      },
+      "ungrounded_or_fabricated_premises": {
+        "ci95": [
+          0.0372,
+          0.1141
+        ],
+        "k": 11,
+        "n": 167,
+        "rate": 0.0659
+      }
+    },
+    "baseline_pass2_only_verifier_before": {
+      "accuracy_120": {
+        "ci95": [
+          0.4281,
+          0.6042
+        ],
+        "k": 62,
+        "n": 120,
+        "rate": 0.5167
+      },
+      "claim_exact_line_recall_106": {
+        "ci95": [
+          0.4524,
+          0.6386
+        ],
+        "k": 58,
+        "n": 106,
+        "rate": 0.5472
+      },
+      "claim_file_recall_106": {
+        "ci95": [
+          0.7369,
+          0.8821
+        ],
+        "k": 87,
+        "n": 106,
+        "rate": 0.8208
+      },
+      "confusion_matrix": {
+        "contradicted": {
+          "no_premises_in_diff": 1
+        },
+        "no_premises": {
+          "no_premises_in_diff": 6
+        },
+        "out_of_scope_meta": {
+          "no_premises_in_diff": 7
+        },
+        "supported": {
+          "derived_supported": 18,
+          "hypothesis_with_verified_premises": 38,
+          "no_premises_in_diff": 50
+        }
+      },
+      "label": "baseline_pass2_only_verifier_before",
+      "operation_accuracy_106": {
+        "ci95": [
+          0.6248,
+          0.794
+        ],
+        "k": 76,
+        "n": 106,
+        "rate": 0.717
+      },
+      "operation_accuracy_120": {
+        "ci95": [
+          0.5783,
+          0.7447
+        ],
+        "k": 80,
+        "n": 120,
+        "rate": 0.6667
+      },
+      "premise_exact_line_recall_210": {
+        "ci95": [
+          0.3225,
+          0.453
+        ],
+        "k": 81,
+        "n": 210,
+        "rate": 0.3857
+      },
+      "proposed_premises_total": 167,
+      "retrieval_exact_line_visibility_106": {
+        "ci95": [
+          0.7475,
+          0.8898
+        ],
+        "k": 88,
+        "n": 106,
+        "rate": 0.8302
+      },
+      "retrieval_file_visibility_106": {
+        "ci95": [
+          0.907,
+          0.9852
+        ],
+        "k": 102,
+        "n": 106,
+        "rate": 0.9623
+      },
+      "spurious_nonempty_on_negative_13": {
+        "ci95": [
+          0.0137,
+          0.3331
+        ],
+        "k": 1,
+        "n": 13,
+        "on_no_premises_6": 0,
+        "on_out_of_scope_meta_7": 1,
+        "rate": 0.0769,
+        "spurious_verified_prem_on_negative_13": 0
+      },
+      "supported_verified_e2e": {
+        "ci95": [
+          0.434,
+          0.6207
+        ],
+        "k": 56,
+        "n": 106,
+        "rate": 0.5283
+      },
+      "ungrounded_or_fabricated_premises": {
+        "ci95": [
+          0.0372,
+          0.1141
+        ],
+        "k": 11,
+        "n": 167,
+        "rate": 0.0659
+      }
+    },
+    "baseline_pass2_plus_pass3_verifier_after": {
+      "accuracy_120": {
+        "ci95": [
+          0.5358,
+          0.7065
+        ],
+        "k": 75,
+        "n": 120,
+        "rate": 0.625
+      },
+      "claim_exact_line_recall_106": {
+        "ci95": [
+          0.4992,
+          0.6829
+        ],
+        "k": 63,
+        "n": 106,
+        "rate": 0.5943
+      },
+      "claim_file_recall_106": {
+        "ci95": [
+          0.7796,
+          0.9123
+        ],
+        "k": 91,
+        "n": 106,
+        "rate": 0.8585
+      },
+      "confusion_matrix": {
+        "contradicted": {
+          "no_premises_in_diff": 1
+        },
+        "no_premises": {
+          "no_premises_in_diff": 6
+        },
+        "out_of_scope_meta": {
+          "no_premises_in_diff": 7
+        },
+        "supported": {
+          "derived_supported": 20,
+          "hypothesis_with_verified_premises": 49,
+          "no_premises_in_diff": 37
+        }
+      },
+      "label": "baseline_pass2_plus_pass3_verifier_after",
+      "operation_accuracy_106": {
+        "ci95": [
+          0.6248,
+          0.794
+        ],
+        "k": 76,
+        "n": 106,
+        "rate": 0.717
+      },
+      "operation_accuracy_120": {
+        "ci95": [
+          0.5783,
+          0.7447
+        ],
+        "k": 80,
+        "n": 120,
+        "rate": 0.6667
+      },
+      "premise_exact_line_recall_210": {
+        "ci95": [
+          0.3589,
+          0.4914
+        ],
+        "k": 89,
+        "n": 210,
+        "rate": 0.4238
+      },
+      "proposed_premises_total": 221,
+      "retrieval_exact_line_visibility_106": {
+        "ci95": [
+          0.7475,
+          0.8898
+        ],
+        "k": 88,
+        "n": 106,
+        "rate": 0.8302
+      },
+      "retrieval_file_visibility_106": {
+        "ci95": [
+          0.907,
+          0.9852
+        ],
+        "k": 102,
+        "n": 106,
+        "rate": 0.9623
+      },
+      "spurious_nonempty_on_negative_13": {
+        "ci95": [
+          0.0137,
+          0.3331
+        ],
+        "k": 1,
+        "n": 13,
+        "on_no_premises_6": 0,
+        "on_out_of_scope_meta_7": 1,
+        "rate": 0.0769,
+        "spurious_verified_prem_on_negative_13": 0
+      },
+      "supported_verified_e2e": {
+        "ci95": [
+          0.5564,
+          0.735
+        ],
+        "k": 69,
+        "n": 106,
+        "rate": 0.6509
+      },
+      "ungrounded_or_fabricated_premises": {
+        "ci95": [
+          0.0451,
+          0.1144
+        ],
+        "k": 16,
+        "n": 221,
+        "rate": 0.0724
+      }
+    },
+    "baseline_pass2_plus_pass3_verifier_before": {
+      "accuracy_120": {
+        "ci95": [
+          0.4608,
+          0.6361
+        ],
+        "k": 66,
+        "n": 120,
+        "rate": 0.55
+      },
+      "claim_exact_line_recall_106": {
+        "ci95": [
+          0.4992,
+          0.6829
+        ],
+        "k": 63,
+        "n": 106,
+        "rate": 0.5943
+      },
+      "claim_file_recall_106": {
+        "ci95": [
+          0.7796,
+          0.9123
+        ],
+        "k": 91,
+        "n": 106,
+        "rate": 0.8585
+      },
+      "confusion_matrix": {
+        "contradicted": {
+          "no_premises_in_diff": 1
+        },
+        "no_premises": {
+          "no_premises_in_diff": 6
+        },
+        "out_of_scope_meta": {
+          "no_premises_in_diff": 7
+        },
+        "supported": {
+          "derived_supported": 20,
+          "hypothesis_with_verified_premises": 40,
+          "no_premises_in_diff": 46
+        }
+      },
+      "label": "baseline_pass2_plus_pass3_verifier_before",
+      "operation_accuracy_106": {
+        "ci95": [
+          0.6248,
+          0.794
+        ],
+        "k": 76,
+        "n": 106,
+        "rate": 0.717
+      },
+      "operation_accuracy_120": {
+        "ci95": [
+          0.5783,
+          0.7447
+        ],
+        "k": 80,
+        "n": 120,
+        "rate": 0.6667
+      },
+      "premise_exact_line_recall_210": {
+        "ci95": [
+          0.3589,
+          0.4914
+        ],
+        "k": 89,
+        "n": 210,
+        "rate": 0.4238
+      },
+      "proposed_premises_total": 221,
+      "retrieval_exact_line_visibility_106": {
+        "ci95": [
+          0.7475,
+          0.8898
+        ],
+        "k": 88,
+        "n": 106,
+        "rate": 0.8302
+      },
+      "retrieval_file_visibility_106": {
+        "ci95": [
+          0.907,
+          0.9852
+        ],
+        "k": 102,
+        "n": 106,
+        "rate": 0.9623
+      },
+      "spurious_nonempty_on_negative_13": {
+        "ci95": [
+          0.0137,
+          0.3331
+        ],
+        "k": 1,
+        "n": 13,
+        "on_no_premises_6": 0,
+        "on_out_of_scope_meta_7": 1,
+        "rate": 0.0769,
+        "spurious_verified_prem_on_negative_13": 0
+      },
+      "supported_verified_e2e": {
+        "ci95": [
+          0.471,
+          0.6564
+        ],
+        "k": 60,
+        "n": 106,
+        "rate": 0.566
+      },
+      "ungrounded_or_fabricated_premises": {
+        "ci95": [
+          0.0451,
+          0.1144
+        ],
+        "k": 16,
+        "n": 221,
+        "rate": 0.0724
+      }
+    },
+    "exp4a_nemotron_retrieval_verifier_after": {
+      "accuracy_120": {
+        "ci95": [
+          0.804,
+          0.9228
+        ],
+        "k": 105,
+        "n": 120,
+        "rate": 0.875
+      },
+      "claim_exact_line_recall_106": {
+        "ci95": [
+          0.7475,
+          0.8898
+        ],
+        "k": 88,
+        "n": 106,
+        "rate": 0.8302
+      },
+      "claim_file_recall_106": {
+        "ci95": [
+          0.8943,
+          0.9797
+        ],
+        "k": 101,
+        "n": 106,
+        "rate": 0.9528
+      },
+      "confusion_matrix": {
+        "contradicted": {
+          "unverifiable": 1
+        },
+        "no_premises": {
+          "no_premises_in_diff": 1,
+          "unverifiable": 5
+        },
+        "out_of_scope_meta": {
+          "hypothesis_with_verified_premises": 1,
+          "unverifiable": 6
+        },
+        "supported": {
+          "derived_supported": 30,
+          "hypothesis_with_verified_premises": 68,
+          "no_premises_in_diff": 7,
+          "unverifiable": 1
+        }
+      },
+      "label": "exp4a_nemotron_retrieval_verifier_after",
+      "operation_accuracy_106": {
+        "ci95": [
+          0.7369,
+          0.8821
+        ],
+        "k": 87,
+        "n": 106,
+        "rate": 0.8208
+      },
+      "operation_accuracy_120": {
+        "ci95": [
+          0.7015,
+          0.8476
+        ],
+        "k": 94,
+        "n": 120,
+        "rate": 0.7833
+      },
+      "premise_exact_line_recall_210": {
+        "ci95": [
+          0.576,
+          0.7046
+        ],
+        "k": 135,
+        "n": 210,
+        "rate": 0.6429
+      },
+      "proposed_premises_total": 278,
+      "retrieval_exact_line_visibility_106": {
+        "ci95": [
+          0.8943,
+          0.9797
+        ],
+        "k": 101,
+        "n": 106,
+        "rate": 0.9528
+      },
+      "retrieval_file_visibility_106": {
+        "ci95": [
+          0.9338,
+          0.9948
+        ],
+        "k": 104,
+        "n": 106,
+        "rate": 0.9811
+      },
+      "spurious_nonempty_on_negative_13": {
+        "ci95": [
+          0.0137,
+          0.3331
+        ],
+        "k": 1,
+        "n": 13,
+        "on_no_premises_6": 0,
+        "on_out_of_scope_meta_7": 1,
+        "rate": 0.0769,
+        "spurious_verified_prem_on_negative_13": 1
+      },
+      "supported_verified_e2e": {
+        "ci95": [
+          0.8581,
+          0.9613
+        ],
+        "k": 98,
+        "n": 106,
+        "rate": 0.9245
+      },
+      "ungrounded_or_fabricated_premises": {
+        "ci95": [
+          0.0171,
+          0.0604
+        ],
+        "k": 9,
+        "n": 278,
+        "rate": 0.0324
+      }
+    },
+    "exp4a_nemotron_retrieval_verifier_before": {
+      "accuracy_120": {
+        "ci95": [
+          0.6834,
+          0.8333
+        ],
+        "k": 92,
+        "n": 120,
+        "rate": 0.7667
+      },
+      "claim_exact_line_recall_106": {
+        "ci95": [
+          0.716,
+          0.8666
+        ],
+        "k": 85,
+        "n": 106,
+        "rate": 0.8019
+      },
+      "claim_file_recall_106": {
+        "ci95": [
+          0.8465,
+          0.9547
+        ],
+        "k": 97,
+        "n": 106,
+        "rate": 0.9151
+      },
+      "confusion_matrix": {
+        "contradicted": {
+          "unverifiable": 1
+        },
+        "no_premises": {
+          "no_premises_in_diff": 1,
+          "unverifiable": 5
+        },
+        "out_of_scope_meta": {
+          "hypothesis_with_verified_premises": 1,
+          "unverifiable": 6
+        },
+        "supported": {
+          "derived_supported": 25,
+          "hypothesis_with_verified_premises": 60,
+          "no_premises_in_diff": 20,
+          "unverifiable": 1
+        }
+      },
+      "label": "exp4a_nemotron_retrieval_verifier_before",
+      "operation_accuracy_106": {
+        "ci95": [
+          0.6954,
+          0.8508
+        ],
+        "k": 83,
+        "n": 106,
+        "rate": 0.783
+      },
+      "operation_accuracy_120": {
+        "ci95": [
+          0.6656,
+          0.8189
+        ],
+        "k": 90,
+        "n": 120,
+        "rate": 0.75
+      },
+      "premise_exact_line_recall_210": {
+        "ci95": [
+          0.5421,
+          0.673
+        ],
+        "k": 128,
+        "n": 210,
+        "rate": 0.6095
+      },
+      "proposed_premises_total": 267,
+      "retrieval_exact_line_visibility_106": {
+        "ci95": [
+          0.8943,
+          0.9797
+        ],
+        "k": 101,
+        "n": 106,
+        "rate": 0.9528
+      },
+      "retrieval_file_visibility_106": {
+        "ci95": [
+          0.9338,
+          0.9948
+        ],
+        "k": 104,
+        "n": 106,
+        "rate": 0.9811
+      },
+      "spurious_nonempty_on_negative_13": {
+        "ci95": [
+          0.0137,
+          0.3331
+        ],
+        "k": 1,
+        "n": 13,
+        "on_no_premises_6": 0,
+        "on_out_of_scope_meta_7": 1,
+        "rate": 0.0769,
+        "spurious_verified_prem_on_negative_13": 1
+      },
+      "supported_verified_e2e": {
+        "ci95": [
+          0.716,
+          0.8666
+        ],
+        "k": 85,
+        "n": 106,
+        "rate": 0.8019
+      },
+      "ungrounded_or_fabricated_premises": {
+        "ci95": [
+          0.0178,
+          0.0628
+        ],
+        "k": 9,
+        "n": 267,
+        "rate": 0.0337
+      }
+    },
+    "exp4a_telemetry": {
+      "actual_billed_usd_nim_dev_tier": 0.0,
+      "api_errors": 0,
+      "cache_hits": 120,
+      "cached_prompt_tokens": 0,
+      "calls": 120,
+      "completion_tokens": 31560,
+      "latency_mean_sec": 7.023,
+      "latency_p50_sec": 5.205,
+      "latency_p95_sec": 14.494,
+      "model_id": "nvidia/nemotron-3-ultra-550b-a55b",
+      "parse_errors": 1,
+      "prompt_tokens": 332240,
+      "reference_cost_usd_120_claims": 0.25615,
+      "reference_pricing_per_1m_usd": {
+        "input": 0.6,
+        "output": 1.8
+      },
+      "total_tokens": 363800,
+      "wall_clock_sec": 6.012
+    },
+    "exp4b_laguna_retrieval_verifier_after": {
+      "accuracy_120": {
+        "ci95": [
+          0.6303,
+          0.7896
+        ],
+        "k": 86,
+        "n": 120,
+        "rate": 0.7167
+      },
+      "claim_exact_line_recall_106": {
+        "ci95": [
+          0.6348,
+          0.8022
+        ],
+        "k": 77,
+        "n": 106,
+        "rate": 0.7264
+      },
+      "claim_file_recall_106": {
+        "ci95": [
+          0.8699,
+          0.9676
+        ],
+        "k": 99,
+        "n": 106,
+        "rate": 0.934
+      },
+      "confusion_matrix": {
+        "contradicted": {
+          "unverifiable": 1
+        },
+        "no_premises": {
+          "hypothesis_with_verified_premises": 1,
+          "no_premises_in_diff": 1,
+          "unverifiable": 4
+        },
+        "out_of_scope_meta": {
+          "hypothesis_with_verified_premises": 1,
+          "no_premises_in_diff": 2,
+          "unverifiable": 4
+        },
+        "supported": {
+          "derived_supported": 20,
+          "hypothesis_with_verified_premises": 61,
+          "no_premises_in_diff": 24,
+          "unverifiable": 1
+        }
+      },
+      "label": "exp4b_laguna_retrieval_verifier_after",
+      "operation_accuracy_106": {
+        "ci95": [
+          0.6348,
+          0.8022
+        ],
+        "k": 77,
+        "n": 106,
+        "rate": 0.7264
+      },
+      "operation_accuracy_120": {
+        "ci95": [
+          0.5869,
+          0.7522
+        ],
+        "k": 81,
+        "n": 120,
+        "rate": 0.675
+      },
+      "premise_exact_line_recall_210": {
+        "ci95": [
+          0.5086,
+          0.6411
+        ],
+        "k": 121,
+        "n": 210,
+        "rate": 0.5762
+      },
+      "proposed_premises_total": 274,
+      "retrieval_exact_line_visibility_106": {
+        "ci95": [
+          0.8943,
+          0.9797
+        ],
+        "k": 101,
+        "n": 106,
+        "rate": 0.9528
+      },
+      "retrieval_file_visibility_106": {
+        "ci95": [
+          0.9338,
+          0.9948
+        ],
+        "k": 104,
+        "n": 106,
+        "rate": 0.9811
+      },
+      "spurious_nonempty_on_negative_13": {
+        "ci95": [
+          0.0818,
+          0.5026
+        ],
+        "k": 3,
+        "n": 13,
+        "on_no_premises_6": 1,
+        "on_out_of_scope_meta_7": 2,
+        "rate": 0.2308,
+        "spurious_verified_prem_on_negative_13": 2
+      },
+      "supported_verified_e2e": {
+        "ci95": [
+          0.675,
+          0.8348
+        ],
+        "k": 81,
+        "n": 106,
+        "rate": 0.7642
+      },
+      "ungrounded_or_fabricated_premises": {
+        "ci95": [
+          0.0507,
+          0.1143
+        ],
+        "k": 21,
+        "n": 274,
+        "rate": 0.0766
+      }
+    },
+    "exp4b_laguna_retrieval_verifier_before": {
+      "accuracy_120": {
+        "ci95": [
+          0.5189,
+          0.691
+        ],
+        "k": 73,
+        "n": 120,
+        "rate": 0.6083
+      },
+      "claim_exact_line_recall_106": {
+        "ci95": [
+          0.6051,
+          0.7773
+        ],
+        "k": 74,
+        "n": 106,
+        "rate": 0.6981
+      },
+      "claim_file_recall_106": {
+        "ci95": [
+          0.8237,
+          0.9411
+        ],
+        "k": 95,
+        "n": 106,
+        "rate": 0.8962
+      },
+      "confusion_matrix": {
+        "contradicted": {
+          "unverifiable": 1
+        },
+        "no_premises": {
+          "hypothesis_with_verified_premises": 1,
+          "no_premises_in_diff": 1,
+          "unverifiable": 4
+        },
+        "out_of_scope_meta": {
+          "hypothesis_with_verified_premises": 1,
+          "no_premises_in_diff": 2,
+          "unverifiable": 4
+        },
+        "supported": {
+          "derived_supported": 16,
+          "hypothesis_with_verified_premises": 52,
+          "no_premises_in_diff": 37,
+          "unverifiable": 1
+        }
+      },
+      "label": "exp4b_laguna_retrieval_verifier_before",
+      "operation_accuracy_106": {
+        "ci95": [
+          0.5952,
+          0.7689
+        ],
+        "k": 73,
+        "n": 106,
+        "rate": 0.6887
+      },
+      "operation_accuracy_120": {
+        "ci95": [
+          0.5527,
+          0.7218
+        ],
+        "k": 77,
+        "n": 120,
+        "rate": 0.6417
+      },
+      "premise_exact_line_recall_210": {
+        "ci95": [
+          0.4753,
+          0.6089
+        ],
+        "k": 114,
+        "n": 210,
+        "rate": 0.5429
+      },
+      "proposed_premises_total": 262,
+      "retrieval_exact_line_visibility_106": {
+        "ci95": [
+          0.8943,
+          0.9797
+        ],
+        "k": 101,
+        "n": 106,
+        "rate": 0.9528
+      },
+      "retrieval_file_visibility_106": {
+        "ci95": [
+          0.9338,
+          0.9948
+        ],
+        "k": 104,
+        "n": 106,
+        "rate": 0.9811
+      },
+      "spurious_nonempty_on_negative_13": {
+        "ci95": [
+          0.0818,
+          0.5026
+        ],
+        "k": 3,
+        "n": 13,
+        "on_no_premises_6": 1,
+        "on_out_of_scope_meta_7": 2,
+        "rate": 0.2308,
+        "spurious_verified_prem_on_negative_13": 2
+      },
+      "supported_verified_e2e": {
+        "ci95": [
+          0.5467,
+          0.7264
+        ],
+        "k": 68,
+        "n": 106,
+        "rate": 0.6415
+      },
+      "ungrounded_or_fabricated_premises": {
+        "ci95": [
+          0.05,
+          0.115
+        ],
+        "k": 20,
+        "n": 262,
+        "rate": 0.0763
+      }
+    },
+    "exp4b_minimax_throttled_note": "minimaxai/minimax-m3.1-flash se prob\u00f3 inicialmente en 4(b): complet\u00f3 79/120 llamadas (0 errores de parseo, 0/166 citas no ancladas, 70/120 exactitud incluyendo los 41 fallos API y 62/106 en supported), pero sufri\u00f3 HTTP 429 Too Many Requests persistente en NIM (41/120 fallos incluso con workers=1 y min_interval=4.5s), por lo que 4(b) se complet\u00f3 al 120/120 con poolside/laguna-xs-2.1.",
+    "exp4b_telemetry": {
+      "actual_billed_usd_nim_dev_tier": 0.0,
+      "api_errors": 0,
+      "cache_hits": 120,
+      "cached_prompt_tokens": 30240,
+      "calls": 120,
+      "completion_tokens": 32631,
+      "latency_mean_sec": 2.713,
+      "latency_p50_sec": 2.43,
+      "latency_p95_sec": 5.762,
+      "model_id": "poolside/laguna-xs-2.1",
+      "parse_errors": 1,
+      "prompt_tokens": 320240,
+      "reference_cost_usd_120_claims": 0.09015,
+      "reference_pricing_per_1m_usd": {
+        "input": 0.2,
+        "output": 0.8
+      },
+      "total_tokens": 352871,
+      "wall_clock_sec": 6.452
+    }
+  },
+  "point5_error_attribution": {
+    "baseline_e2e_correct": 66,
+    "baseline_e2e_errors": 54,
+    "cascade_accuracy_table": [
+      {
+        "accuracy_120": {
+          "ci95": [
+            0.9543,
+            0.9985
+          ],
+          "k": 119,
+          "n": 120,
+          "rate": 0.9917
+        },
+        "stage": "1. Engine Ceiling (Oracle -> Engine)",
+        "supported_recall_106": {
+          "ci95": [
+            0.965,
+            1.0
+          ],
+          "k": 106,
+          "n": 106,
+          "rate": 1.0
+        }
+      },
+      {
+        "accuracy_120": {
+          "ci95": [
+            0.6567,
+            0.8116
+          ],
+          "k": 89,
+          "n": 120,
+          "rate": 0.7417
+        },
+        "stage": "2. Oracle -> Verifier BEFORE (3808d82) -> Engine",
+        "supported_recall_106": {
+          "ci95": [
+            0.6248,
+            0.794
+          ],
+          "k": 76,
+          "n": 106,
+          "rate": 0.717
+        }
+      },
+      {
+        "accuracy_120": {
+          "ci95": [
+            0.7105,
+            0.8547
+          ],
+          "k": 95,
+          "n": 120,
+          "rate": 0.7917
+        },
+        "stage": "3. Oracle -> Verifier AFTER (v3 fixes) -> Engine",
+        "supported_recall_106": {
+          "ci95": [
+            0.6852,
+            0.8429
+          ],
+          "k": 82,
+          "n": 106,
+          "rate": 0.7736
+        }
+      },
+      {
+        "accuracy_120": {
+          "ci95": [
+            0.4608,
+            0.6361
+          ],
+          "k": 66,
+          "n": 120,
+          "rate": 0.55
+        },
+        "stage": "4. Baseline Nemotron (Pass 2/3) + Verifier BEFORE",
+        "supported_recall_106": {
+          "ci95": [
+            0.471,
+            0.6564
+          ],
+          "k": 60,
+          "n": 106,
+          "rate": 0.566
+        }
+      },
+      {
+        "accuracy_120": {
+          "ci95": [
+            0.5358,
+            0.7065
+          ],
+          "k": 75,
+          "n": 120,
+          "rate": 0.625
+        },
+        "stage": "5. Baseline Nemotron (Pass 2/3) + Verifier AFTER",
+        "supported_recall_106": {
+          "ci95": [
+            0.5564,
+            0.735
+          ],
+          "k": 69,
+          "n": 106,
+          "rate": 0.6509
+        }
+      },
+      {
+        "accuracy_120": {
+          "ci95": [
+            0.6834,
+            0.8333
+          ],
+          "k": 92,
+          "n": 120,
+          "rate": 0.7667
+        },
+        "stage": "6a. 4(a) Nemotron + Retrieval + Verifier BEFORE",
+        "supported_recall_106": {
+          "ci95": [
+            0.716,
+            0.8666
+          ],
+          "k": 85,
+          "n": 106,
+          "rate": 0.8019
+        }
+      },
+      {
+        "accuracy_120": {
+          "ci95": [
+            0.804,
+            0.9228
+          ],
+          "k": 105,
+          "n": 120,
+          "rate": 0.875
+        },
+        "stage": "6b. 4(a) Nemotron + Retrieval + Verifier AFTER",
+        "supported_recall_106": {
+          "ci95": [
+            0.8581,
+            0.9613
+          ],
+          "k": 98,
+          "n": 106,
+          "rate": 0.9245
+        }
+      },
+      {
+        "accuracy_120": {
+          "ci95": [
+            0.5189,
+            0.691
+          ],
+          "k": 73,
+          "n": 120,
+          "rate": 0.6083
+        },
+        "stage": "7a. 4(b) Poolside Laguna XS 2.1 + Retrieval + Verifier BEFORE",
+        "supported_recall_106": {
+          "ci95": [
+            0.5467,
+            0.7264
+          ],
+          "k": 68,
+          "n": 106,
+          "rate": 0.6415
+        }
+      },
+      {
+        "accuracy_120": {
+          "ci95": [
+            0.6303,
+            0.7896
+          ],
+          "k": 86,
+          "n": 120,
+          "rate": 0.7167
+        },
+        "stage": "7b. 4(b) Poolside Laguna XS 2.1 + Retrieval + Verifier AFTER",
+        "supported_recall_106": {
+          "ci95": [
+            0.675,
+            0.8348
+          ],
+          "k": 81,
+          "n": 106,
+          "rate": 0.7642
+        }
+      }
+    ],
+    "mutually_exclusive_partition": {
+      "engine_only": {
+        "count": 1,
+        "item_ids": [
+          "DIAG-041"
+        ],
+        "share_of_120": 0.0083,
+        "share_of_120_ci95": [
+          0.0015,
+          0.0457
+        ],
+        "share_of_errors": 0.0185,
+        "share_of_errors_ci95": [
+          0.0033,
+          0.0977
+        ]
+      },
+      "reader_and_verifier_joint": {
+        "count": 4,
+        "item_ids": [
+          "DIAG-031",
+          "DIAG-045",
+          "DIAG-054",
+          "DIAG-072"
+        ],
+        "share_of_120": 0.0333,
+        "share_of_120_ci95": [
+          0.013,
+          0.0826
+        ],
+        "share_of_errors": 0.0741,
+        "share_of_errors_ci95": [
+          0.0292,
+          0.1755
+        ]
+      },
+      "reader_only": {
+        "count": 32,
+        "item_ids": [
+          "DIAG-003",
+          "DIAG-012",
+          "DIAG-016",
+          "DIAG-017",
+          "DIAG-023",
+          "DIAG-024",
+          "DIAG-025",
+          "DIAG-026",
+          "DIAG-027",
+          "DIAG-032",
+          "DIAG-033",
+          "DIAG-036",
+          "DIAG-040",
+          "DIAG-051",
+          "DIAG-053",
+          "DIAG-056",
+          "DIAG-060",
+          "DIAG-062",
+          "DIAG-068",
+          "DIAG-069",
+          "DIAG-070",
+          "DIAG-076",
+          "DIAG-086",
+          "DIAG-088",
+          "DIAG-089",
+          "DIAG-090",
+          "DIAG-096",
+          "DIAG-098",
+          "DIAG-106",
+          "DIAG-108",
+          "DIAG-112",
+          "DIAG-118"
+        ],
+        "share_of_120": 0.2667,
+        "share_of_120_ci95": [
+          0.1957,
+          0.3521
+        ],
+        "share_of_errors": 0.5926,
+        "share_of_errors_ci95": [
+          0.4597,
+          0.7132
+        ]
+      },
+      "verifier_only": {
+        "count": 17,
+        "item_ids": [
+          "DIAG-002",
+          "DIAG-006",
+          "DIAG-007",
+          "DIAG-008",
+          "DIAG-009",
+          "DIAG-015",
+          "DIAG-020",
+          "DIAG-029",
+          "DIAG-034",
+          "DIAG-050",
+          "DIAG-071",
+          "DIAG-080",
+          "DIAG-082",
+          "DIAG-099",
+          "DIAG-100",
+          "DIAG-113",
+          "DIAG-116"
+        ],
+        "share_of_120": 0.1417,
+        "share_of_120_ci95": [
+          0.0904,
+          0.2152
+        ],
+        "share_of_errors": 0.3148,
+        "share_of_errors_ci95": [
+          0.2068,
+          0.4474
+        ]
+      }
+    }
+  },
+  "qualitative_caveats_from_annotator": {
+    "empty_hunk_rename_limitation_items": [
+      "DIAG-091",
+      "DIAG-075",
+      "DIAG-089"
+    ],
+    "intra_pr_self_correction_items": [
+      "DIAG-039",
+      "DIAG-045",
+      "DIAG-105",
+      "DIAG-120"
+    ],
+    "merge_polluted_diff_disputed_contradiction": [
+      "DIAG-041"
+    ],
+    "priority_human_review_count": 43
+  },
+  "silver_confidence_distribution": {
+    "high": 86,
+    "low": 5,
+    "medium": 29
+  },
+  "silver_status_distribution": {
+    "contradicted": 1,
+    "no_premises": 6,
+    "out_of_scope_meta": 7,
+    "supported": 106
+  }
+}

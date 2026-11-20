@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import collections
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import copy
 import hashlib
 import json
 import os
@@ -44,6 +45,9 @@ from claimlayer.v4.domains.code_change_inference import (  # noqa: E402
     RelevanceConfig,
     TypedDiffLedger,
     VerdictThresholds,
+    _CONFIG_FILE_RE,
+    _DOCS_FILE_RE,
+    _LOCK_GEN_RE,
     build_typed_diff_ledger,
     compute_pr_verdict,
     reconcile_phase3_literal_claim,
@@ -51,6 +55,23 @@ from claimlayer.v4.domains.code_change_inference import (  # noqa: E402
     specific_tokens,
     verify_behavior_graph,
 )
+
+_LEGACY_V2_TEST_FILE_RE = re.compile(
+    r"(?i)(?:^|/)(?:tests?|specs?|__tests__)/|(?:_test|_tests|\.test|\.spec)\.[A-Za-z0-9]+$|"
+    r"Tests?\.(?:swift|java|kt|cs|go|py|ts|tsx|js|jsx|rs|rb)$"
+)
+
+
+def _legacy_v2_file_category(path: str) -> str:
+    """Reproduce v2 `classify_file_category` solely for offline Pass-2 cache key replay."""
+    p = path.strip().replace("\\", "/")
+    if _LEGACY_V2_TEST_FILE_RE.search(p):
+        return "test"
+    if _DOCS_FILE_RE.search(p):
+        return "docs"
+    if _CONFIG_FILE_RE.search(p):
+        return "config"
+    return "src"
 from claimlayer.v4.reader import LLMProposalReader  # noqa: E402
 from claimlayer.v4.triage import verify_draft  # noqa: E402
 
@@ -280,8 +301,8 @@ class _PRModelCallProxy:
     def identity(self) -> Any:
         return getattr(self._inner, "identity", {"provider": "replay"})
 
-    def complete(self, system: str, payload: Mapping[str, Any]) -> dict[str, Any]:
-        res = self._inner.complete(system, payload)
+    def complete(self, system: str, payload: Mapping[str, Any], **kwargs: Any) -> dict[str, Any]:
+        res = self._inner.complete(system, payload, **kwargs)
         for rr in res.get("reader_rejected") or ():
             self._collector.append({"stage": self._stage, **dict(rr)})
         return res
@@ -314,6 +335,7 @@ class ResilientCachedModel:
         self.allow_pass3_replay_miss_as_empty = allow_pass3_replay_miss_as_empty
         self.cache: dict[str, dict[str, Any]] = {}
         self.pass3_replay_miss_claims: set[str] = set()
+        self.pass2_legacy_category_replay_hits: int = 0
         self._pass3_by_pr_claim: dict[tuple[str, str], tuple[dict[str, Any], tuple[dict[str, Any], ...]]] = {}
         self._lock = threading.Lock()
         self._identity = model.identity if model is not None else {"provider": "replay"}
@@ -364,11 +386,23 @@ class ResilientCachedModel:
                 time.sleep(wait)
             ResilientCachedModel._global_last_call_ts = time.monotonic()
 
-    def complete(self, system: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+    def complete(
+        self,
+        system: str,
+        payload: Mapping[str, Any],
+        *,
+        replay_fallback_payloads: Sequence[Mapping[str, Any]] = (),
+    ) -> dict[str, Any]:
         key = self._make_key(system, payload)
         with self._lock:
             if key in self.cache:
                 return self.cache[key]
+            if self.model is None and replay_fallback_payloads:
+                for fb_payload in replay_fallback_payloads:
+                    fb_key = self._make_key(system, fb_payload)
+                    if fb_key in self.cache:
+                        self.pass2_legacy_category_replay_hits += 1
+                        return self.cache[fb_key]
             # Deterministic offline subset reassembly when prior audit fixes shrink Pass-3 candidate_claims
             if (
                 self.model is None
@@ -646,8 +680,31 @@ def evaluate_pr_phase3(
             },
             "ranked_diff_hunks": ranked_p2,
         }
+        legacy_cats = {f: _legacy_v2_file_category(f) for f in typed_ledger.files}
+        p2_replay_fallbacks: tuple[Mapping[str, Any], ...] = ()
+        if any(legacy_cats[f] != typed_ledger.file_categories.get(f) for f in typed_ledger.files):
+            p2_payload_v2 = copy.deepcopy(p2_payload)
+            p2_payload_v2["diff_summary"]["category_counts"] = {
+                "src": sum(1 for f in typed_ledger.files if legacy_cats[f] == "src" and not _LOCK_GEN_RE.search(f)),
+                "test": sum(1 for f in typed_ledger.files if legacy_cats[f] == "test"),
+                "config": sum(1 for f in typed_ledger.files if legacy_cats[f] == "config" and not _LOCK_GEN_RE.search(f)),
+                "docs": sum(1 for f in typed_ledger.files if legacy_cats[f] == "docs"),
+            }
+            for h_ent in p2_payload_v2.get("ranked_diff_hunks") or ():
+                hf = h_ent.get("file")
+                if hf in legacy_cats:
+                    h_ent["category"] = legacy_cats[hf]
+            p2_replay_fallbacks = (p2_payload_v2,)
         try:
-            p2_res = pass2_model.complete(PASS2_BEHAVIOR_PROMPT, p2_payload)
+            inner_m = getattr(pass2_model, "_inner", pass2_model)
+            if p2_replay_fallbacks and isinstance(inner_m, ResilientCachedModel):
+                p2_res = pass2_model.complete(
+                    PASS2_BEHAVIOR_PROMPT,
+                    p2_payload,
+                    replay_fallback_payloads=p2_replay_fallbacks,
+                )
+            else:
+                p2_res = pass2_model.complete(PASS2_BEHAVIOR_PROMPT, p2_payload)
             p2_out = p2_res.get("output")
             if not isinstance(p2_out, Mapping) or not isinstance(p2_out.get("behavioral_claims"), list):
                 read_errors.append("pass2_invalid_schema")

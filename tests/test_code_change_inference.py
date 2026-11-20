@@ -17,6 +17,7 @@ from claimlayer.v4.domains.code_change_inference import (
     check_premise_relevance,
     compute_pr_verdict,
     evaluate_i5_structural_signals,
+    reconcile_phase3_literal_claim,
     repo_identifier_tokens,
     verify_behavior_graph,
 )
@@ -1406,6 +1407,438 @@ def test_duplicate_json_field_discards_only_malformed_proposal_and_escalates_on_
     assert res_b["ablations"]["d_full"]["verdict"] == "ESCALATE"
     assert res_b["ablations"]["a_literal"]["verdict"] == "ESCALATE"
     assert any("pass2_exception" in e for e in res_b["read_errors"])
+
+
+def test_bug1_dependency_boundary_no_substring_match() -> None:
+    """Base dep name `eslint` must NEVER collide with `eslint-config-next` or `@eslint/eslintrc`."""
+    pr = _sample_pr(
+        file_patches=[
+            {
+                "filename": "package.json",
+                "status": "modified",
+                "patch": '@@ -10,3 +10,3 @@\n-    "eslint": "^8.57.0"\n+    "eslint": "^9.39.1"\n',
+            }
+        ]
+    )
+    ledger = build_typed_diff_ledger(pr)
+    res_other = verify_behavior_graph(
+        claim_id="b1_other",
+        claim_text="Updates @eslint/eslintrc to 3.3.1 and eslint-config-next to 16.0.4.",
+        operation="updates_dependency",
+        target="eslint-config-next",
+        proposed_premises=[
+            {"file": "package.json", "symbol_or_key": "eslint", "literal_quote": '+    "eslint": "^9.39.1"'}
+        ],
+        ledger=ledger,
+    )
+    assert res_other["status"] != "premise_contradicted"
+    assert res_other["contradiction_reason"] is None
+
+    # Exact boundary mention with mismatched version STILL contradicts!
+    res_mismatch = verify_behavior_graph(
+        claim_id="b1_bad",
+        claim_text="Updates eslint to 99.9.9.",
+        operation="updates_dependency",
+        target="eslint",
+        proposed_premises=[
+            {"file": "package.json", "symbol_or_key": "eslint", "literal_quote": '+    "eslint": "^9.39.1"'}
+        ],
+        ledger=ledger,
+    )
+    assert res_mismatch["status"] == "premise_contradicted"
+    assert "dependency_version_mismatch:eslint" in (res_mismatch["contradiction_reason"] or "")
+
+
+def test_bug2_toml_pep508_and_lockfile_stanza_deps() -> None:
+    """Parse quoted PEP 508 bounds in pyproject.toml AND lockfile [[package]] stanzas without semver-padding FPs."""
+    pr = _sample_pr(
+        file_patches=[
+            {
+                "filename": "pyproject.toml",
+                "status": "modified",
+                "patch": (
+                    "@@ -10,4 +10,5 @@ dependencies = [\n"
+                    '-    "rich==13.9.4",\n'
+                    '+    "rich>=14.0.0,<15.0.0",\n'
+                    '-    "spec-kitty-runtime @ git+https://github.com/org/spec-kitty-runtime.git@v0.1.0",\n'
+                    '+    "spec-kitty-runtime==0.2.0a0",\n'
+                ),
+            },
+            {
+                "filename": "poetry.lock",
+                "status": "modified",
+                "patch": (
+                    "@@ -50,4 +50,4 @@\n"
+                    " [[package]]\n"
+                    ' name = "h11"\n'
+                    '-version = "0.14.0"\n'
+                    '+version = "0.16.0"\n'
+                    "@@ -90,2 +90,2 @@\n"
+                    " [package.dependencies]\n"
+                    '-h11 = ">=0.14"\n'
+                    '+h11 = ">=0.16"\n'
+                ),
+            },
+        ]
+    )
+    ledger = build_typed_diff_ledger(pr)
+    by_pkg = {d["package"]: d for d in ledger.dependencies}
+    assert "version" not in {d["package"].lower() for d in ledger.dependencies}
+    assert by_pkg["rich"]["version"] == ">=14.0.0,<15.0.0"
+    assert by_pkg["spec-kitty-runtime"]["version"] == "0.2.0a0"
+    assert by_pkg["h11"]["version"] == "0.16.0"
+
+    # Reconciling Pass-1 PEP 508 literal claim must succeed
+    st_rich, why_rich = reconcile_phase3_literal_claim(
+        "changes_dependency",
+        {"action": "update", "package": "rich", "version": ">=14.0.0,<15.0.0"},
+        "insufficient_evidence",
+        ledger,
+    )
+    assert st_rich == "literal_supported" and why_rich == "typed_ledger_dep_match"
+
+    # Semver zero-padding equivalence (`0.16` vs `0.16.0`) must NOT contradict
+    res_h11 = verify_behavior_graph(
+        claim_id="b2_h11",
+        claim_text="Updates dependency h11 to 0.16.0.",
+        operation="updates_dependency",
+        target="h11",
+        proposed_premises=[
+            {"file": "poetry.lock", "symbol_or_key": "h11", "literal_quote": '+version = "0.16.0"'}
+        ],
+        ledger=ledger,
+    )
+    assert res_h11["status"] == "derived_supported"
+
+    # Wrong version still contradicts cleanly
+    res_h11_bad = verify_behavior_graph(
+        claim_id="b2_h11_bad",
+        claim_text="Updates dependency h11 to 99.9.9.",
+        operation="updates_dependency",
+        target="h11",
+        proposed_premises=[],
+        ledger=ledger,
+    )
+    assert res_h11_bad["status"] == "premise_contradicted"
+
+
+def test_bug3_ignore_manifest_version_and_json_test_fixtures() -> None:
+    """Manifest `version`, lock-version, and JSON fixtures inside code/test files never become dependencies."""
+    pr = _sample_pr(
+        file_patches=[
+            {
+                "filename": "pyproject.toml",
+                "status": "modified",
+                "patch": '@@ -1,3 +1,3 @@\n [project]\n-version = "1.6.2"\n+version = "1.7.0"\n',
+            },
+            {
+                "filename": "openapi3/openapi3_version_test.go",
+                "status": "modified",
+                "patch": '@@ -5,1 +5,1 @@\n+\t"openapi": "3.0.3",\n',
+            },
+            {
+                "filename": "tests/fixtures/sample_manifest.json",
+                "status": "modified",
+                "patch": '@@ -1,2 +1,2 @@\n+  "lodash": "^4.17.21"\n',
+            },
+        ]
+    )
+    ledger = build_typed_diff_ledger(pr)
+    assert ledger.dependencies == ()
+
+    res = verify_behavior_graph(
+        claim_id="b3_julia",
+        claim_text='echo "Julia version >= 1.12" in workflow',
+        operation="implements",
+        target="Schema.Validate",
+        proposed_premises=[],
+        ledger=ledger,
+    )
+    assert res["status"] == "no_premises_in_diff"
+    assert res["contradiction_reason"] is None
+
+
+def test_bug4_checklist_or_not_required_not_doc_only() -> None:
+    """`- [x] Documentation updated (or not required).` must NOT trigger `D_doc_only_but_code`."""
+    pr_template = _sample_pr(
+        body=(
+            "Fix watcher invalidation on symlink update.\n"
+            "- [x] Tests updated (or not required).\n"
+            "- [x] Documentation updated (or not required).\n"
+        ),
+    )
+    ledger = build_typed_diff_ledger(pr_template)
+    sigs = evaluate_i5_structural_signals(pr_template, ledger)
+    assert not any(s["signal"] == "D_doc_only_but_code" for s in sigs)
+
+    # Genuine Type-of-Change "Documentation update" alone on a code diff STILL fires D_doc_only_but_code
+    pr_doc_claim = _sample_pr(
+        body=(
+            "Type of change:\n"
+            "- [ ] Bug fix\n"
+            "- [ ] New feature\n"
+            "- [x] Documentation update\n"
+        ),
+    )
+    sigs2 = evaluate_i5_structural_signals(pr_doc_claim, build_typed_diff_ledger(pr_doc_claim))
+    assert any(s["signal"] == "D_doc_only_but_code" for s in sigs2)
+
+
+def test_bug5_yaml_workflow_tokens_and_parens_identifier_normalization() -> None:
+    """Trailing `()` matches cleanly, YAML diff tokens validate, and shell/paren prose is unverifiable."""
+    pr = _sample_pr(
+        file_patches=[
+            {
+                "filename": "src/path_utils.py",
+                "status": "added",
+                "patch": "@@ -0,0 +1,2 @@\n+def resolve_real_path(p: str) -> str:\n+    return p\n",
+            },
+            {
+                "filename": ".github/workflows/ci.yml",
+                "status": "modified",
+                "patch": (
+                    "@@ -10,2 +10,5 @@ jobs:\n"
+                    "+      uses: peter-evans/create-pull-request@v8\n"
+                    "+      run: echo \"YEAR=$(date +%Y)\" >> $GITHUB_ENV\n"
+                    "+    runs-on: ubuntu-24.04-16cores-public\n"
+                ),
+            },
+        ]
+    )
+    ledger = build_typed_diff_ledger(pr)
+    assert all("(" not in sym and ")" not in sym for sym in ledger.add_syms)
+
+    st_paren, why_paren = reconcile_phase3_literal_claim(
+        "adds_identifier", "resolve_real_path()", "insufficient_evidence", ledger
+    )
+    assert st_paren == "literal_supported" and why_paren == "paren_stripped_match"
+
+    # Unbacked Foo() must remain literal_unsupported
+    st_fake, _ = reconcile_phase3_literal_claim(
+        "adds_identifier", "fabricated_fn()", "insufficient_evidence", ledger
+    )
+    assert st_fake == "literal_unsupported"
+
+    # Genuine YAML tokens present in workflow diff validate cleanly
+    for ytok in ("YEAR", "peter-evans/create-pull-request", "ubuntu-24.04-16cores-public"):
+        st_y, why_y = reconcile_phase3_literal_claim("adds_identifier", ytok, "insufficient_evidence", ledger)
+        assert st_y == "literal_supported" and why_y == "yaml_diff_token_match"
+
+    # Parenthesized prose/shell command expressions do not fail as literal_unsupported identifiers
+    st_expr, why_expr = reconcile_phase3_literal_claim(
+        "adds_identifier", "pull_request_target trigger (type: labeled)", "insufficient_evidence", ledger
+    )
+    assert st_expr == "unverifiable" and why_expr == "non_identifier_paren_or_expr"
+    st_sh, _ = reconcile_phase3_literal_claim("modifies_identifier", "$(date +%Y)", "insufficient_evidence", ledger)
+    assert st_sh == "unverifiable"
+
+
+def test_bug6_renamed_previous_file_paths_supported() -> None:
+    """Pre-rename source paths reconcile via `previous_filename`, extension renames, or `old -> new` prose."""
+    pr = _sample_pr(
+        body="- `packages/ui/BpkContentCard.js` → `BpkContentCard.tsx`\n",
+        file_patches=[
+            {
+                "filename": "packages/ui/BpkContentCard.tsx",
+                "status": "renamed",
+                "patch": "",
+            },
+            {
+                "filename": "packages/old_module_new.py",
+                "status": "renamed",
+                "previous_filename": "packages/old_module.py",
+                "patch": "",
+            },
+        ],
+    )
+    ledger = build_typed_diff_ledger(pr)
+    assert "packages/ui/BpkContentCard.tsx" in ledger.renamed_files
+    assert "packages/old_module.py" in ledger.renamed_from_paths
+
+    st1, _ = reconcile_phase3_literal_claim(
+        "changes_file", "packages/ui/BpkContentCard.js", "insufficient_evidence", ledger, pr_text=pr["body"]
+    )
+    st2, _ = reconcile_phase3_literal_claim(
+        "changes_file", "packages/old_module.py", "insufficient_evidence", ledger, pr_text=pr["body"]
+    )
+    st_bad, _ = reconcile_phase3_literal_claim(
+        "changes_file", "packages/ui/NonExistentFile.js", "insufficient_evidence", ledger, pr_text=pr["body"]
+    )
+    assert st1 == "literal_supported"
+    assert st2 == "literal_supported"
+    assert st_bad == "literal_unsupported"
+
+
+def test_bug7_local_test_execution_reclassified_to_out_of_scope_meta() -> None:
+    """Running existing tests locally or running linters becomes `out_of_scope_meta`, while new-test claims still check."""
+    pr = _sample_pr(
+        file_patches=[
+            {
+                "filename": "src/core.py",
+                "status": "modified",
+                "patch": "@@ -1,1 +1,2 @@\n def ok():\n+    return True\n",
+            }
+        ]
+    )
+    ledger = build_typed_diff_ledger(pr)
+    for txt in (
+        "Ejecuté los tests en local y pasaron todos.",
+        "Run unit tests locally with python -m unittest discover, which executed 48 tests and completed successfully (OK).",
+        "All 438 existing tests still pass.",
+        "ruff check and ruff format clean",
+    ):
+        r = verify_behavior_graph(
+            claim_id="b7_local",
+            claim_text=txt,
+            operation="adds_test_for",
+            target="local tests",
+            proposed_premises=[],
+            ledger=ledger,
+        )
+        assert r["operation"] == "out_of_scope_meta"
+        assert r["status"] == "unverifiable"
+
+    # Negative check (N3 protection): claiming NEW unit tests on zero-test diff MUST still be contradicted!
+    r_added = verify_behavior_graph(
+        claim_id="b7_n3",
+        claim_text="Added comprehensive unit tests covering retry backoff.",
+        operation="adds_test_for",
+        target="retry backoff",
+        proposed_premises=[],
+        ledger=ledger,
+    )
+    assert r_added["operation"] == "adds_test_for"
+    assert r_added["status"] == "premise_contradicted"
+    assert r_added["contradiction_reason"] == "claimed_tests_but_zero_tests_in_diff"
+
+
+def test_pass3_spoofed_target_blocked_after_reread() -> None:
+    """In Pass 3 (`reread_attempted=True`), an ungrounded spoofed target cannot justify an unrelated claim."""
+    pr = _sample_pr(
+        file_patches=[
+            {
+                "filename": "install-plugin.sh",
+                "status": "modified",
+                "patch": "@@ -1,1 +1,2 @@\n+echo 'plugin banner initialized'\n",
+            }
+        ]
+    )
+    ledger = build_typed_diff_ledger(pr)
+    spoof_quote = "+echo 'plugin banner initialized'"
+
+    # In Pass 3 with hardening enabled (default True), spoofed target not in claim_text is REJECTED
+    res_hardened = verify_behavior_graph(
+        claim_id="p3_spoof",
+        claim_text="Replace outdated tmux-focused empty state message with agent-first approach",
+        operation="implements",
+        target="banner message in install-plugin.sh",
+        proposed_premises=[
+            {
+                "file": "install-plugin.sh",
+                "symbol_or_key": "install-plugin.sh",
+                "literal_quote": spoof_quote,
+            }
+        ],
+        ledger=ledger,
+        reread_attempted=True,
+        relevance_config=RelevanceConfig(pass3_require_target_grounded_in_claim=True),
+    )
+    assert res_hardened["status"] == "no_premises_in_diff"
+    assert res_hardened["verified_premises"] == []
+
+    # When target IS genuinely grounded in claim_text and premise matches a src def, Pass 3 still derives!
+    pr_src = _sample_pr()
+    ledger_src = build_typed_diff_ledger(pr_src)
+    res_legit = verify_behavior_graph(
+        claim_id="p3_legit",
+        claim_text="Implements compute_retry_backoff with bounded exponential delay.",
+        operation="implements",
+        target="compute_retry_backoff",
+        proposed_premises=[
+            {
+                "file": "src/retry.py",
+                "symbol_or_key": "compute_retry_backoff",
+                "literal_quote": "+def compute_retry_backoff(attempt: int) -> float:",
+            }
+        ],
+        ledger=ledger_src,
+        reread_attempted=True,
+        relevance_config=RelevanceConfig(pass3_require_target_grounded_in_claim=True),
+    )
+    assert res_legit["status"] == "derived_supported"
+
+
+def test_decoupled_review_thresholds_in_compute_pr_verdict() -> None:
+    """`REVIEW` triggers follow independent `review_k_*` / `review_theta_*` thresholds."""
+    pr = _sample_pr()
+    ledger = build_typed_diff_ledger(pr)
+    lit_claims = [
+        {"claim_id": "l1", "status": "literal_supported", "claim_receipt_sha256": "a" * 64},
+        {"claim_id": "l2", "status": "literal_unsupported", "claim_receipt_sha256": "b" * 64},
+    ]
+    beh_results = [
+        {
+            "claim_id": "b1",
+            "status": "derived_supported",
+            "effective_epistemic_kind": "derivation",
+            "verified_premises": [],
+            "rejected_premises": [],
+            "claim_receipt_sha256": "c" * 64,
+        },
+        {
+            "claim_id": "b2",
+            "status": "derived_supported",
+            "effective_epistemic_kind": "derivation",
+            "verified_premises": [],
+            "rejected_premises": [],
+            "claim_receipt_sha256": "d" * 64,
+        },
+        {
+            "claim_id": "b3",
+            "status": "no_premises_in_diff",
+            "effective_epistemic_kind": "hypothesis",
+            "verified_premises": [],
+            "rejected_premises": [],
+            "claim_receipt_sha256": "e" * 64,
+        },
+    ]
+
+    # Default thresholds (review_k=1, review_theta=0.0) mark partial cases as REVIEW
+    th_default = VerdictThresholds(k_phantom=2, theta_phantom=0.5, k_lit=3, theta_lit=0.5, include_i5=False)
+    v_def = compute_pr_verdict(
+        pr=pr,
+        ledger=ledger,
+        literal_claims=lit_claims,
+        behavior_results=beh_results,
+        draft_rejected={},
+        thresholds=th_default,
+    )
+    assert v_def["verdict"] == "REVIEW"
+
+    # Raising review thresholds above 1/3 phantom and 1/2 literal yields CONSISTENT cleanly
+    th_tuned = VerdictThresholds(
+        k_phantom=2,
+        theta_phantom=0.5,
+        k_lit=3,
+        theta_lit=0.5,
+        review_on_single_unsupported_or_phantom=True,
+        review_k_phantom=2,
+        review_theta_phantom=0.5,
+        review_k_lit=2,
+        review_theta_lit=0.67,
+        review_on_all_unruled_hypothesis=False,
+        include_i5=False,
+    )
+    v_tuned = compute_pr_verdict(
+        pr=pr,
+        ledger=ledger,
+        literal_claims=lit_claims,
+        behavior_results=beh_results,
+        draft_rejected={},
+        thresholds=th_tuned,
+    )
+    assert v_tuned["verdict"] == "CONSISTENT"
+
 
 
 

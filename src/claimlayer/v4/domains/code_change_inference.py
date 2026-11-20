@@ -250,10 +250,78 @@ _CODE_EXT_RE = re.compile(
     re.IGNORECASE,
 )
 
+_FIXTURE_PATH_RE = re.compile(
+    r"(?i)(?:^|/)(?:fixtures?|testdata|__fixtures__|__mocks__|snapshots?|examples?)/"
+)
+_DEP_MANIFEST_FILE_RE = re.compile(
+    r"(?i)(?:^|/)(?:"
+    r"package\.json|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|"
+    r"pyproject\.toml|setup\.cfg|setup\.py|requirements[^/]*\.(?:txt|in)|constraints[^/]*\.txt|"
+    r"Pipfile(?:\.lock)?|poetry\.lock|uv\.lock|pdm\.lock|"
+    r"Cargo\.toml|Cargo\.lock|go\.mod|go\.sum|Gemfile(?:\.lock)?|"
+    r"composer\.json|composer\.lock|pom\.xml|build\.gradle(?:\.kts)?|"
+    r"libs\.versions\.toml|pubspec\.ya?ml|pubspec\.lock|Project\.toml|Manifest\.toml|"
+    r"environment\.ya?ml"
+    r")$"
+)
+_TOML_LOCKFILE_RE = re.compile(r"(?i)(?:^|/)(?:poetry\.lock|Cargo\.lock|uv\.lock|pdm\.lock)$")
+_NON_DEPENDENCY_KEYS_LOWER = frozenset({
+    "version",
+    "lock-version",
+    "lock_version",
+    "package-version",
+    "package_version",
+    "format-version",
+    "format_version",
+    "schema-version",
+    "schema_version",
+    "manifest-version",
+    "manifest_version",
+    "python",
+    "python-versions",
+    "python_versions",
+    "requires-python",
+    "requires_python",
+    "node",
+    "npm",
+    "yarn",
+    "pnpm",
+    "bun",
+    "edition",
+    "rust-version",
+    "rust_version",
+    "msrv",
+    "go",
+    "toolchain",
+    "spec-version",
+    "spec_version",
+    "api-version",
+    "api_version",
+    "openapi",
+    "swagger",
+    "engines",
+    "packagemanager",
+    "resolution",
+    "integrity",
+    "resolved",
+    "name",
+    "description",
+    "license",
+    "author",
+    "homepage",
+    "repository",
+    "documentation",
+    "readme",
+})
+
 _DEP_JSON_RE = re.compile(r'^\s*"([@A-Za-z0-9_./-]{2,80})"\s*:\s*"([~^>=<*!v]*\d+[^"\s]{0,30})"')
-_DEP_PIP_RE = re.compile(r"^\s*([A-Za-z0-9_.-]{2,60})(?:\[[^\]]+\])?\s*(?:==|>=|<=|~=|!=)\s*([0-9][A-Za-z0-9.*+-]{0,30})")
+_DEP_PEP508_QUOTED_RE = re.compile(
+    r"""^\s*['"]([A-Za-z0-9_.-]{2,60})(?:\[[^\]]+\])?\s*"""
+    r"""(?:(==|>=|<=|~=|!=|<|>)\s*([0-9][^'";\s]{0,40})(?:\s*;[^'"]*)?|@\s*\S+?(?:@v?([0-9][^'";\s]{0,30}))?)['"]\s*,?\s*(?:#.*)?$"""
+)
+_DEP_PIP_RE = re.compile(r"^\s*([A-Za-z0-9_.-]{2,60})(?:\[[^\]]+\])?\s*(?:==|>=|<=|~=|!=)\s*([0-9][^,;\s#]{0,36}(?:\s*,\s*[<>!=]+\s*[0-9][^,;\s#]{0,20})*)")
 _DEP_TOML_RE = re.compile(
-    r'^\s*([A-Za-z0-9_-]{2,60})\s*=\s*(?:"([~^>=<*]*\d+[^"\s]{0,30})"|\{[^}]*version\s*=\s*"([^"]+)")'
+    r'^\s*([A-Za-z0-9_-]{2,60})\s*=\s*(?:"([~^>=<*]*\d+[^"\s]{0,36})"|\{[^}]*version\s*=\s*"([^"]+)")'
 )
 _DEP_GO_RE = re.compile(r"^\s*([A-Za-z0-9.-]+\.[A-Za-z0-9./_-]+)\s+(v\d+\.\d+\.\d+[^\s]*)")
 _DEP_GEM_RE = re.compile(r"""^\s*gem\s+['"]([A-Za-z0-9_.-]+)['"]\s*(?:,\s*['"]([^'"]+)['"])?""")
@@ -442,7 +510,7 @@ def _extract_line_identifiers(line: str) -> list[str]:
             found.append(last)
     out: list[str] = []
     for sym in found:
-        if sym.lower() in CODE_STOPWORDS or len(sym) < 2:
+        if sym.lower() in CODE_STOPWORDS or len(sym) < 2 or any(ch in sym for ch in "()[]{} \t"):
             continue
         out.append(sym)
     return out
@@ -458,20 +526,104 @@ def _extract_definitions(line: str) -> list[str]:
     return [s for s in dict.fromkeys(found) if len(s) >= 2 and s.lower() not in CODE_STOPWORDS]
 
 
-def _extract_dep(line: str) -> tuple[str, str | None] | None:
+def _is_dep_manifest_file(filename: str | None) -> bool:
+    """Return True only when *filename* is a recognized dependency manifest or lockfile (excluding fixtures/examples)."""
+    if not filename:
+        return False
+    p = filename.strip().replace("\\", "/")
+    if _FIXTURE_PATH_RE.search(p):
+        return False
+    return bool(_DEP_MANIFEST_FILE_RE.search(p))
+
+
+def _normalize_pkg_key(pkg: str) -> str:
+    return re.sub(r"[-_.]+", "-", (pkg or "").strip().lower())
+
+
+def _package_mentioned_with_boundaries(pkg: str, text: str) -> bool:
+    """Exact package-token match without substring collisions (e.g. `eslint` never matches `eslint-config-next`)."""
+    p = (pkg or "").strip()
+    if not p or not text or p.lower() in _NON_DEPENDENCY_KEYS_LOWER:
+        return False
+    escaped = re.sub(r"(?:\\[-_])+", "[-_]", re.escape(p))
+    pat = re.compile(
+        rf"(?<![A-Za-z0-9_/@-])(?<![A-Za-z0-9_]\.){escaped}(?![A-Za-z0-9_/@-])(?!\.[A-Za-z0-9_])",
+        re.IGNORECASE,
+    )
+    return bool(pat.search(text))
+
+
+def _normalize_semver_tuple(ver: str | None) -> tuple[tuple[int, ...], str] | None:
+    """Normalize semver strings (`0.16`, `>=0.16`, `v1.19.1/go.mod`, `0.2.0a0`) for comparison."""
+    v = (ver or "").strip()
+    if not v:
+        return None
+    v = v.removesuffix("/go.mod")
+    v = v.split(",", 1)[0].strip()
+    v = v.lstrip("^~>=<!=vV ")
+    m = re.match(r"^(\d+(?:\.\d+)*)([A-Za-z0-9._+-]*)$", v)
+    if not m:
+        return None
+    nums = [int(p) for p in m.group(1).split(".")]
+    while len(nums) < 3:
+        nums.append(0)
+    suffix = m.group(2).lower().lstrip(".-+")
+    return tuple(nums), suffix
+
+
+def _extract_dep(line: str, *, filename: str | None = None) -> tuple[str, str | None] | None:
+    if filename is not None and not _is_dep_manifest_file(filename):
+        return None
     if m := _DEP_JSON_RE.match(line):
         pkg, ver = m.group(1), m.group(2)
-        if pkg.lower() not in {"version", "node", "npm", "python"}:
+        if pkg.lower() not in _NON_DEPENDENCY_KEYS_LOWER:
             return pkg, ver
+    if m := _DEP_PEP508_QUOTED_RE.match(line):
+        pkg = m.group(1)
+        if pkg.lower() not in _NON_DEPENDENCY_KEYS_LOWER:
+            op = m.group(2) or ""
+            v = m.group(3) or m.group(4) or ""
+            ver_out = f"{op}{v}" if (op and op != "==" and v) else (v or None)
+            if op == "==" and v:
+                ver_out = v
+            return pkg, ver_out
     if m := _DEP_PIP_RE.match(line):
-        return m.group(1), m.group(2)
+        pkg, ver = m.group(1), m.group(2).strip()
+        if pkg.lower() not in _NON_DEPENDENCY_KEYS_LOWER:
+            return pkg, ver
     if m := _DEP_TOML_RE.match(line):
-        return m.group(1), (m.group(2) or m.group(3))
+        pkg = m.group(1)
+        if pkg.lower() not in _NON_DEPENDENCY_KEYS_LOWER:
+            return pkg, (m.group(2) or m.group(3))
     if m := _DEP_GO_RE.match(line):
-        return m.group(1), m.group(2)
+        pkg, ver = m.group(1), m.group(2).removesuffix("/go.mod")
+        if pkg.lower() not in _NON_DEPENDENCY_KEYS_LOWER:
+            return pkg, ver
     if m := _DEP_GEM_RE.match(line):
-        return m.group(1), m.group(2)
+        pkg = m.group(1)
+        if pkg.lower() not in _NON_DEPENDENCY_KEYS_LOWER:
+            return pkg, m.group(2)
     return None
+
+
+def _extract_yaml_tokens(line: str) -> list[str]:
+    """Extract verbatim YAML/GitHub-Workflow tokens (keys, action refs, runs-on labels, env vars, step outputs)."""
+    toks: list[str] = []
+    if _COMMENT_LINE_RE.match(line):
+        return toks
+    if km := _KEY_RE.match(line):
+        toks.append(km.group(1))
+    if um := re.search(r"\buses\s*:\s*['\"]?([A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+?)(?:@([^\s'\"]+))?['\"]?\s*(?:#.*)?$", line):
+        toks.append(um.group(1))
+        if um.group(2):
+            toks.append(f"{um.group(1)}@{um.group(2)}")
+    if rm := re.search(r"\bruns-on\s*:\s*['\"]?([A-Za-z0-9_.-]{3,60})['\"]?", line):
+        toks.append(rm.group(1))
+    for em in re.findall(r"\b([A-Z][A-Z0-9_]{2,})=", line):
+        toks.append(em)
+    for sm in re.findall(r"\b((?:steps|needs|inputs|secrets|github)\.[A-Za-z0-9_.-]{2,80})\b", line):
+        toks.append(sm)
+    return [t for t in dict.fromkeys(toks) if t and len(t) >= 2]
 
 
 def _extract_tests(line: str) -> list[str]:
@@ -539,11 +691,18 @@ def _build_chunks_from_pr(pr: Mapping[str, Any]) -> list[dict[str, Any]]:
         chunks: list[dict[str, Any]] = []
         for idx, entry in enumerate(raw_fp):
             fname = str(entry.get("filename") or "").strip() or None
+            prev_fname = str(
+                entry.get("previous_filename")
+                or entry.get("old_filename")
+                or entry.get("from_filename")
+                or ""
+            ).strip() or None
             patch = str(entry.get("patch") or "")
             chunks.append(
                 {
                     "chunk_id": f"diff_{pr.get('pr_id', 'unknown')}_{idx:04d}",
                     "file": fname,
+                    "previous_filename": prev_fname,
                     "category": classify_file_category(fname) if fname else "unknown",
                     "attribution_mode": "exact_aidev" if fname else "unattributed",
                     "patch": patch,
@@ -641,6 +800,9 @@ class TypedDiffLedger:
     truncated_fields: dict[str, dict[str, int]]
     ledger_digest: str
     summary_text: str
+    renamed_files: tuple[str, ...] = ()
+    renamed_from_paths: frozenset[str] = frozenset()
+    yaml_tokens: frozenset[str] = frozenset()
 
     def check_literal_quote(self, value: str, quote: str, *, document_id: str | None = None) -> tuple[bool, str | None, tuple[str, ...]]:
         """Run untouched `verify(..., evidence_profile='code_config')` against raw diff text."""
@@ -756,8 +918,35 @@ def build_typed_diff_ledger(
     config_keys_by_file: dict[str, set[str]] = {}
     doc_terms_by_file: dict[str, set[str]] = {}
     added_docstrings: list[tuple[str | None, str, str, int, int]] = []
-    dep_plus: dict[str, tuple[str | None, str | None, str, str, int, int]] = {}
-    dep_minus: dict[str, tuple[str | None, str | None, str, str, int, int]] = {}
+    # Map norm_pkg -> (display_pkg, ver, file, cid, quote, start, end, is_exact_pin)
+    dep_plus: dict[str, tuple[str, str | None, str | None, str, str, int, int, bool]] = {}
+    dep_minus: dict[str, tuple[str, str | None, str | None, str, str, int, int, bool]] = {}
+    yaml_toks_all: set[str] = set()
+    renamed_files: list[str] = []
+    renamed_from_set: set[str] = set()
+
+    _LOCK_NAME_RE = re.compile(r'^\s*name\s*=\s*"([^"]+)"')
+    _LOCK_VER_RE = re.compile(r'^\s*version\s*=\s*"([^"]+)"')
+
+    def _record_dep(
+        store: dict[str, tuple[str, str | None, str | None, str, str, int, int, bool]],
+        pkg: str,
+        ver: str | None,
+        fn: str | None,
+        cid: str,
+        ln: str,
+        st: int,
+        en: int,
+        *,
+        is_exact_pin: bool,
+    ) -> None:
+        if not pkg or pkg.lower() in _NON_DEPENDENCY_KEYS_LOWER:
+            return
+        k = _normalize_pkg_key(pkg)
+        prev = store.get(k)
+        # Never let a transitive lockfile subtable constraint overwrite an explicit manifest/[[package]] pin
+        if prev is None or is_exact_pin or not prev[7]:
+            store[k] = (pkg, ver, fn, cid, ln, st, en, is_exact_pin)
 
     fact_seq = 0
 
@@ -772,10 +961,23 @@ def build_typed_diff_ledger(
         fname = chunk["file"]
         cat = chunk["category"]
         mode = chunk["attribution_mode"]
+        if str(chunk.get("status") or "").lower() == "renamed" and fname:
+            renamed_files.append(fname)
+        prev_fn = str(chunk.get("previous_filename") or "").strip()
+        if prev_fn:
+            renamed_from_set.update(_path_variants(prev_fn))
         if not patch_txt or not patch_txt.strip():
             continue
         doc = SourceDocument(document_id=cid, text=patch_txt, authority_rank=100, weight=1.0)
         raw_docs[cid] = doc
+
+        is_yaml_file = bool(fname and fname.lower().endswith((".yml", ".yaml")))
+        is_manifest_file = _is_dep_manifest_file(fname)
+        is_toml_lock = bool(fname and _TOML_LOCKFILE_RE.search(fname))
+        lock_section = "none"
+        lock_ctx_pkg: str | None = None
+        lock_plus_pkg: str | None = None
+        lock_minus_pkg: str | None = None
 
         offset = 0
         for line in patch_txt.splitlines(keepends=True):
@@ -783,8 +985,33 @@ def build_typed_diff_ledger(
             l_start = offset
             l_end = offset + len(line_stripped)
             offset += len(line)
+            if line_stripped.startswith("rename from "):
+                old_p = line_stripped[len("rename from "):].strip()
+                if old_p:
+                    renamed_from_set.update(_path_variants(old_p))
+                continue
             if not line_stripped or line_stripped.startswith("+++") or line_stripped.startswith("---"):
                 continue
+
+            if is_toml_lock:
+                raw_body_lock = line_stripped[1:] if line_stripped[0] in "+- " else line_stripped
+                hdr = raw_body_lock.strip()
+                if line_stripped.startswith("@@"):
+                    lock_section = "none"
+                    lock_ctx_pkg = lock_plus_pkg = lock_minus_pkg = None
+                elif hdr.startswith("[[package]]"):
+                    lock_section = "package"
+                    lock_ctx_pkg = lock_plus_pkg = lock_minus_pkg = None
+                elif hdr.startswith("["):
+                    lock_section = "subtable"
+                elif lock_section == "package":
+                    if nm := _LOCK_NAME_RE.match(raw_body_lock):
+                        if line_stripped.startswith("+"):
+                            lock_plus_pkg = nm.group(1)
+                        elif line_stripped.startswith("-"):
+                            lock_minus_pkg = nm.group(1)
+                        elif line_stripped.startswith(" "):
+                            lock_ctx_pkg = nm.group(1)
 
             if line_stripped.startswith("+"):
                 body = line_stripped[1:]
@@ -793,6 +1020,8 @@ def build_typed_diff_ledger(
                 t_fns = _extract_tests(body)
                 added_all.extend(syms)
                 tests_plus.extend(t_fns)
+                if is_yaml_file:
+                    yaml_toks_all.update(_extract_yaml_tokens(body))
                 for dsym in defs:
                     all_defs_add.add(dsym)
                     if fname and cat == "src":
@@ -830,8 +1059,15 @@ def build_typed_diff_ledger(
                 elif _DOCSTRING_OR_COMMENT_RE.match(body) and len(body.strip()) >= 8:
                     added_docstrings.append((fname, line_stripped, cid, l_start, l_end))
 
-                if dep := _extract_dep(body):
-                    dep_plus[dep[0]] = (dep[1], fname, cid, line_stripped, l_start, l_end)
+                if is_manifest_file:
+                    if is_toml_lock and lock_section == "package":
+                        if vm := _LOCK_VER_RE.match(body):
+                            stanza_pkg = lock_plus_pkg or lock_ctx_pkg
+                            if stanza_pkg:
+                                _record_dep(dep_plus, stanza_pkg, vm.group(1), fname, cid, line_stripped, l_start, l_end, is_exact_pin=True)
+                    elif dep := _extract_dep(body, filename=fname):
+                        is_sub = is_toml_lock and lock_section == "subtable"
+                        _record_dep(dep_plus, dep[0], dep[1], fname, cid, line_stripped, l_start, l_end, is_exact_pin=not is_sub)
 
                 if defs or t_fns or (fname and cat in ("config", "docs")) or _KEY_RE.match(body):
                     facts.append(
@@ -859,13 +1095,22 @@ def build_typed_diff_ledger(
                 removed_all.extend(syms)
                 tests_minus.extend(t_fns)
                 all_defs_rem.update(defs)
+                if is_yaml_file:
+                    yaml_toks_all.update(_extract_yaml_tokens(body))
                 if fname:
                     rem_defs_by_file.setdefault(fname, set()).update(defs)
                 if fname and cat == "config" and not _LOCK_GEN_RE.search(fname):
                     if km := _KEY_RE.match(body):
                         config_keys_by_file.setdefault(fname, set()).add(km.group(1))
-                if dep := _extract_dep(body):
-                    dep_minus[dep[0]] = (dep[1], fname, cid, line_stripped, l_start, l_end)
+                if is_manifest_file:
+                    if is_toml_lock and lock_section == "package":
+                        if vm := _LOCK_VER_RE.match(body):
+                            stanza_pkg = lock_minus_pkg or lock_ctx_pkg
+                            if stanza_pkg:
+                                _record_dep(dep_minus, stanza_pkg, vm.group(1), fname, cid, line_stripped, l_start, l_end, is_exact_pin=True)
+                    elif dep := _extract_dep(body, filename=fname):
+                        is_sub = is_toml_lock and lock_section == "subtable"
+                        _record_dep(dep_minus, dep[0], dep[1], fname, cid, line_stripped, l_start, l_end, is_exact_pin=not is_sub)
                 if defs or t_fns or _KEY_RE.match(body):
                     facts.append(
                         DiffFactRecord(
@@ -886,8 +1131,13 @@ def build_typed_diff_ledger(
             elif m := _HUNK_RE.match(line_stripped):
                 if m.group(1):
                     touched_all.extend(_extract_line_identifiers(m.group(1)))
+                    if is_yaml_file:
+                        yaml_toks_all.update(_extract_yaml_tokens(m.group(1)))
             elif line_stripped.startswith(" "):
-                touched_all.extend(_extract_line_identifiers(line_stripped[1:]))
+                ctx_body = line_stripped[1:]
+                touched_all.extend(_extract_line_identifiers(ctx_body))
+                if is_yaml_file:
+                    yaml_toks_all.update(_extract_yaml_tokens(ctx_body))
 
     a_uniq = list(dict.fromkeys(added_all))
     r_uniq = list(dict.fromkeys(removed_all))
@@ -909,15 +1159,15 @@ def build_typed_diff_ledger(
     rem_tests = list(dict.fromkeys([t for t in tm_uniq if t not in tp_set]))
 
     dependencies: list[dict[str, Any]] = []
-    for pkg, (ver, fn, cid, ln, st, en) in dep_plus.items():
-        if pkg in dep_minus:
-            if dep_minus[pkg][0] != ver:
-                dependencies.append({"package": pkg, **({"version": ver} if ver else {}), "action": "update", "file": fn, "quote": ln, "document_id": cid})
+    for pkg_k, (pkg_disp, ver, fn, cid, ln, st, en, _) in dep_plus.items():
+        if pkg_k in dep_minus:
+            if dep_minus[pkg_k][1] != ver:
+                dependencies.append({"package": pkg_disp, **({"version": ver} if ver else {}), "action": "update", "file": fn, "quote": ln, "document_id": cid})
         else:
-            dependencies.append({"package": pkg, **({"version": ver} if ver else {}), "action": "add", "file": fn, "quote": ln, "document_id": cid})
-    for pkg, (ver, fn, cid, ln, st, en) in dep_minus.items():
-        if pkg not in dep_plus:
-            dependencies.append({"package": pkg, **({"version": ver} if ver else {}), "action": "remove", "file": fn, "quote": ln, "document_id": cid})
+            dependencies.append({"package": pkg_disp, **({"version": ver} if ver else {}), "action": "add", "file": fn, "quote": ln, "document_id": cid})
+    for pkg_k, (pkg_disp, ver, fn, cid, ln, st, en, _) in dep_minus.items():
+        if pkg_k not in dep_plus:
+            dependencies.append({"package": pkg_disp, **({"version": ver} if ver else {}), "action": "remove", "file": fn, "quote": ln, "document_id": cid})
 
     truncated_fields: dict[str, dict[str, int]] = {}
 
@@ -945,6 +1195,10 @@ def build_typed_diff_ledger(
     summary_text = "\n".join(meta_lines)
     raw_docs[f"diff_meta_{pr_id}"] = SourceDocument(document_id=f"diff_meta_{pr_id}", text=summary_text, authority_rank=100, weight=1.0)
 
+    renamed_files_t = tuple(dict.fromkeys(renamed_files))
+    renamed_from_fs = frozenset(renamed_from_set)
+    yaml_toks_fs = frozenset(yaml_toks_all)
+
     ledger_digest = digest({
         "pr_id": pr_id,
         "files": files,
@@ -955,6 +1209,8 @@ def build_typed_diff_ledger(
         "rem_tests": list(rem_tests_t),
         "deps": [{k: v for k, v in d.items() if k in ("package", "version", "action", "file")} for d in dependencies],
         "cat_counts": cat_counts,
+        "renamed_files": list(renamed_files_t),
+        "renamed_from_paths": sorted(renamed_from_fs),
         "truncated": bool(truncated_fields),
         "truncated_fields": truncated_fields,
         "chunks": [digest(c["patch"]) for c in chunks],
@@ -989,6 +1245,9 @@ def build_typed_diff_ledger(
         truncated_fields=truncated_fields,
         ledger_digest=ledger_digest,
         summary_text=summary_text,
+        renamed_files=renamed_files_t,
+        renamed_from_paths=renamed_from_fs,
+        yaml_tokens=yaml_toks_fs,
     )
 
 
@@ -1157,6 +1416,7 @@ class RelevanceConfig:
     min_specific_anchors: int = 2
     require_target_match_when_present: bool = True
     require_category_compat: bool = True
+    pass3_require_target_grounded_in_claim: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -1172,6 +1432,10 @@ class VerdictThresholds:
     k_lit: int = 2
     theta_lit: float = 0.50
     review_on_single_unsupported_or_phantom: bool = True
+    review_k_phantom: int = 1
+    review_theta_phantom: float = 0.0
+    review_k_lit: int = 1
+    review_theta_lit: float = 0.0
     review_on_all_unruled_hypothesis: bool = True
     include_i5: bool = True
     i5_placeholder_max_words: int = 8
@@ -1198,8 +1462,37 @@ def _operation_category_compatible(operation: str, premise_file: str | None, pre
     if operation == "documents":
         return cat == "docs" or bool(_DOCSTRING_OR_COMMENT_RE.match(premise_quote.lstrip("+- ")))
     if operation == "updates_dependency":
-        return bool(_extract_dep(premise_quote.lstrip("+- "))) or cat == "config"
+        return bool(_extract_dep(premise_quote.lstrip("+- "), filename=premise_file)) or _is_dep_manifest_file(premise_file) or cat == "config"
     return True
+
+
+def _target_grounded_in_claim(
+    target: str | None,
+    claim_text: str,
+    *,
+    repo_tokens: frozenset[str] = frozenset(),
+) -> bool:
+    """Return True only when *target* genuinely appears inside *claim_text* (blocks Pass-3 target spoofing)."""
+    tgt = (target or "").strip().strip("`\"'")
+    cl = claim_text or ""
+    if not tgt or not cl:
+        return False
+    if _matches_target_symbol(tgt, cl):
+        return True
+    tgt_compounds = [tok for tok in re.findall(r"[A-Za-z0-9_./:-]+", tgt) if is_compound_identifier(tok)]
+    if tgt_compounds:
+        return all(_matches_target_symbol(tc, cl) for tc in tgt_compounds)
+    tgt_spec = specific_tokens(tgt, repo_tokens=repo_tokens, min_len=3)
+    if not tgt_spec:
+        return False
+    cl_spec = set(specific_tokens(cl, repo_tokens=repo_tokens, min_len=3))
+    cl_stems = {_stem_token(t, repo_tokens=repo_tokens) for t in cl_spec}
+    hits = sum(
+        1
+        for t in tgt_spec
+        if t in cl_spec or _stem_token(t, repo_tokens=repo_tokens) in cl_stems
+    )
+    return hits >= max(1, (len(tgt_spec) + 1) // 2) and (hits / len(tgt_spec)) >= 0.5
 
 
 def check_premise_relevance(
@@ -1214,6 +1507,7 @@ def check_premise_relevance(
     repo_tokens: frozenset[str] = frozenset(),
     config: RelevanceConfig = RelevanceConfig(),
     hunk_header: str | None = None,
+    require_target_grounded_in_claim: bool = False,
 ) -> tuple[bool, str]:
     """Deterministic anti-N2 guard rejecting generic same-repo or stopword-only matches."""
     if config.require_category_compat and not _operation_category_compatible(
@@ -1230,7 +1524,10 @@ def check_premise_relevance(
 
     tgt_clean = (target or "").strip().strip("`\"'")
     tgt_spec = specific_tokens(tgt_clean, repo_tokens=repo_tokens, min_len=3)
-    if config.require_target_match_when_present and tgt_spec:
+    tgt_grounded = (not require_target_grounded_in_claim) or _target_grounded_in_claim(
+        tgt_clean, claim_text, repo_tokens=repo_tokens
+    )
+    if config.require_target_match_when_present and tgt_spec and tgt_grounded:
         # Concrete target present: must match target symbol/path OR share specific tokens/stems or compound identifier
         if _matches_target_symbol(tgt_clean, prem_blob):
             return True, "TARGET_EXACT_MATCH"
@@ -1349,19 +1646,30 @@ def _detect_rule_satisfaction(
     if operation == "updates_dependency":
         if not tgt or len(tgt) < 2:
             return False, "TARGET_TOO_GENERIC_FOR_DEPENDENCY", "unknown"
-        ver_m = re.search(r"\bv?(\d+\.\d+(?:\.\d+)?)\b", tgt)
-        pkg_clean = re.sub(r"\bv?\d+\.\d+(?:\.\d+)?\b", "", tgt).strip() or tgt
-        for dep in ledger.dependencies:
-            if _matches_target_symbol(dep["package"], pkg_clean) or dep["package"].lower() == pkg_clean.lower():
-                if ver_m and dep.get("version"):
-                    dep_ver = dep["version"].lstrip("^~>=<!v")
-                    if dep_ver != ver_m.group(1):
-                        return False, "DEPENDENCY_VERSION_MISMATCH", "refuted"
-                return True, "UPDATES_DEPENDENCY_RULE_VERIFIED", "verified"
+        ver_m = re.search(r"\bv?(\d+\.\d+(?:\.\d+)?[0-9A-Za-z]*)\b", tgt)
+        pkg_clean = re.sub(r"\bv?\d+\.\d+(?:\.\d+)?[0-9A-Za-z]*\b", "", tgt).strip() or tgt
+        pkg_norm = _normalize_pkg_key(pkg_clean)
+        matched_deps = [
+            dep
+            for dep in ledger.dependencies
+            if _normalize_pkg_key(dep["package"]) == pkg_norm or _package_mentioned_with_boundaries(dep["package"], pkg_clean)
+        ]
+        if matched_deps:
+            if ver_m:
+                cv_norm = _normalize_semver_tuple(ver_m.group(1))
+                with_ver = [d for d in matched_deps if d.get("version")]
+                if with_ver and not any(
+                    (_normalize_semver_tuple(d["version"]) == cv_norm and cv_norm is not None)
+                    or d["version"].lstrip("^~>=<!v") == ver_m.group(1)
+                    for d in with_ver
+                ):
+                    return False, "DEPENDENCY_VERSION_MISMATCH", "refuted"
+            return True, "UPDATES_DEPENDENCY_RULE_VERIFIED", "verified"
         for p in verified_premises:
             q = p.get("quote", "")
-            dep = _extract_dep(q.lstrip("+- "))
-            if dep and (dep[0].lower() == pkg_clean.lower() or _matches_target_symbol(pkg_clean, dep[0])):
+            fn = p.get("file")
+            dep = _extract_dep(q.lstrip("+- "), filename=fn)
+            if dep and (_normalize_pkg_key(dep[0]) == pkg_norm or _package_mentioned_with_boundaries(dep[0], pkg_clean)):
                 return True, "UPDATES_DEPENDENCY_RULE_VERIFIED", "verified"
         return False, "DEPENDENCY_NOT_MATCHED_IN_MANIFEST", "unknown"
 
@@ -1468,6 +1776,50 @@ def build_code_diff_verifier_registry(ledger: TypedDiffLedger, *, use_declared_r
 # Behavior Claim JustificationGraph Builder & Evaluator
 # ---------------------------------------------------------------------------
 
+_DEP_CLAIM_CONTEXT_RE = re.compile(
+    r"\b(?:bump|bumps|bumped|bumping|upgrad\w*|updat\w*|downgrad\w*|pin(?:s|ned|ning)?|dependenc\w*|version|release)\b",
+    re.I,
+)
+_RUNTIME_VERSION_PREFIX_RE = re.compile(
+    r"\b(?:python|node|nodejs|go|golang|rust|julia|ruby|php|swift|java|jdk|kotlin|"
+    r"postgres|postgresql|mysql|sqlite|redis|ubuntu|macos|debian|alpine|docker|cuda|"
+    r"openapi|swagger|tls|http|oauth|iso|utf)\s*(?:version\s*)?(?:>=?|<=?|==)?\s*v?$",
+    re.I,
+)
+_ADD_TEST_VERB_RE = re.compile(
+    r"\b(?:add(?:s|ed|ing)?|creat(?:e|es|ed|ing)|writ(?:e|es|ten|ing)|wrote|"
+    r"introduc(?:e|es|ed|ing)|implement(?:s|ed|ing)?|includ(?:e|es|ed|ing)|"
+    r"new\s+(?:unit|integration|e2e|regression|smoke)?\s*tests?|"
+    r"regression\s+tests?|unit\s+tests?\s+(?:in|covering|to\s+verify)|"
+    r"agre(?:g[aóe]|gando)|añad(?:e|ió|iendo)|nuev[oa]s?\s+(?:tests?|pruebas?))\b",
+    re.I,
+)
+_LOCAL_TEST_EXEC_RE = re.compile(
+    r"(?:"
+    r"\b(?:ruff\s+check|ruff\s+format|eslint|prettier|flake8|mypy|pyright|clippy|"
+    r"golangci-lint|bash\s+-n|syntax\s+check|syntax\s+validation|typecheck|type-check)\b"
+    r"|\b(?:all\s+(?:existing\s+)?(?:\d+\+?\s+)?[\w:./-]*\s*tests?\s+(?:still\s+)?pass(?:ed)?|"
+    r"existing\s+tests?\s+(?:still\s+)?pass|tests?\s+(?:still\s+)?(?:pass(?:ed)?|succeed(?:ed)?)\s+(?:with|locally|en\s+local)\b|"
+    r"\d+\s+[\w:/-]*\s*tests?\s+pass(?:ed)?\b|\b0\s+failures?\b)"
+    r"|\b(?:ran|run|running|execut(?:e|ed|ing)|verified|ejecut[eéó]|corr[iíó])\b[^.]{0,120}"
+    r"\b(?:tests?|test\s+suite|unit\s+tests?|pytest|unittest|cargo\s+test|go\s+test|"
+    r"yarn\s+test|npm\s+test|npx\s+jest|jest|vitest|locally|local|en\s+local|pruebas)\b"
+    r"|\b(?:cargo\s+test|yarn\s+test|npm\s+test|python\s+-m\s+unittest|npx\s+jest)\b"
+    r")",
+    re.I,
+)
+
+
+def _is_local_test_execution_report(claim_text: str, target: str | None = None) -> bool:
+    """Return True when a claim merely reports running tests/linters locally rather than adding tests."""
+    combined = f"{claim_text or ''} {target or ''}".strip()
+    if not combined:
+        return False
+    if _ADD_TEST_VERB_RE.search(combined):
+        return False
+    return bool(_LOCAL_TEST_EXEC_RE.search(combined))
+
+
 def _detect_hard_factual_contradiction(
     *,
     claim_text: str,
@@ -1478,15 +1830,38 @@ def _detect_hard_factual_contradiction(
     """Detect direct factual contradictions verifiable against the diff register (not mere absence)."""
     txt = claim_text or ""
     tgt = (target or "").strip().strip("`\"'")
-    # 1. Dependency version contradiction (e.g., claims X 2.0.0 when diff updates/adds X 1.8.0)
-    if operation == "updates_dependency" or any(d["package"].lower() in txt.lower() for d in ledger.dependencies):
+    # 1. Dependency version contradiction (strict package-token boundary + normalized semver matching)
+    if ledger.dependencies and (operation == "updates_dependency" or _DEP_CLAIM_CONTEXT_RE.search(txt)):
+        deps_by_pkg: dict[str, list[dict[str, Any]]] = {}
         for dep in ledger.dependencies:
-            pkg = dep["package"].lower()
-            if pkg in txt.lower() and dep.get("version"):
-                dep_ver = dep["version"].lstrip("^~>=<!v")
-                claimed_vers = re.findall(r"\bv?(\d+\.\d+(?:\.\d+)?)\b", txt)
-                if claimed_vers and dep_ver not in claimed_vers:
-                    return True, f"dependency_version_mismatch:{dep['package']}:claimed={claimed_vers}:diff={dep_ver}"
+            deps_by_pkg.setdefault(_normalize_pkg_key(dep["package"]), []).append(dep)
+        raw_ver_matches = list(re.finditer(r"\bv?(\d+\.\d+(?:\.\d+)?[0-9A-Za-z]*)\b", txt))
+        claimed_vers = [
+            m.group(1)
+            for m in raw_ver_matches
+            if not _RUNTIME_VERSION_PREFIX_RE.search(txt[max(0, m.start() - 32) : m.start()])
+        ]
+        if claimed_vers:
+            for pkg_entries in deps_by_pkg.values():
+                disp_pkg = pkg_entries[0]["package"]
+                if not _package_mentioned_with_boundaries(disp_pkg, txt):
+                    continue
+                diff_vers = [str(d["version"]) for d in pkg_entries if d.get("version")]
+                if not diff_vers:
+                    continue
+                diff_norms = [_normalize_semver_tuple(dv) for dv in diff_vers]
+                matched = False
+                for cv in claimed_vers:
+                    cv_norm = _normalize_semver_tuple(cv)
+                    if any(
+                        cv == dv.lstrip("^~>=<!v") or (cv_norm is not None and dv_norm is not None and cv_norm == dv_norm)
+                        for dv, dv_norm in zip(diff_vers, diff_norms)
+                    ):
+                        matched = True
+                        break
+                if not matched:
+                    rep_diff = diff_vers[0].lstrip("^~>=<!v")
+                    return True, f"dependency_version_mismatch:{disp_pkg}:claimed={claimed_vers}:diff={rep_diff}"
 
     # 2. Explicit added-vs-removed polarity flip for concrete target symbol
     if operation == "removes_support_for" and tgt and len(tgt) >= 3:
@@ -1534,6 +1909,9 @@ def verify_behavior_graph(
     """Verify one behavioral PR claim via JustificationGraph + code_config + DeclaredRules."""
     op = operation if operation in BEHAVIOR_OPERATIONS else "other_behavior"
     tgt = target.strip() if isinstance(target, str) and target.strip() else None
+
+    if op == "adds_test_for" and _is_local_test_execution_report(claim_text, tgt):
+        op = "out_of_scope_meta"
 
     if op == "out_of_scope_meta":
         rec = _build_claim_receipt(
@@ -1613,11 +1991,19 @@ def verify_behavior_graph(
                 rejected_premises.append({"reason": "wrong_file_attribution", "claimed_file": p_file, "actual_file": chunk_meta["file"]})
                 continue
 
-        # Prevent LLM symbol_or_key spoofing from bypassing relevance when symbol is absent from quote/file
+        # Prevent LLM symbol_or_key spoofing from bypassing relevance when symbol is absent from quote/file,
+        # while allowing deterministic lockfile [[package]] stanza bindings parsed in the same chunk.
         verified_sym = (
             p_sym
             if (p_sym and (p_sym.lower() in resolved_quote.lower() or (resolved_file and p_sym.lower() in resolved_file.lower())))
-            else None
+            else next(
+                (
+                    d["package"]
+                    for d in ledger.dependencies
+                    if d.get("document_id") == matched_doc_id and d.get("quote") == resolved_quote
+                ),
+                None,
+            )
         )
         hunk_hdr = (
             _enclosing_hunk_header(ledger.raw_documents[matched_doc_id].text, ref.start)
@@ -1625,7 +2011,7 @@ def verify_behavior_graph(
             else ""
         )
 
-        # Check anti-N2 relevance guard
+        # Check anti-N2 relevance guard (Pass-3 blind reread additionally requires target grounded in claim_text)
         rel_ok, rel_reason = check_premise_relevance(
             claim_text=claim_text,
             operation=op,
@@ -1637,6 +2023,9 @@ def verify_behavior_graph(
             repo_tokens=repo_tokens,
             config=relevance_config,
             hunk_header=hunk_hdr,
+            require_target_grounded_in_claim=(
+                reread_attempted and relevance_config.pass3_require_target_grounded_in_claim
+            ),
         )
         if not rel_ok:
             rejected_premises.append({"reason": f"rejected_irrelevant_premise:{rel_reason}", "file": resolved_file, "quote": resolved_quote[:120]})
@@ -1966,6 +2355,108 @@ def _build_claim_receipt(
     )
 
 
+_DOC_CHECKLIST_NOISE_RE = re.compile(
+    r"(?i)(?:\(\s*(?:or\s+)?(?:not\s+required|not\s+applicable|n/?a|if\s+applicable|optional|if\s+needed)\b[^)]*\)"
+    r"|\b(?:or\s+not\s+required|not\s+required|not\s+applicable|if\s+applicable|if\s+needed)\b"
+    r"|\bdocumentation\s+(?:updated|has\s+been\s+updated|added|is\s+up\s+to\s+date)\b(?!.*\bonly\b))"
+)
+
+
+def reconcile_phase3_literal_claim(
+    predicate: str,
+    value: Any,
+    raw_status: str,
+    ledger: TypedDiffLedger,
+    *,
+    pr_text: str = "",
+) -> tuple[str, str | None]:
+    """Reconcile Pass-1 CODE_CHANGE_VOCAB_V2 literal disposition against the typed diff ledger.
+
+    Leaves frozen `eval_v2vocab` untouched while handling manifest/TOML/lockfile deps,
+    renamed source paths, YAML workflow tokens, and trailing `()` identifier normalization.
+    Returns `(final_status, reconciliation_reason_or_None)`.
+    """
+    st = str(raw_status or "")
+    if st == "error_escalated":
+        return "error_escalated", None
+    if predicate == "changes_dependency" and isinstance(value, Mapping):
+        pkg = str(value.get("package") or "").strip()
+        ver = str(value.get("version") or "").strip() or None
+        if pkg.lower() in _NON_DEPENDENCY_KEYS_LOWER:
+            return "unverifiable", "non_dependency_metadata_key"
+        pkg_k = _normalize_pkg_key(pkg)
+        matching = [d for d in ledger.dependencies if _normalize_pkg_key(d["package"]) == pkg_k]
+        if matching:
+            if not ver:
+                return "literal_supported", "typed_ledger_dep_match"
+            cv_norm = _normalize_semver_tuple(ver)
+            for d in matching:
+                dv = str(d.get("version") or "")
+                if not dv:
+                    return "literal_supported", "typed_ledger_dep_match"
+                dv_clean = dv.lstrip("^~>=<!v")
+                if ver == dv or ver.lstrip("^~>=<!v") == dv_clean:
+                    return "literal_supported", "typed_ledger_dep_match"
+                if cv_norm is not None and _normalize_semver_tuple(dv) == cv_norm:
+                    return "literal_supported", "typed_ledger_dep_match"
+        return "literal_unsupported", None
+
+    if st == "supported":
+        return "literal_supported", None
+
+    if predicate == "changes_file" and isinstance(value, str):
+        val_clean = value.strip().strip("`'\"").lstrip("./")
+        if val_clean in ledger.renamed_from_paths:
+            return "literal_supported", "renamed_from_path"
+        if val_clean and ("/" in val_clean or "." in val_clean):
+            v_dir, _, v_base = val_clean.rpartition("/")
+            v_stem, v_dot, _ = v_base.rpartition(".")
+            v_stem_core = v_stem if v_dot else v_base
+            for rf in ledger.renamed_files:
+                rf_norm = rf.strip().lstrip("./")
+                r_dir, _, r_base = rf_norm.rpartition("/")
+                r_stem, r_dot, _ = r_base.rpartition(".")
+                r_stem_core = r_stem if r_dot else r_base
+                dir_match = (v_dir == r_dir) or (bool(v_dir) and r_dir.endswith("/" + v_dir)) or (not v_dir)
+                if dir_match and v_stem_core and v_stem_core == r_stem_core and val_clean != rf_norm:
+                    return "literal_supported", "renamed_extension_match"
+        if pr_text and val_clean:
+            esc = re.escape(val_clean)
+            arrow_m = re.search(rf"(?:`|\"|'|\b){esc}(?:`|\"|'|\b)?\s*(?:->|→|=>|\bto\b)\s*[`'\"]?([A-Za-z0-9_./-]+)", pr_text)
+            if arrow_m:
+                new_cand = arrow_m.group(1).strip().strip("`'\"").lstrip("./")
+                file_pool = {f.strip().lstrip("./") for f in (ledger.renamed_files or ledger.files)}
+                new_base = new_cand.rsplit("/", 1)[-1]
+                if any(fp == new_cand or fp.endswith("/" + new_cand) or fp.rsplit("/", 1)[-1] == new_base for fp in file_pool):
+                    return "literal_supported", "pr_text_rename_arrow_match"
+        return "literal_unsupported", None
+
+    if predicate in ("adds_identifier", "modifies_identifier", "removes_identifier", "adds_test", "removes_test") and isinstance(value, str):
+        v_clean = value.strip().strip("`\"'")
+        pool_map = {
+            "adds_identifier": set(ledger.add_syms) | ledger.all_defs_added,
+            "removes_identifier": set(ledger.rem_syms) | ledger.all_defs_removed,
+            "modifies_identifier": set(ledger.mod_syms) | set(ledger.add_syms) | set(ledger.rem_syms),
+            "adds_test": set(ledger.add_tests),
+            "removes_test": set(ledger.rem_tests),
+        }
+        pool = pool_map[predicate]
+        if m_sig := re.fullmatch(r"([A-Za-z_][\w.:$-]*)\(\)", v_clean):
+            tok = m_sig.group(1)
+            tok_tail = tok.rsplit(".", 1)[-1].rsplit("::", 1)[-1]
+            if tok in pool or tok_tail in pool:
+                return "literal_supported", "paren_stripped_match"
+        if predicate in ("adds_identifier", "modifies_identifier", "removes_identifier") and ledger.yaml_tokens:
+            v_no_ver = v_clean.split("@", 1)[0] if "@" in v_clean else v_clean
+            if v_clean in ledger.yaml_tokens or v_no_ver in ledger.yaml_tokens:
+                return "literal_supported", "yaml_diff_token_match"
+        if predicate in ("adds_identifier", "modifies_identifier", "removes_identifier"):
+            if re.search(r"\$\(|\$\{\{", v_clean) or ("(" in v_clean and ")" in v_clean and re.search(r"[\s:=<>]", v_clean)):
+                return "unverifiable", "non_identifier_paren_or_expr"
+
+    return "literal_unsupported", None
+
+
 # ---------------------------------------------------------------------------
 # I5 Structural Rules & PR Verdict Engine
 # ---------------------------------------------------------------------------
@@ -1983,11 +2474,16 @@ def evaluate_i5_structural_signals(
     full_text = f"{title}\n\n{body}" if title else body
     files = list(ledger.files)
 
-    # 1. D_doc_only_but_code
+    # 1. D_doc_only_but_code (ignoring PR readiness checklist templates like "Documentation updated (or not required)")
     checked = re.findall(r"(?m)^\s*-\s*\[[xX]\]\s*(.+)$", body)
-    types = [c for c in checked if re.search(r"(bug fix|new feature|breaking change|documentation update)", c, re.I)]
+    types = [
+        c
+        for c in checked
+        if re.search(r"(bug fix|new feature|breaking change|documentation update|docs?\s+only|documentation\s+only)", c, re.I)
+        and not _DOC_CHECKLIST_NOISE_RE.search(c)
+    ]
     code_non_doc = [f for f in files if _CODE_EXT_RE.search(f) and ledger.file_categories.get(f) != "docs"]
-    if types and all(re.search(r"documentation", c, re.I) for c in types) and code_non_doc:
+    if types and all(re.search(r"documentation|docs?\s+only", c, re.I) for c in types) and code_non_doc:
         signals.append(
             {
                 "signal": "D_doc_only_but_code",
@@ -2137,9 +2633,17 @@ def compute_pr_verdict(
     else:
         rev_reasons: list[str] = []
         if thresholds.review_on_single_unsupported_or_phantom:
-            if n_phan >= 1:
+            if (
+                n_phan >= thresholds.review_k_phantom
+                and tot_beh_checkable > 0
+                and (n_phan / tot_beh_checkable) >= thresholds.review_theta_phantom
+            ):
                 rev_reasons.append(f"REVIEW_partial_phantom:{n_phan}/{tot_beh_checkable}")
-            if n_lunsup >= 1:
+            if (
+                n_lunsup >= thresholds.review_k_lit
+                and tot_lit > 0
+                and (n_lunsup / tot_lit) >= thresholds.review_theta_lit
+            ):
                 rev_reasons.append(f"REVIEW_partial_literal_unsupported:{n_lunsup}/{tot_lit}")
         if sum(draft_rejected.values()) > 0 and (state_counts["literal_supported"] + state_counts["derived_supported"] == 0):
             rev_reasons.append("REVIEW_draft_rejected_no_support")
@@ -2236,6 +2740,7 @@ __all__ = [
     "compute_pr_verdict",
     "evaluate_i5_structural_signals",
     "is_compound_identifier",
+    "reconcile_phase3_literal_claim",
     "repo_identifier_tokens",
     "specific_tokens",
     "split_code_tokens",

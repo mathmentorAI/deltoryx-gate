@@ -29,6 +29,7 @@ from .code_change_inference import (
     build_typed_diff_ledger,
     check_premise_relevance,
     compute_pr_verdict,
+    reconcile_phase3_literal_claim,
     verify_behavior_graph,
 )
 from .securitization import (
@@ -66,6 +67,7 @@ __all__ = [
     "build_typed_diff_ledger",
     "check_premise_relevance",
     "compute_pr_verdict",
+    "reconcile_phase3_literal_claim",
     "verify_behavior_graph",
     "SECURITIZATION_VOCABULARY",
     "SECURITIZATION_ACCEPTANCE_POLICY",

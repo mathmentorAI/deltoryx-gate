@@ -1,0 +1,2650 @@
+{
+  "ablations": {
+    "a_literal": {
+      "n1_easy_50": {
+        "broad_flag_rate": 0.46,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 0.6,
+            "inconsistent_rate": 0.2,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 4,
+              "INCONSISTENT": 2,
+              "REVIEW": 4
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.8,
+            "inconsistent_rate": 0.1,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "INCONSISTENT": 1,
+              "REVIEW": 7
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.2,
+            "inconsistent_rate": 0.0,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 8,
+              "REVIEW": 2
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.2,
+            "inconsistent_rate": 0.0,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 8,
+              "REVIEW": 2
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.5,
+            "inconsistent_rate": 0.0,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 5,
+              "REVIEW": 5
+            }
+          }
+        },
+        "inconsistent_rate": 0.06,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 0,
+          "broad_leakage_rate": 0.0,
+          "catch_rate": 0.0,
+          "caught_no_premise_or_contradicted": 0,
+          "matched_injected_claims": 0,
+          "prs_with_matched_injected_claim": 0,
+          "strict_leakage_derived_supported": 0,
+          "strict_leakage_rate": 0.0,
+          "total_prs": 50
+        },
+        "n": 50,
+        "state_counts": {
+          "derived_supported": 0,
+          "hypothesis_with_verified_premises": 0,
+          "literal_supported": 68,
+          "literal_unsupported": 67,
+          "no_premises_in_diff": 0,
+          "premise_contradicted": 0,
+          "unverifiable": 0
+        },
+        "verdicts": {
+          "CONSISTENT": 27,
+          "INCONSISTENT": 3,
+          "REVIEW": 20
+        }
+      },
+      "n2_hard": {
+        "broad_flag_rate": 0.4891,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 0.6111,
+            "inconsistent_rate": 0.1667,
+            "n": 36,
+            "verdicts": {
+              "CONSISTENT": 14,
+              "INCONSISTENT": 6,
+              "REVIEW": 16
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.7027,
+            "inconsistent_rate": 0.0541,
+            "n": 37,
+            "verdicts": {
+              "CONSISTENT": 11,
+              "INCONSISTENT": 2,
+              "REVIEW": 24
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.3143,
+            "inconsistent_rate": 0.0,
+            "n": 35,
+            "verdicts": {
+              "CONSISTENT": 24,
+              "REVIEW": 11
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.4595,
+            "inconsistent_rate": 0.027,
+            "n": 37,
+            "verdicts": {
+              "CONSISTENT": 20,
+              "INCONSISTENT": 1,
+              "REVIEW": 16
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.359,
+            "inconsistent_rate": 0.0,
+            "n": 39,
+            "verdicts": {
+              "CONSISTENT": 24,
+              "ESCALATE": 1,
+              "REVIEW": 14
+            }
+          }
+        },
+        "inconsistent_rate": 0.0489,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 0,
+          "broad_leakage_rate": 0.0,
+          "catch_rate": 0.0,
+          "caught_no_premise_or_contradicted": 0,
+          "matched_injected_claims": 0,
+          "prs_with_matched_injected_claim": 0,
+          "strict_leakage_derived_supported": 0,
+          "strict_leakage_rate": 0.0,
+          "total_prs": 184
+        },
+        "n": 184,
+        "state_counts": {
+          "derived_supported": 0,
+          "hypothesis_with_verified_premises": 0,
+          "literal_supported": 330,
+          "literal_unsupported": 267,
+          "no_premises_in_diff": 0,
+          "premise_contradicted": 0,
+          "unverifiable": 0
+        },
+        "verdicts": {
+          "CONSISTENT": 93,
+          "ESCALATE": 1,
+          "INCONSISTENT": 9,
+          "REVIEW": 81
+        }
+      },
+      "n3_mutation": {
+        "broad_flag_rate": 0.54,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 0.6,
+            "inconsistent_rate": 0.075,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 15,
+              "ESCALATE": 1,
+              "INCONSISTENT": 3,
+              "REVIEW": 21
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.6,
+            "inconsistent_rate": 0.025,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 16,
+              "INCONSISTENT": 1,
+              "REVIEW": 23
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.35,
+            "inconsistent_rate": 0.0,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 26,
+              "REVIEW": 14
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.65,
+            "inconsistent_rate": 0.05,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 13,
+              "ESCALATE": 1,
+              "INCONSISTENT": 2,
+              "REVIEW": 24
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.5,
+            "inconsistent_rate": 0.0,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 20,
+              "REVIEW": 20
+            }
+          }
+        },
+        "by_mutation_kind": {
+          "claimed_doc_file_but_zero_docs": {
+            "broad_recall": 0.4634,
+            "inconsistent_recall": 0.0,
+            "n": 41
+          },
+          "claimed_tests_but_zero_tests": {
+            "broad_recall": 0.5111,
+            "inconsistent_recall": 0.0222,
+            "n": 90
+          },
+          "dependency_version_mismatch": {
+            "broad_recall": 0.6604,
+            "inconsistent_recall": 0.0755,
+            "n": 53
+          },
+          "polarity_flip_remove_added_symbol": {
+            "broad_recall": 0.5,
+            "inconsistent_recall": 0.0,
+            "n": 16
+          }
+        },
+        "inconsistent_rate": 0.03,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 0,
+          "broad_leakage_rate": 0.0,
+          "catch_rate": 0.0,
+          "caught_no_premise_or_contradicted": 0,
+          "matched_injected_claims": 0,
+          "prs_with_matched_injected_claim": 0,
+          "strict_leakage_derived_supported": 0,
+          "strict_leakage_rate": 0.0,
+          "total_prs": 200
+        },
+        "n": 200,
+        "state_counts": {
+          "derived_supported": 0,
+          "hypothesis_with_verified_premises": 0,
+          "literal_supported": 361,
+          "literal_unsupported": 301,
+          "no_premises_in_diff": 0,
+          "premise_contradicted": 0,
+          "unverifiable": 0
+        },
+        "verdicts": {
+          "CONSISTENT": 90,
+          "ESCALATE": 2,
+          "INCONSISTENT": 6,
+          "REVIEW": 102
+        }
+      },
+      "operating_points_n2_vs_originals": {
+        "broad_inconsistent_or_review": {
+          "f1": 0.4986,
+          "fn": 94,
+          "fp": 87,
+          "fpr": 0.435,
+          "precision": 0.5085,
+          "recall": 0.4891,
+          "tn": 113,
+          "tp": 90
+        },
+        "strict_inconsistent": {
+          "f1": 0.09,
+          "fn": 175,
+          "fp": 7,
+          "fpr": 0.035,
+          "precision": 0.5625,
+          "recall": 0.0489,
+          "tn": 193,
+          "tp": 9
+        }
+      },
+      "originals": {
+        "behavioral_i2_i3_rate": 0.0,
+        "broad_flag_rate": 0.435,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 0.425,
+            "inconsistent_rate": 0.075,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 22,
+              "ESCALATE": 1,
+              "INCONSISTENT": 3,
+              "REVIEW": 14
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.675,
+            "inconsistent_rate": 0.075,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 13,
+              "INCONSISTENT": 3,
+              "REVIEW": 24
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.225,
+            "inconsistent_rate": 0.0,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 31,
+              "REVIEW": 9
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.475,
+            "inconsistent_rate": 0.025,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 20,
+              "ESCALATE": 1,
+              "INCONSISTENT": 1,
+              "REVIEW": 18
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.375,
+            "inconsistent_rate": 0.0,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 25,
+              "REVIEW": 15
+            }
+          }
+        },
+        "inconsistent_rate": 0.035,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 0,
+          "broad_leakage_rate": 0.0,
+          "catch_rate": 0.0,
+          "caught_no_premise_or_contradicted": 0,
+          "matched_injected_claims": 0,
+          "prs_with_matched_injected_claim": 0,
+          "strict_leakage_derived_supported": 0,
+          "strict_leakage_rate": 0.0,
+          "total_prs": 200
+        },
+        "n": 200,
+        "pass1_clean_inconsistent_rate": 0.0,
+        "pass1_clean_n": 162,
+        "state_counts": {
+          "derived_supported": 0,
+          "hypothesis_with_verified_premises": 0,
+          "literal_supported": 305,
+          "literal_unsupported": 231,
+          "no_premises_in_diff": 0,
+          "premise_contradicted": 0,
+          "unverifiable": 0
+        },
+        "verdicts": {
+          "CONSISTENT": 111,
+          "ESCALATE": 2,
+          "INCONSISTENT": 7,
+          "REVIEW": 80
+        }
+      }
+    },
+    "b_graph_no_rules": {
+      "n1_easy_50": {
+        "broad_flag_rate": 0.86,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 1.0,
+            "inconsistent_rate": 0.3,
+            "n": 10,
+            "verdicts": {
+              "INCONSISTENT": 3,
+              "REVIEW": 7
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.9,
+            "inconsistent_rate": 0.2,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "INCONSISTENT": 2,
+              "REVIEW": 7
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.8,
+            "inconsistent_rate": 0.0,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "REVIEW": 8
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.7,
+            "inconsistent_rate": 0.1,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 3,
+              "INCONSISTENT": 1,
+              "REVIEW": 6
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.9,
+            "inconsistent_rate": 0.4,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "INCONSISTENT": 4,
+              "REVIEW": 5
+            }
+          }
+        },
+        "inconsistent_rate": 0.2,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 1,
+          "broad_leakage_rate": 0.0385,
+          "catch_rate": 0.9231,
+          "caught_no_premise_or_contradicted": 24,
+          "matched_injected_claims": 26,
+          "prs_with_matched_injected_claim": 25,
+          "strict_leakage_derived_supported": 0,
+          "strict_leakage_rate": 0.0,
+          "total_prs": 50
+        },
+        "n": 50,
+        "state_counts": {
+          "derived_supported": 0,
+          "hypothesis_with_verified_premises": 157,
+          "literal_supported": 68,
+          "literal_unsupported": 67,
+          "no_premises_in_diff": 101,
+          "premise_contradicted": 1,
+          "unverifiable": 4
+        },
+        "verdicts": {
+          "CONSISTENT": 7,
+          "INCONSISTENT": 10,
+          "REVIEW": 33
+        }
+      },
+      "n2_hard": {
+        "broad_flag_rate": 0.8913,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 0.9444,
+            "inconsistent_rate": 0.1944,
+            "n": 36,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "INCONSISTENT": 7,
+              "REVIEW": 27
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.8919,
+            "inconsistent_rate": 0.1351,
+            "n": 37,
+            "verdicts": {
+              "CONSISTENT": 4,
+              "INCONSISTENT": 5,
+              "REVIEW": 28
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.9429,
+            "inconsistent_rate": 0.0286,
+            "n": 35,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "INCONSISTENT": 1,
+              "REVIEW": 32
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.8919,
+            "inconsistent_rate": 0.1892,
+            "n": 37,
+            "verdicts": {
+              "CONSISTENT": 4,
+              "INCONSISTENT": 7,
+              "REVIEW": 26
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.7949,
+            "inconsistent_rate": 0.1538,
+            "n": 39,
+            "verdicts": {
+              "CONSISTENT": 7,
+              "ESCALATE": 1,
+              "INCONSISTENT": 6,
+              "REVIEW": 25
+            }
+          }
+        },
+        "inconsistent_rate": 0.1413,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 15,
+          "broad_leakage_rate": 0.1376,
+          "catch_rate": 0.7982,
+          "caught_no_premise_or_contradicted": 87,
+          "matched_injected_claims": 109,
+          "prs_with_matched_injected_claim": 101,
+          "strict_leakage_derived_supported": 0,
+          "strict_leakage_rate": 0.0,
+          "total_prs": 184
+        },
+        "n": 184,
+        "state_counts": {
+          "derived_supported": 0,
+          "hypothesis_with_verified_premises": 717,
+          "literal_supported": 330,
+          "literal_unsupported": 267,
+          "no_premises_in_diff": 291,
+          "premise_contradicted": 10,
+          "unverifiable": 21
+        },
+        "verdicts": {
+          "CONSISTENT": 19,
+          "ESCALATE": 1,
+          "INCONSISTENT": 26,
+          "REVIEW": 138
+        }
+      },
+      "n3_mutation": {
+        "broad_flag_rate": 0.93,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 0.95,
+            "inconsistent_rate": 0.675,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "ESCALATE": 1,
+              "INCONSISTENT": 27,
+              "REVIEW": 11
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.925,
+            "inconsistent_rate": 0.425,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 3,
+              "INCONSISTENT": 17,
+              "REVIEW": 20
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.975,
+            "inconsistent_rate": 0.7,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "INCONSISTENT": 28,
+              "REVIEW": 11
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.875,
+            "inconsistent_rate": 0.475,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 4,
+              "ESCALATE": 1,
+              "INCONSISTENT": 19,
+              "REVIEW": 16
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.925,
+            "inconsistent_rate": 0.65,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 3,
+              "INCONSISTENT": 26,
+              "REVIEW": 11
+            }
+          }
+        },
+        "by_mutation_kind": {
+          "claimed_doc_file_but_zero_docs": {
+            "broad_recall": 0.9512,
+            "inconsistent_recall": 0.5854,
+            "n": 41
+          },
+          "claimed_tests_but_zero_tests": {
+            "broad_recall": 0.8778,
+            "inconsistent_recall": 0.4778,
+            "n": 90
+          },
+          "dependency_version_mismatch": {
+            "broad_recall": 0.9811,
+            "inconsistent_recall": 0.717,
+            "n": 53
+          },
+          "polarity_flip_remove_added_symbol": {
+            "broad_recall": 1.0,
+            "inconsistent_recall": 0.75,
+            "n": 16
+          }
+        },
+        "inconsistent_rate": 0.585,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 10,
+          "broad_leakage_rate": 0.082,
+          "catch_rate": 0.9098,
+          "caught_no_premise_or_contradicted": 111,
+          "matched_injected_claims": 122,
+          "prs_with_matched_injected_claim": 114,
+          "strict_leakage_derived_supported": 0,
+          "strict_leakage_rate": 0.0,
+          "total_prs": 200
+        },
+        "n": 200,
+        "state_counts": {
+          "derived_supported": 0,
+          "hypothesis_with_verified_premises": 756,
+          "literal_supported": 361,
+          "literal_unsupported": 301,
+          "no_premises_in_diff": 241,
+          "premise_contradicted": 111,
+          "unverifiable": 16
+        },
+        "verdicts": {
+          "CONSISTENT": 12,
+          "ESCALATE": 2,
+          "INCONSISTENT": 117,
+          "REVIEW": 69
+        }
+      },
+      "operating_points_n2_vs_originals": {
+        "broad_inconsistent_or_review": {
+          "f1": 0.6626,
+          "fn": 20,
+          "fp": 147,
+          "fpr": 0.735,
+          "precision": 0.5273,
+          "recall": 0.8913,
+          "tn": 53,
+          "tp": 164
+        },
+        "strict_inconsistent": {
+          "f1": 0.2291,
+          "fn": 158,
+          "fp": 17,
+          "fpr": 0.085,
+          "precision": 0.6047,
+          "recall": 0.1413,
+          "tn": 183,
+          "tp": 26
+        }
+      },
+      "originals": {
+        "behavioral_i2_i3_rate": 0.055,
+        "broad_flag_rate": 0.735,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 0.825,
+            "inconsistent_rate": 0.125,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 6,
+              "ESCALATE": 1,
+              "INCONSISTENT": 5,
+              "REVIEW": 28
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.95,
+            "inconsistent_rate": 0.175,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "INCONSISTENT": 7,
+              "REVIEW": 31
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.525,
+            "inconsistent_rate": 0.0,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 19,
+              "REVIEW": 21
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.75,
+            "inconsistent_rate": 0.075,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 9,
+              "ESCALATE": 1,
+              "INCONSISTENT": 3,
+              "REVIEW": 27
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.625,
+            "inconsistent_rate": 0.05,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 15,
+              "INCONSISTENT": 2,
+              "REVIEW": 23
+            }
+          }
+        },
+        "inconsistent_rate": 0.085,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 0,
+          "broad_leakage_rate": 0.0,
+          "catch_rate": 0.0,
+          "caught_no_premise_or_contradicted": 0,
+          "matched_injected_claims": 0,
+          "prs_with_matched_injected_claim": 0,
+          "strict_leakage_derived_supported": 0,
+          "strict_leakage_rate": 0.0,
+          "total_prs": 200
+        },
+        "n": 200,
+        "pass1_clean_inconsistent_rate": 0.0309,
+        "pass1_clean_n": 162,
+        "state_counts": {
+          "derived_supported": 0,
+          "hypothesis_with_verified_premises": 838,
+          "literal_supported": 305,
+          "literal_unsupported": 231,
+          "no_premises_in_diff": 245,
+          "premise_contradicted": 9,
+          "unverifiable": 13
+        },
+        "verdicts": {
+          "CONSISTENT": 51,
+          "ESCALATE": 2,
+          "INCONSISTENT": 17,
+          "REVIEW": 130
+        }
+      }
+    },
+    "c_graph_rules_no_reread": {
+      "n1_easy_50": {
+        "broad_flag_rate": 0.88,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 1.0,
+            "inconsistent_rate": 0.3,
+            "n": 10,
+            "verdicts": {
+              "INCONSISTENT": 3,
+              "REVIEW": 7
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.9,
+            "inconsistent_rate": 0.3,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "INCONSISTENT": 3,
+              "REVIEW": 6
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.8,
+            "inconsistent_rate": 0.0,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "REVIEW": 8
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.8,
+            "inconsistent_rate": 0.1,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "INCONSISTENT": 1,
+              "REVIEW": 7
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.9,
+            "inconsistent_rate": 0.4,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "INCONSISTENT": 4,
+              "REVIEW": 5
+            }
+          }
+        },
+        "inconsistent_rate": 0.22,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 1,
+          "broad_leakage_rate": 0.0385,
+          "catch_rate": 0.9231,
+          "caught_no_premise_or_contradicted": 24,
+          "matched_injected_claims": 26,
+          "prs_with_matched_injected_claim": 25,
+          "strict_leakage_derived_supported": 0,
+          "strict_leakage_rate": 0.0,
+          "total_prs": 50
+        },
+        "n": 50,
+        "state_counts": {
+          "derived_supported": 28,
+          "hypothesis_with_verified_premises": 110,
+          "literal_supported": 68,
+          "literal_unsupported": 67,
+          "no_premises_in_diff": 120,
+          "premise_contradicted": 1,
+          "unverifiable": 4
+        },
+        "verdicts": {
+          "CONSISTENT": 6,
+          "INCONSISTENT": 11,
+          "REVIEW": 33
+        }
+      },
+      "n2_hard": {
+        "broad_flag_rate": 0.913,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 0.9722,
+            "inconsistent_rate": 0.1944,
+            "n": 36,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "INCONSISTENT": 7,
+              "REVIEW": 28
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.8919,
+            "inconsistent_rate": 0.1892,
+            "n": 37,
+            "verdicts": {
+              "CONSISTENT": 4,
+              "INCONSISTENT": 7,
+              "REVIEW": 26
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.9429,
+            "inconsistent_rate": 0.0857,
+            "n": 35,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "INCONSISTENT": 3,
+              "REVIEW": 30
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.9189,
+            "inconsistent_rate": 0.2432,
+            "n": 37,
+            "verdicts": {
+              "CONSISTENT": 3,
+              "INCONSISTENT": 9,
+              "REVIEW": 25
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.8462,
+            "inconsistent_rate": 0.1538,
+            "n": 39,
+            "verdicts": {
+              "CONSISTENT": 5,
+              "ESCALATE": 1,
+              "INCONSISTENT": 6,
+              "REVIEW": 27
+            }
+          }
+        },
+        "inconsistent_rate": 0.1739,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 12,
+          "broad_leakage_rate": 0.1101,
+          "catch_rate": 0.8257,
+          "caught_no_premise_or_contradicted": 90,
+          "matched_injected_claims": 109,
+          "prs_with_matched_injected_claim": 101,
+          "strict_leakage_derived_supported": 4,
+          "strict_leakage_rate": 0.0367,
+          "total_prs": 184
+        },
+        "n": 184,
+        "state_counts": {
+          "derived_supported": 166,
+          "hypothesis_with_verified_premises": 478,
+          "literal_supported": 330,
+          "literal_unsupported": 267,
+          "no_premises_in_diff": 364,
+          "premise_contradicted": 10,
+          "unverifiable": 21
+        },
+        "verdicts": {
+          "CONSISTENT": 15,
+          "ESCALATE": 1,
+          "INCONSISTENT": 32,
+          "REVIEW": 136
+        }
+      },
+      "n3_mutation": {
+        "broad_flag_rate": 0.93,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 0.95,
+            "inconsistent_rate": 0.675,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "ESCALATE": 1,
+              "INCONSISTENT": 27,
+              "REVIEW": 11
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.925,
+            "inconsistent_rate": 0.425,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 3,
+              "INCONSISTENT": 17,
+              "REVIEW": 20
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.975,
+            "inconsistent_rate": 0.7,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "INCONSISTENT": 28,
+              "REVIEW": 11
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.875,
+            "inconsistent_rate": 0.475,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 4,
+              "ESCALATE": 1,
+              "INCONSISTENT": 19,
+              "REVIEW": 16
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.925,
+            "inconsistent_rate": 0.65,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 3,
+              "INCONSISTENT": 26,
+              "REVIEW": 11
+            }
+          }
+        },
+        "by_mutation_kind": {
+          "claimed_doc_file_but_zero_docs": {
+            "broad_recall": 0.9512,
+            "inconsistent_recall": 0.5854,
+            "n": 41
+          },
+          "claimed_tests_but_zero_tests": {
+            "broad_recall": 0.8778,
+            "inconsistent_recall": 0.4778,
+            "n": 90
+          },
+          "dependency_version_mismatch": {
+            "broad_recall": 0.9811,
+            "inconsistent_recall": 0.717,
+            "n": 53
+          },
+          "polarity_flip_remove_added_symbol": {
+            "broad_recall": 1.0,
+            "inconsistent_recall": 0.75,
+            "n": 16
+          }
+        },
+        "inconsistent_rate": 0.585,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 10,
+          "broad_leakage_rate": 0.082,
+          "catch_rate": 0.9098,
+          "caught_no_premise_or_contradicted": 111,
+          "matched_injected_claims": 122,
+          "prs_with_matched_injected_claim": 114,
+          "strict_leakage_derived_supported": 7,
+          "strict_leakage_rate": 0.0574,
+          "total_prs": 200
+        },
+        "n": 200,
+        "state_counts": {
+          "derived_supported": 180,
+          "hypothesis_with_verified_premises": 523,
+          "literal_supported": 361,
+          "literal_unsupported": 301,
+          "no_premises_in_diff": 294,
+          "premise_contradicted": 111,
+          "unverifiable": 16
+        },
+        "verdicts": {
+          "CONSISTENT": 12,
+          "ESCALATE": 2,
+          "INCONSISTENT": 117,
+          "REVIEW": 69
+        }
+      },
+      "operating_points_n2_vs_originals": {
+        "broad_inconsistent_or_review": {
+          "f1": 0.664,
+          "fn": 16,
+          "fp": 154,
+          "fpr": 0.77,
+          "precision": 0.5217,
+          "recall": 0.913,
+          "tn": 46,
+          "tp": 168
+        },
+        "strict_inconsistent": {
+          "f1": 0.27,
+          "fn": 152,
+          "fp": 21,
+          "fpr": 0.105,
+          "precision": 0.6038,
+          "recall": 0.1739,
+          "tn": 179,
+          "tp": 32
+        }
+      },
+      "originals": {
+        "behavioral_i2_i3_rate": 0.075,
+        "broad_flag_rate": 0.77,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 0.9,
+            "inconsistent_rate": 0.15,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 3,
+              "ESCALATE": 1,
+              "INCONSISTENT": 6,
+              "REVIEW": 30
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.95,
+            "inconsistent_rate": 0.2,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "INCONSISTENT": 8,
+              "REVIEW": 30
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.575,
+            "inconsistent_rate": 0.025,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 17,
+              "INCONSISTENT": 1,
+              "REVIEW": 22
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.8,
+            "inconsistent_rate": 0.075,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 7,
+              "ESCALATE": 1,
+              "INCONSISTENT": 3,
+              "REVIEW": 29
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.625,
+            "inconsistent_rate": 0.075,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 15,
+              "INCONSISTENT": 3,
+              "REVIEW": 22
+            }
+          }
+        },
+        "inconsistent_rate": 0.105,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 0,
+          "broad_leakage_rate": 0.0,
+          "catch_rate": 0.0,
+          "caught_no_premise_or_contradicted": 0,
+          "matched_injected_claims": 0,
+          "prs_with_matched_injected_claim": 0,
+          "strict_leakage_derived_supported": 0,
+          "strict_leakage_rate": 0.0,
+          "total_prs": 200
+        },
+        "n": 200,
+        "pass1_clean_inconsistent_rate": 0.0556,
+        "pass1_clean_n": 162,
+        "state_counts": {
+          "derived_supported": 200,
+          "hypothesis_with_verified_premises": 570,
+          "literal_supported": 305,
+          "literal_unsupported": 231,
+          "no_premises_in_diff": 313,
+          "premise_contradicted": 9,
+          "unverifiable": 13
+        },
+        "verdicts": {
+          "CONSISTENT": 44,
+          "ESCALATE": 2,
+          "INCONSISTENT": 21,
+          "REVIEW": 133
+        }
+      }
+    },
+    "d_full": {
+      "n1_easy_50": {
+        "broad_flag_rate": 0.86,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 1.0,
+            "inconsistent_rate": 0.4,
+            "n": 10,
+            "verdicts": {
+              "INCONSISTENT": 4,
+              "REVIEW": 6
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.9,
+            "inconsistent_rate": 0.2,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "INCONSISTENT": 2,
+              "REVIEW": 7
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.8,
+            "inconsistent_rate": 0.1,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "INCONSISTENT": 1,
+              "REVIEW": 7
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.7,
+            "inconsistent_rate": 0.1,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 3,
+              "INCONSISTENT": 1,
+              "REVIEW": 6
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.9,
+            "inconsistent_rate": 0.4,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "INCONSISTENT": 4,
+              "REVIEW": 5
+            }
+          }
+        },
+        "inconsistent_rate": 0.24,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 1,
+          "broad_leakage_rate": 0.0385,
+          "catch_rate": 0.9231,
+          "caught_no_premise_or_contradicted": 24,
+          "matched_injected_claims": 26,
+          "prs_with_matched_injected_claim": 25,
+          "strict_leakage_derived_supported": 0,
+          "strict_leakage_rate": 0.0,
+          "total_prs": 50
+        },
+        "n": 50,
+        "state_counts": {
+          "derived_supported": 29,
+          "hypothesis_with_verified_premises": 128,
+          "literal_supported": 68,
+          "literal_unsupported": 67,
+          "no_premises_in_diff": 101,
+          "premise_contradicted": 1,
+          "unverifiable": 4
+        },
+        "verdicts": {
+          "CONSISTENT": 7,
+          "INCONSISTENT": 12,
+          "REVIEW": 31
+        }
+      },
+      "n2_hard": {
+        "broad_flag_rate": 0.8859,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 0.9444,
+            "inconsistent_rate": 0.2222,
+            "n": 36,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "INCONSISTENT": 8,
+              "REVIEW": 26
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.8919,
+            "inconsistent_rate": 0.1351,
+            "n": 37,
+            "verdicts": {
+              "CONSISTENT": 4,
+              "INCONSISTENT": 5,
+              "REVIEW": 28
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.9429,
+            "inconsistent_rate": 0.0857,
+            "n": 35,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "INCONSISTENT": 3,
+              "REVIEW": 30
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.8919,
+            "inconsistent_rate": 0.1892,
+            "n": 37,
+            "verdicts": {
+              "CONSISTENT": 4,
+              "INCONSISTENT": 7,
+              "REVIEW": 26
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.7692,
+            "inconsistent_rate": 0.1538,
+            "n": 39,
+            "verdicts": {
+              "CONSISTENT": 8,
+              "ESCALATE": 1,
+              "INCONSISTENT": 6,
+              "REVIEW": 24
+            }
+          }
+        },
+        "inconsistent_rate": 0.1576,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 15,
+          "broad_leakage_rate": 0.1376,
+          "catch_rate": 0.7982,
+          "caught_no_premise_or_contradicted": 87,
+          "matched_injected_claims": 109,
+          "prs_with_matched_injected_claim": 101,
+          "strict_leakage_derived_supported": 4,
+          "strict_leakage_rate": 0.0367,
+          "total_prs": 184
+        },
+        "n": 184,
+        "state_counts": {
+          "derived_supported": 179,
+          "hypothesis_with_verified_premises": 538,
+          "literal_supported": 330,
+          "literal_unsupported": 267,
+          "no_premises_in_diff": 291,
+          "premise_contradicted": 10,
+          "unverifiable": 21
+        },
+        "verdicts": {
+          "CONSISTENT": 20,
+          "ESCALATE": 1,
+          "INCONSISTENT": 29,
+          "REVIEW": 134
+        }
+      },
+      "n3_mutation": {
+        "broad_flag_rate": 0.93,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 0.95,
+            "inconsistent_rate": 0.675,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "ESCALATE": 1,
+              "INCONSISTENT": 27,
+              "REVIEW": 11
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.925,
+            "inconsistent_rate": 0.425,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 3,
+              "INCONSISTENT": 17,
+              "REVIEW": 20
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.975,
+            "inconsistent_rate": 0.75,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "INCONSISTENT": 30,
+              "REVIEW": 9
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.875,
+            "inconsistent_rate": 0.475,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 4,
+              "ESCALATE": 1,
+              "INCONSISTENT": 19,
+              "REVIEW": 16
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.925,
+            "inconsistent_rate": 0.65,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 3,
+              "INCONSISTENT": 26,
+              "REVIEW": 11
+            }
+          }
+        },
+        "by_mutation_kind": {
+          "claimed_doc_file_but_zero_docs": {
+            "broad_recall": 0.9512,
+            "inconsistent_recall": 0.5854,
+            "n": 41
+          },
+          "claimed_tests_but_zero_tests": {
+            "broad_recall": 0.8778,
+            "inconsistent_recall": 0.4889,
+            "n": 90
+          },
+          "dependency_version_mismatch": {
+            "broad_recall": 0.9811,
+            "inconsistent_recall": 0.7358,
+            "n": 53
+          },
+          "polarity_flip_remove_added_symbol": {
+            "broad_recall": 1.0,
+            "inconsistent_recall": 0.75,
+            "n": 16
+          }
+        },
+        "inconsistent_rate": 0.595,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 10,
+          "broad_leakage_rate": 0.082,
+          "catch_rate": 0.9098,
+          "caught_no_premise_or_contradicted": 111,
+          "matched_injected_claims": 122,
+          "prs_with_matched_injected_claim": 114,
+          "strict_leakage_derived_supported": 7,
+          "strict_leakage_rate": 0.0574,
+          "total_prs": 200
+        },
+        "n": 200,
+        "state_counts": {
+          "derived_supported": 192,
+          "hypothesis_with_verified_premises": 564,
+          "literal_supported": 361,
+          "literal_unsupported": 301,
+          "no_premises_in_diff": 241,
+          "premise_contradicted": 111,
+          "unverifiable": 16
+        },
+        "verdicts": {
+          "CONSISTENT": 12,
+          "ESCALATE": 2,
+          "INCONSISTENT": 119,
+          "REVIEW": 67
+        }
+      },
+      "operating_points_n2_vs_originals": {
+        "broad_inconsistent_or_review": {
+          "f1": 0.6613,
+          "fn": 21,
+          "fp": 146,
+          "fpr": 0.73,
+          "precision": 0.5275,
+          "recall": 0.8859,
+          "tn": 54,
+          "tp": 163
+        },
+        "strict_inconsistent": {
+          "f1": 0.2489,
+          "fn": 155,
+          "fp": 20,
+          "fpr": 0.1,
+          "precision": 0.5918,
+          "recall": 0.1576,
+          "tn": 180,
+          "tp": 29
+        }
+      },
+      "originals": {
+        "behavioral_i2_i3_rate": 0.055,
+        "broad_flag_rate": 0.73,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 0.825,
+            "inconsistent_rate": 0.15,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 6,
+              "ESCALATE": 1,
+              "INCONSISTENT": 6,
+              "REVIEW": 27
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.95,
+            "inconsistent_rate": 0.175,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "INCONSISTENT": 7,
+              "REVIEW": 31
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.525,
+            "inconsistent_rate": 0.05,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 19,
+              "INCONSISTENT": 2,
+              "REVIEW": 19
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.725,
+            "inconsistent_rate": 0.075,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 10,
+              "ESCALATE": 1,
+              "INCONSISTENT": 3,
+              "REVIEW": 26
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.625,
+            "inconsistent_rate": 0.05,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 15,
+              "INCONSISTENT": 2,
+              "REVIEW": 23
+            }
+          }
+        },
+        "inconsistent_rate": 0.1,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 0,
+          "broad_leakage_rate": 0.0,
+          "catch_rate": 0.0,
+          "caught_no_premise_or_contradicted": 0,
+          "matched_injected_claims": 0,
+          "prs_with_matched_injected_claim": 0,
+          "strict_leakage_derived_supported": 0,
+          "strict_leakage_rate": 0.0,
+          "total_prs": 200
+        },
+        "n": 200,
+        "pass1_clean_inconsistent_rate": 0.0432,
+        "pass1_clean_n": 162,
+        "state_counts": {
+          "derived_supported": 214,
+          "hypothesis_with_verified_premises": 624,
+          "literal_supported": 305,
+          "literal_unsupported": 231,
+          "no_premises_in_diff": 245,
+          "premise_contradicted": 9,
+          "unverifiable": 13
+        },
+        "verdicts": {
+          "CONSISTENT": 52,
+          "ESCALATE": 2,
+          "INCONSISTENT": 20,
+          "REVIEW": 126
+        }
+      }
+    },
+    "e_full_no_i5": {
+      "n1_easy_50": {
+        "broad_flag_rate": 0.86,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 1.0,
+            "inconsistent_rate": 0.3,
+            "n": 10,
+            "verdicts": {
+              "INCONSISTENT": 3,
+              "REVIEW": 7
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.9,
+            "inconsistent_rate": 0.2,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "INCONSISTENT": 2,
+              "REVIEW": 7
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.8,
+            "inconsistent_rate": 0.0,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "REVIEW": 8
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.7,
+            "inconsistent_rate": 0.1,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 3,
+              "INCONSISTENT": 1,
+              "REVIEW": 6
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.9,
+            "inconsistent_rate": 0.4,
+            "n": 10,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "INCONSISTENT": 4,
+              "REVIEW": 5
+            }
+          }
+        },
+        "inconsistent_rate": 0.2,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 1,
+          "broad_leakage_rate": 0.0385,
+          "catch_rate": 0.9231,
+          "caught_no_premise_or_contradicted": 24,
+          "matched_injected_claims": 26,
+          "prs_with_matched_injected_claim": 25,
+          "strict_leakage_derived_supported": 0,
+          "strict_leakage_rate": 0.0,
+          "total_prs": 50
+        },
+        "n": 50,
+        "state_counts": {
+          "derived_supported": 29,
+          "hypothesis_with_verified_premises": 128,
+          "literal_supported": 68,
+          "literal_unsupported": 67,
+          "no_premises_in_diff": 101,
+          "premise_contradicted": 1,
+          "unverifiable": 4
+        },
+        "verdicts": {
+          "CONSISTENT": 7,
+          "INCONSISTENT": 10,
+          "REVIEW": 33
+        }
+      },
+      "n2_hard": {
+        "broad_flag_rate": 0.8859,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 0.9444,
+            "inconsistent_rate": 0.1944,
+            "n": 36,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "INCONSISTENT": 7,
+              "REVIEW": 27
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.8919,
+            "inconsistent_rate": 0.1351,
+            "n": 37,
+            "verdicts": {
+              "CONSISTENT": 4,
+              "INCONSISTENT": 5,
+              "REVIEW": 28
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.9429,
+            "inconsistent_rate": 0.0286,
+            "n": 35,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "INCONSISTENT": 1,
+              "REVIEW": 32
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.8919,
+            "inconsistent_rate": 0.1892,
+            "n": 37,
+            "verdicts": {
+              "CONSISTENT": 4,
+              "INCONSISTENT": 7,
+              "REVIEW": 26
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.7692,
+            "inconsistent_rate": 0.1538,
+            "n": 39,
+            "verdicts": {
+              "CONSISTENT": 8,
+              "ESCALATE": 1,
+              "INCONSISTENT": 6,
+              "REVIEW": 24
+            }
+          }
+        },
+        "inconsistent_rate": 0.1413,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 15,
+          "broad_leakage_rate": 0.1376,
+          "catch_rate": 0.7982,
+          "caught_no_premise_or_contradicted": 87,
+          "matched_injected_claims": 109,
+          "prs_with_matched_injected_claim": 101,
+          "strict_leakage_derived_supported": 4,
+          "strict_leakage_rate": 0.0367,
+          "total_prs": 184
+        },
+        "n": 184,
+        "state_counts": {
+          "derived_supported": 179,
+          "hypothesis_with_verified_premises": 538,
+          "literal_supported": 330,
+          "literal_unsupported": 267,
+          "no_premises_in_diff": 291,
+          "premise_contradicted": 10,
+          "unverifiable": 21
+        },
+        "verdicts": {
+          "CONSISTENT": 20,
+          "ESCALATE": 1,
+          "INCONSISTENT": 26,
+          "REVIEW": 137
+        }
+      },
+      "n3_mutation": {
+        "broad_flag_rate": 0.93,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 0.95,
+            "inconsistent_rate": 0.675,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "ESCALATE": 1,
+              "INCONSISTENT": 27,
+              "REVIEW": 11
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.925,
+            "inconsistent_rate": 0.425,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 3,
+              "INCONSISTENT": 17,
+              "REVIEW": 20
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.975,
+            "inconsistent_rate": 0.7,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 1,
+              "INCONSISTENT": 28,
+              "REVIEW": 11
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.875,
+            "inconsistent_rate": 0.475,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 4,
+              "ESCALATE": 1,
+              "INCONSISTENT": 19,
+              "REVIEW": 16
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.925,
+            "inconsistent_rate": 0.65,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 3,
+              "INCONSISTENT": 26,
+              "REVIEW": 11
+            }
+          }
+        },
+        "by_mutation_kind": {
+          "claimed_doc_file_but_zero_docs": {
+            "broad_recall": 0.9512,
+            "inconsistent_recall": 0.5854,
+            "n": 41
+          },
+          "claimed_tests_but_zero_tests": {
+            "broad_recall": 0.8778,
+            "inconsistent_recall": 0.4778,
+            "n": 90
+          },
+          "dependency_version_mismatch": {
+            "broad_recall": 0.9811,
+            "inconsistent_recall": 0.717,
+            "n": 53
+          },
+          "polarity_flip_remove_added_symbol": {
+            "broad_recall": 1.0,
+            "inconsistent_recall": 0.75,
+            "n": 16
+          }
+        },
+        "inconsistent_rate": 0.585,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 10,
+          "broad_leakage_rate": 0.082,
+          "catch_rate": 0.9098,
+          "caught_no_premise_or_contradicted": 111,
+          "matched_injected_claims": 122,
+          "prs_with_matched_injected_claim": 114,
+          "strict_leakage_derived_supported": 7,
+          "strict_leakage_rate": 0.0574,
+          "total_prs": 200
+        },
+        "n": 200,
+        "state_counts": {
+          "derived_supported": 192,
+          "hypothesis_with_verified_premises": 564,
+          "literal_supported": 361,
+          "literal_unsupported": 301,
+          "no_premises_in_diff": 241,
+          "premise_contradicted": 111,
+          "unverifiable": 16
+        },
+        "verdicts": {
+          "CONSISTENT": 12,
+          "ESCALATE": 2,
+          "INCONSISTENT": 117,
+          "REVIEW": 69
+        }
+      },
+      "operating_points_n2_vs_originals": {
+        "broad_inconsistent_or_review": {
+          "f1": 0.6626,
+          "fn": 21,
+          "fp": 145,
+          "fpr": 0.725,
+          "precision": 0.5292,
+          "recall": 0.8859,
+          "tn": 55,
+          "tp": 163
+        },
+        "strict_inconsistent": {
+          "f1": 0.2291,
+          "fn": 158,
+          "fp": 17,
+          "fpr": 0.085,
+          "precision": 0.6047,
+          "recall": 0.1413,
+          "tn": 183,
+          "tp": 26
+        }
+      },
+      "originals": {
+        "behavioral_i2_i3_rate": 0.055,
+        "broad_flag_rate": 0.725,
+        "by_agent": {
+          "Claude_Code": {
+            "broad_flag_rate": 0.825,
+            "inconsistent_rate": 0.125,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 6,
+              "ESCALATE": 1,
+              "INCONSISTENT": 5,
+              "REVIEW": 28
+            }
+          },
+          "Copilot": {
+            "broad_flag_rate": 0.95,
+            "inconsistent_rate": 0.175,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 2,
+              "INCONSISTENT": 7,
+              "REVIEW": 31
+            }
+          },
+          "Cursor": {
+            "broad_flag_rate": 0.5,
+            "inconsistent_rate": 0.0,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 20,
+              "REVIEW": 20
+            }
+          },
+          "Devin": {
+            "broad_flag_rate": 0.725,
+            "inconsistent_rate": 0.075,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 10,
+              "ESCALATE": 1,
+              "INCONSISTENT": 3,
+              "REVIEW": 26
+            }
+          },
+          "OpenAI_Codex": {
+            "broad_flag_rate": 0.625,
+            "inconsistent_rate": 0.05,
+            "n": 40,
+            "verdicts": {
+              "CONSISTENT": 15,
+              "INCONSISTENT": 2,
+              "REVIEW": 23
+            }
+          }
+        },
+        "inconsistent_rate": 0.085,
+        "leakage": {
+          "broad_leakage_any_verified_premise": 0,
+          "broad_leakage_rate": 0.0,
+          "catch_rate": 0.0,
+          "caught_no_premise_or_contradicted": 0,
+          "matched_injected_claims": 0,
+          "prs_with_matched_injected_claim": 0,
+          "strict_leakage_derived_supported": 0,
+          "strict_leakage_rate": 0.0,
+          "total_prs": 200
+        },
+        "n": 200,
+        "pass1_clean_inconsistent_rate": 0.0309,
+        "pass1_clean_n": 162,
+        "state_counts": {
+          "derived_supported": 214,
+          "hypothesis_with_verified_premises": 624,
+          "literal_supported": 305,
+          "literal_unsupported": 231,
+          "no_premises_in_diff": 245,
+          "premise_contradicted": 9,
+          "unverifiable": 13
+        },
+        "verdicts": {
+          "CONSISTENT": 53,
+          "ESCALATE": 2,
+          "INCONSISTENT": 17,
+          "REVIEW": 128
+        }
+      }
+    }
+  },
+  "calibration_scope": "N2_hard (positives) vs originals (negatives) only on AIDev-Dev; N1 (50) and N3 (200) reported only",
+  "manual_audit_originals_inconsistent": {
+    "audit_corrected_fpr_excluding_real": 0.0722,
+    "audit_corrected_fpr_full_denom": 0.07,
+    "category_counts": {
+      "false_alarm_dep_extractor_lockfile_and_semver_padding": 1,
+      "false_alarm_dep_extractor_on_non_manifest": 1,
+      "false_alarm_dep_extractor_package_version_field": 1,
+      "false_alarm_dep_substring_match_eslint": 1,
+      "false_alarm_execution_report_read_as_adds_test": 1,
+      "false_alarm_i5_checklist_or_not_required": 1,
+      "false_alarm_pass1_literal_extraction": 2,
+      "false_alarm_pass1_predicate_routing_and_prefix": 1,
+      "false_alarm_pass1_rename_source_paths_and_comments": 1,
+      "false_alarm_pass2_grounding_and_dep_parser": 1,
+      "false_alarm_pass2_grounding_and_operation": 1,
+      "false_alarm_pass2_hunk_context_and_impact_bullets": 1,
+      "false_alarm_pass2_short_grammar_lines": 1,
+      "genuine_doc_only_claim_on_260_file_code_diff": 1,
+      "genuine_missing_claimed_feature_and_files": 1,
+      "genuine_nonexistent_files_and_unmentioned_scope": 1,
+      "genuine_severe_unmentioned_scope": 2,
+      "genuine_stale_description_removed_commands": 1
+    },
+    "items": [
+      {
+        "adjudication": "false_alarm",
+        "agent": "Claude_Code",
+        "category": "false_alarm_dep_extractor_on_non_manifest",
+        "note": "JSON test fixture string inside a Go test file was parsed as a package version and compared against a prose spec version.",
+        "pr_id": "3910870885",
+        "reasons": [
+          "I2_premise_contradicted:2"
+        ]
+      },
+      {
+        "adjudication": "real_inconsistency",
+        "agent": "Claude_Code",
+        "category": "genuine_severe_unmentioned_scope",
+        "note": "Diff spans 46 files across cache, websocket, eventsource, CI, and package dependencies while description mentions only single-issue socket cleanup.",
+        "pr_id": "3315462760",
+        "reasons": [
+          "I5_U_severe_understated_files"
+        ]
+      },
+      {
+        "adjudication": "real_inconsistency",
+        "agent": "Claude_Code",
+        "category": "genuine_missing_claimed_feature_and_files",
+        "note": "All named integration example, doc, and test files claimed in the PR description are absent from the 50-file diff.",
+        "pr_id": "3492184706",
+        "reasons": [
+          "I3_phantom_behavior:8/8",
+          "I4_literal_unsupported:7/8",
+          "I5_U_severe_understated_files"
+        ]
+      },
+      {
+        "adjudication": "false_alarm",
+        "agent": "Claude_Code",
+        "category": "false_alarm_pass1_literal_extraction",
+        "note": "Symbols and white-box tests exist in the diff cleanly, but Pass-1 added trailing parens to identifiers and emitted prose test bullets as literal adds_test claims.",
+        "pr_id": "4093559333",
+        "reasons": [
+          "I4_literal_unsupported:8/8"
+        ]
+      },
+      {
+        "adjudication": "false_alarm",
+        "agent": "Claude_Code",
+        "category": "false_alarm_pass2_grounding_and_operation",
+        "note": "Single-file fix genuinely wires the described components, but bug-symptom prose was mapped to removes_support_for and manual verification steps to behavioral test claims.",
+        "pr_id": "4120989454",
+        "reasons": [
+          "I2_premise_contradicted:1",
+          "I3_phantom_behavior:7/7"
+        ]
+      },
+      {
+        "adjudication": "real_inconsistency",
+        "agent": "Claude_Code",
+        "category": "genuine_nonexistent_files_and_unmentioned_scope",
+        "note": "Three explicitly named Python module filenames do not exist in the 97-file diff and dozens of unrelated checkpoint and test-project files are omitted.",
+        "pr_id": "3301299783",
+        "reasons": [
+          "I4_literal_unsupported:6/6",
+          "I5_U_severe_understated_files"
+        ]
+      },
+      {
+        "adjudication": "false_alarm",
+        "agent": "OpenAI_Codex",
+        "category": "false_alarm_pass2_grounding_and_dep_parser",
+        "note": "Single-line pyproject dependency pin change matches the description cleanly; TOML array dependency string bypassed dependency extraction and relevance matching.",
+        "pr_id": "4112362014",
+        "reasons": [
+          "I3_phantom_behavior:3/3"
+        ]
+      },
+      {
+        "adjudication": "false_alarm",
+        "agent": "OpenAI_Codex",
+        "category": "false_alarm_execution_report_read_as_adds_test",
+        "note": "CI migration diff matches the description; reporting a local unit test run in prose was misclassified as adding new test files.",
+        "pr_id": "4014302868",
+        "reasons": [
+          "I2_premise_contradicted:1"
+        ]
+      },
+      {
+        "adjudication": "real_inconsistency",
+        "agent": "Copilot",
+        "category": "genuine_stale_description_removed_commands",
+        "note": "Description command table still documents CLI subcommands that were later replaced and deleted within the same PR diff without updating the description.",
+        "pr_id": "3978765167",
+        "reasons": [
+          "I4_literal_unsupported:9/9"
+        ]
+      },
+      {
+        "adjudication": "false_alarm",
+        "agent": "Copilot",
+        "category": "false_alarm_pass1_rename_source_paths_and_comments",
+        "note": "TypeScript rename and comment cleanup match the diff, but Pass-1 extracted pre-rename filenames and suppression comments as added/removed literal entities.",
+        "pr_id": "3461414254",
+        "reasons": [
+          "I4_literal_unsupported:8/8"
+        ]
+      },
+      {
+        "adjudication": "real_inconsistency",
+        "agent": "Copilot",
+        "category": "genuine_severe_unmentioned_scope",
+        "note": "Description claims edits are limited to two release config files with no functional change while the 170-file diff modifies 168 other source, migration, and test files.",
+        "pr_id": "3373697596",
+        "reasons": [
+          "I3_phantom_behavior:6/6",
+          "I5_U_severe_understated_files"
+        ]
+      },
+      {
+        "adjudication": "false_alarm",
+        "agent": "Copilot",
+        "category": "false_alarm_dep_extractor_package_version_field",
+        "note": "Manifest version field was extracted as a package named version and compared against a prose language version mention.",
+        "pr_id": "3363161365",
+        "reasons": [
+          "I2_premise_contradicted:1"
+        ]
+      },
+      {
+        "adjudication": "false_alarm",
+        "agent": "Copilot",
+        "category": "false_alarm_pass2_short_grammar_lines",
+        "note": "Parser grammar and tests match the description cleanly, but short single-token grammar lines lacked enough specific tokens to pass the two-anchor relevance threshold.",
+        "pr_id": "3736601084",
+        "reasons": [
+          "I3_phantom_behavior:5/6"
+        ]
+      },
+      {
+        "adjudication": "false_alarm",
+        "agent": "Copilot",
+        "category": "false_alarm_pass1_literal_extraction",
+        "note": "Workflow YAML diff implements the described changes, but Pass-1 routed shell/runner expressions and replaced values into unsupported literal identifier predicates.",
+        "pr_id": "3781064566",
+        "reasons": [
+          "I4_literal_unsupported:6/6"
+        ]
+      },
+      {
+        "adjudication": "false_alarm",
+        "agent": "Copilot",
+        "category": "false_alarm_pass2_hunk_context_and_impact_bullets",
+        "note": "Go fix and regression test match the description, but impact bullets sharing the same enclosing function target lacked the function name on the single-line body diff quote.",
+        "pr_id": "3621033669",
+        "reasons": [
+          "I3_phantom_behavior:6/7"
+        ]
+      },
+      {
+        "adjudication": "false_alarm",
+        "agent": "Devin",
+        "category": "false_alarm_pass1_predicate_routing_and_prefix",
+        "note": "All 12 described file paths and directories exist under a top-level subdirectory prefix in the diff, but Pass-1 omitted the prefix and routed paths into identifier predicates.",
+        "pr_id": "3179749937",
+        "reasons": [
+          "I4_literal_unsupported:12/12"
+        ]
+      },
+      {
+        "adjudication": "false_alarm",
+        "agent": "Devin",
+        "category": "false_alarm_dep_extractor_lockfile_and_semver_padding",
+        "note": "Dependency bump matches pyproject and lockfile changes; lockfile package-version stanza collision and transitive range normalization triggered false version mismatches.",
+        "pr_id": "3415684744",
+        "reasons": [
+          "I2_premise_contradicted:2"
+        ]
+      },
+      {
+        "adjudication": "false_alarm",
+        "agent": "Devin",
+        "category": "false_alarm_dep_substring_match_eslint",
+        "note": "Package updates match package.json cleanly; substring matching of base package name inside compound plugin names triggered false version mismatches.",
+        "pr_id": "3669324709",
+        "reasons": [
+          "I2_premise_contradicted:2"
+        ]
+      },
+      {
+        "adjudication": "false_alarm",
+        "agent": "Cursor",
+        "category": "false_alarm_i5_checklist_or_not_required",
+        "note": "Checked template item stating documentation was updated or not required was misinterpreted as a doc-only PR type checkbox.",
+        "pr_id": "3914823134",
+        "reasons": [
+          "I5_D_doc_only_but_code"
+        ]
+      },
+      {
+        "adjudication": "real_inconsistency",
+        "agent": "Cursor",
+        "category": "genuine_doc_only_claim_on_260_file_code_diff",
+        "note": "Description explicitly asserts changes are limited to docs/instructions without runtime impact while the 260-file diff modifies 146 source files, 50 tests, and 36 configs.",
+        "pr_id": "3924461875",
+        "reasons": [
+          "I5_U_severe_understated_files"
+        ]
+      }
+    ],
+    "n_false_alarm": 14,
+    "n_flagged_inconsistent": 20,
+    "n_originals": 200,
+    "n_real_inconsistency": 6,
+    "policy": "Decision 2 read-only audit of ALL 20 originals flagged INCONSISTENT under calibrated d_full; zero thresholds or rules modified afterwards.",
+    "raw_fpr": 0.1
+  },
+  "operating_point_protocol": {
+    "broad": "verdict in (INCONSISTENT, REVIEW) (maps to PR-MCI partial | misaligned)",
+    "strict": "verdict == INCONSISTENT (maps to PR-MCI misaligned)"
+  },
+  "originals_inconsistent_d_full": [
+    {
+      "agent": "Claude_Code",
+      "pr_id": "3910870885",
+      "reasons": [
+        "I2_premise_contradicted:2"
+      ]
+    },
+    {
+      "agent": "Claude_Code",
+      "pr_id": "3315462760",
+      "reasons": [
+        "I5_U_severe_understated_files"
+      ]
+    },
+    {
+      "agent": "Claude_Code",
+      "pr_id": "3492184706",
+      "reasons": [
+        "I3_phantom_behavior:8/8",
+        "I4_literal_unsupported:7/8",
+        "I5_U_severe_understated_files"
+      ]
+    },
+    {
+      "agent": "Claude_Code",
+      "pr_id": "4093559333",
+      "reasons": [
+        "I4_literal_unsupported:8/8"
+      ]
+    },
+    {
+      "agent": "Claude_Code",
+      "pr_id": "4120989454",
+      "reasons": [
+        "I2_premise_contradicted:1",
+        "I3_phantom_behavior:7/7"
+      ]
+    },
+    {
+      "agent": "Claude_Code",
+      "pr_id": "3301299783",
+      "reasons": [
+        "I4_literal_unsupported:6/6",
+        "I5_U_severe_understated_files"
+      ]
+    },
+    {
+      "agent": "OpenAI_Codex",
+      "pr_id": "4112362014",
+      "reasons": [
+        "I3_phantom_behavior:3/3"
+      ]
+    },
+    {
+      "agent": "OpenAI_Codex",
+      "pr_id": "4014302868",
+      "reasons": [
+        "I2_premise_contradicted:1"
+      ]
+    },
+    {
+      "agent": "Copilot",
+      "pr_id": "3978765167",
+      "reasons": [
+        "I4_literal_unsupported:9/9"
+      ]
+    },
+    {
+      "agent": "Copilot",
+      "pr_id": "3461414254",
+      "reasons": [
+        "I4_literal_unsupported:8/8"
+      ]
+    },
+    {
+      "agent": "Copilot",
+      "pr_id": "3373697596",
+      "reasons": [
+        "I3_phantom_behavior:6/6",
+        "I5_U_severe_understated_files"
+      ]
+    },
+    {
+      "agent": "Copilot",
+      "pr_id": "3363161365",
+      "reasons": [
+        "I2_premise_contradicted:1"
+      ]
+    },
+    {
+      "agent": "Copilot",
+      "pr_id": "3736601084",
+      "reasons": [
+        "I3_phantom_behavior:5/6"
+      ]
+    },
+    {
+      "agent": "Copilot",
+      "pr_id": "3781064566",
+      "reasons": [
+        "I4_literal_unsupported:6/6"
+      ]
+    },
+    {
+      "agent": "Copilot",
+      "pr_id": "3621033669",
+      "reasons": [
+        "I3_phantom_behavior:6/7"
+      ]
+    },
+    {
+      "agent": "Devin",
+      "pr_id": "3179749937",
+      "reasons": [
+        "I4_literal_unsupported:12/12"
+      ]
+    },
+    {
+      "agent": "Devin",
+      "pr_id": "3415684744",
+      "reasons": [
+        "I2_premise_contradicted:2"
+      ]
+    },
+    {
+      "agent": "Devin",
+      "pr_id": "3669324709",
+      "reasons": [
+        "I2_premise_contradicted:2"
+      ]
+    },
+    {
+      "agent": "Cursor",
+      "pr_id": "3914823134",
+      "reasons": [
+        "I5_D_doc_only_but_code"
+      ]
+    },
+    {
+      "agent": "Cursor",
+      "pr_id": "3924461875",
+      "reasons": [
+        "I5_U_severe_understated_files"
+      ]
+    }
+  ],
+  "paper_heuristic_baseline": {
+    "n1_easy_50": {
+      "flagged_misaligned": 0,
+      "n": 50,
+      "rate": 0.0
+    },
+    "n2_hard": {
+      "flagged_misaligned": 0,
+      "n": 184,
+      "rate": 0.0
+    },
+    "n2_vs_originals": {
+      "f1": 0.0,
+      "fn": 184,
+      "fp": 0,
+      "fpr": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "tn": 200,
+      "tp": 0
+    },
+    "n3_mutation": {
+      "flagged_misaligned": 0,
+      "n": 200,
+      "rate": 0.0
+    },
+    "originals": {
+      "flagged_misaligned": 0,
+      "n": 200,
+      "rate": 0.0
+    }
+  },
+  "reader_rejected_summary": {
+    "n1_easy_50": {
+      "escalate_count": 0,
+      "n": 50,
+      "prs_with_reader_rejected": 2,
+      "rejected_items_total": 2
+    },
+    "n2_hard": {
+      "escalate_count": 1,
+      "n": 184,
+      "prs_with_reader_rejected": 5,
+      "rejected_items_total": 5
+    },
+    "n3_mutation": {
+      "escalate_count": 2,
+      "n": 200,
+      "prs_with_reader_rejected": 5,
+      "rejected_items_total": 5
+    },
+    "originals": {
+      "escalate_count": 2,
+      "n": 200,
+      "prs_with_reader_rejected": 2,
+      "rejected_items_total": 2
+    }
+  },
+  "selected_config": {
+    "calibration_summary": {
+      "broad_op_inconsistent_or_review": {
+        "f1": 0.6613,
+        "fn": 21,
+        "fp": 146,
+        "fpr": 0.73,
+        "precision": 0.5275,
+        "recall": 0.8859,
+        "tn": 54,
+        "tp": 163
+      },
+      "meets_fpr_10pct": true,
+      "meets_n2_strict_leak_10pct": true,
+      "n2_broad_leakage_rate": 0.1376,
+      "n2_strict_leakage_rate": 0.0367,
+      "objective": 102.6416,
+      "orig_pass1_clean_fpr_inconsistent": 0.0432,
+      "strict_op_inconsistent": {
+        "f1": 0.2489,
+        "fn": 155,
+        "fp": 20,
+        "fpr": 0.1,
+        "precision": 0.5918,
+        "recall": 0.1576,
+        "tn": 180,
+        "tp": 29
+      }
+    },
+    "relevance_config": {
+      "min_specific_anchors": 2,
+      "require_category_compat": true,
+      "require_target_match_when_present": true
+    },
+    "thresholds": {
+      "i5_placeholder_max_title_words": 3,
+      "i5_placeholder_max_words": 8,
+      "i5_placeholder_min_churn": 100,
+      "i5_understated_min_enumerated": 2,
+      "i5_understated_min_share": 0.95,
+      "include_i5": true,
+      "k_lit": 5,
+      "k_phantom": 3,
+      "review_on_all_unruled_hypothesis": false,
+      "review_on_single_unsupported_or_phantom": true,
+      "singleton_phantom_inconsistent": true,
+      "theta_lit": 0.8,
+      "theta_phantom": 0.75
+    }
+  },
+  "top_5_grid_candidates": [
+    {
+      "broad_op_inconsistent_or_review": {
+        "f1": 0.6613,
+        "fn": 21,
+        "fp": 146,
+        "fpr": 0.73,
+        "precision": 0.5275,
+        "recall": 0.8859,
+        "tn": 54,
+        "tp": 163
+      },
+      "meets_fpr_10pct": true,
+      "meets_n2_strict_leak_10pct": true,
+      "n2_broad_leakage_rate": 0.1376,
+      "n2_strict_leakage_rate": 0.0367,
+      "objective": 102.6416,
+      "orig_pass1_clean_fpr_inconsistent": 0.0432,
+      "relevance_config": {
+        "min_specific_anchors": 2,
+        "require_category_compat": true,
+        "require_target_match_when_present": true
+      },
+      "strict_op_inconsistent": {
+        "f1": 0.2489,
+        "fn": 155,
+        "fp": 20,
+        "fpr": 0.1,
+        "precision": 0.5918,
+        "recall": 0.1576,
+        "tn": 180,
+        "tp": 29
+      },
+      "thresholds": {
+        "i5_placeholder_max_title_words": 3,
+        "i5_placeholder_max_words": 8,
+        "i5_placeholder_min_churn": 100,
+        "i5_understated_min_enumerated": 2,
+        "i5_understated_min_share": 0.95,
+        "include_i5": true,
+        "k_lit": 5,
+        "k_phantom": 3,
+        "review_on_all_unruled_hypothesis": false,
+        "review_on_single_unsupported_or_phantom": true,
+        "singleton_phantom_inconsistent": true,
+        "theta_lit": 0.8,
+        "theta_phantom": 0.75
+      }
+    },
+    {
+      "broad_op_inconsistent_or_review": {
+        "f1": 0.6613,
+        "fn": 21,
+        "fp": 146,
+        "fpr": 0.73,
+        "precision": 0.5275,
+        "recall": 0.8859,
+        "tn": 54,
+        "tp": 163
+      },
+      "meets_fpr_10pct": true,
+      "meets_n2_strict_leak_10pct": true,
+      "n2_broad_leakage_rate": 0.1376,
+      "n2_strict_leakage_rate": 0.0367,
+      "objective": 102.6416,
+      "orig_pass1_clean_fpr_inconsistent": 0.0432,
+      "relevance_config": {
+        "min_specific_anchors": 2,
+        "require_category_compat": true,
+        "require_target_match_when_present": true
+      },
+      "strict_op_inconsistent": {
+        "f1": 0.2489,
+        "fn": 155,
+        "fp": 20,
+        "fpr": 0.1,
+        "precision": 0.5918,
+        "recall": 0.1576,
+        "tn": 180,
+        "tp": 29
+      },
+      "thresholds": {
+        "i5_placeholder_max_title_words": 3,
+        "i5_placeholder_max_words": 8,
+        "i5_placeholder_min_churn": 100,
+        "i5_understated_min_enumerated": 2,
+        "i5_understated_min_share": 0.95,
+        "include_i5": true,
+        "k_lit": 5,
+        "k_phantom": 3,
+        "review_on_all_unruled_hypothesis": false,
+        "review_on_single_unsupported_or_phantom": true,
+        "singleton_phantom_inconsistent": true,
+        "theta_lit": 0.9,
+        "theta_phantom": 0.75
+      }
+    },
+    {
+      "broad_op_inconsistent_or_review": {
+        "f1": 0.6613,
+        "fn": 21,
+        "fp": 146,
+        "fpr": 0.73,
+        "precision": 0.5275,
+        "recall": 0.8859,
+        "tn": 54,
+        "tp": 163
+      },
+      "meets_fpr_10pct": true,
+      "meets_n2_strict_leak_10pct": true,
+      "n2_broad_leakage_rate": 0.1376,
+      "n2_strict_leakage_rate": 0.0367,
+      "objective": 102.6416,
+      "orig_pass1_clean_fpr_inconsistent": 0.0432,
+      "relevance_config": {
+        "min_specific_anchors": 2,
+        "require_category_compat": true,
+        "require_target_match_when_present": true
+      },
+      "strict_op_inconsistent": {
+        "f1": 0.2489,
+        "fn": 155,
+        "fp": 20,
+        "fpr": 0.1,
+        "precision": 0.5918,
+        "recall": 0.1576,
+        "tn": 180,
+        "tp": 29
+      },
+      "thresholds": {
+        "i5_placeholder_max_title_words": 3,
+        "i5_placeholder_max_words": 8,
+        "i5_placeholder_min_churn": 100,
+        "i5_understated_min_enumerated": 2,
+        "i5_understated_min_share": 0.95,
+        "include_i5": true,
+        "k_lit": 5,
+        "k_phantom": 3,
+        "review_on_all_unruled_hypothesis": false,
+        "review_on_single_unsupported_or_phantom": true,
+        "singleton_phantom_inconsistent": false,
+        "theta_lit": 0.8,
+        "theta_phantom": 0.75
+      }
+    },
+    {
+      "broad_op_inconsistent_or_review": {
+        "f1": 0.6613,
+        "fn": 21,
+        "fp": 146,
+        "fpr": 0.73,
+        "precision": 0.5275,
+        "recall": 0.8859,
+        "tn": 54,
+        "tp": 163
+      },
+      "meets_fpr_10pct": true,
+      "meets_n2_strict_leak_10pct": true,
+      "n2_broad_leakage_rate": 0.1376,
+      "n2_strict_leakage_rate": 0.0367,
+      "objective": 102.6416,
+      "orig_pass1_clean_fpr_inconsistent": 0.0432,
+      "relevance_config": {
+        "min_specific_anchors": 2,
+        "require_category_compat": true,
+        "require_target_match_when_present": true
+      },
+      "strict_op_inconsistent": {
+        "f1": 0.2489,
+        "fn": 155,
+        "fp": 20,
+        "fpr": 0.1,
+        "precision": 0.5918,
+        "recall": 0.1576,
+        "tn": 180,
+        "tp": 29
+      },
+      "thresholds": {
+        "i5_placeholder_max_title_words": 3,
+        "i5_placeholder_max_words": 8,
+        "i5_placeholder_min_churn": 100,
+        "i5_understated_min_enumerated": 2,
+        "i5_understated_min_share": 0.95,
+        "include_i5": true,
+        "k_lit": 5,
+        "k_phantom": 3,
+        "review_on_all_unruled_hypothesis": false,
+        "review_on_single_unsupported_or_phantom": true,
+        "singleton_phantom_inconsistent": false,
+        "theta_lit": 0.9,
+        "theta_phantom": 0.75
+      }
+    },
+    {
+      "broad_op_inconsistent_or_review": {
+        "f1": 0.2638,
+        "fn": 153,
+        "fp": 20,
+        "fpr": 0.1,
+        "precision": 0.6078,
+        "recall": 0.1685,
+        "tn": 180,
+        "tp": 31
+      },
+      "meets_fpr_10pct": true,
+      "meets_n2_strict_leak_10pct": true,
+      "n2_broad_leakage_rate": 0.1376,
+      "n2_strict_leakage_rate": 0.0367,
+      "objective": 102.2441,
+      "orig_pass1_clean_fpr_inconsistent": 0.0432,
+      "relevance_config": {
+        "min_specific_anchors": 2,
+        "require_category_compat": true,
+        "require_target_match_when_present": true
+      },
+      "strict_op_inconsistent": {
+        "f1": 0.2489,
+        "fn": 155,
+        "fp": 20,
+        "fpr": 0.1,
+        "precision": 0.5918,
+        "recall": 0.1576,
+        "tn": 180,
+        "tp": 29
+      },
+      "thresholds": {
+        "i5_placeholder_max_title_words": 3,
+        "i5_placeholder_max_words": 8,
+        "i5_placeholder_min_churn": 100,
+        "i5_understated_min_enumerated": 2,
+        "i5_understated_min_share": 0.95,
+        "include_i5": true,
+        "k_lit": 5,
+        "k_phantom": 3,
+        "review_on_all_unruled_hypothesis": false,
+        "review_on_single_unsupported_or_phantom": false,
+        "singleton_phantom_inconsistent": true,
+        "theta_lit": 0.8,
+        "theta_phantom": 0.75
+      }
+    }
+  ]
+}

@@ -1932,6 +1932,35 @@ class ClaimVerifier:
         )
 
 
+DEFAULT_PLANNER_BASE_URL = "https://integrate.api.nvidia.com/v1"
+DEFAULT_PLANNER_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
+
+
+def build_derivation_planner_model(
+    api_key: str,
+    *,
+    base_url: str = DEFAULT_PLANNER_BASE_URL,
+    model: str = DEFAULT_PLANNER_MODEL,
+    timeout: float = 120.0,
+    enable_thinking: bool = False,
+) -> OpenAICompatibleModel:
+    """Provider configuration used by the live derivation benchmark
+    (`benchmarks/v4_derivation_planner_eval.py`): temperature 0, max_tokens 2048,
+    2 transport retries, thinking disabled. Applications (API, CLI) should build the
+    planner model here so that their results stay comparable with the benchmark."""
+    if not isinstance(api_key, str) or not api_key.strip():
+        raise ValueError("api_key is required to build the derivation planner model.")
+    return OpenAICompatibleModel(
+        base_url=base_url,
+        model=model,
+        api_key=api_key.strip(),
+        timeout=float(timeout),
+        max_tokens=2048,
+        retries=2,
+        extra_body={"chat_template_kwargs": {"enable_thinking": bool(enable_thinking)}},
+    )
+
+
 def verify_claim(
     sources: (
         Mapping[str, SourceDocument]

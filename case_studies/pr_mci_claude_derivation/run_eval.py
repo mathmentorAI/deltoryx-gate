@@ -134,9 +134,29 @@ def main() -> int:
     ap.add_argument("--skip-old", action="store_true")
     ap.add_argument("--only", default="")
     ap.add_argument("--out", type=Path, default=OUT, help="output file (default: first-measurement path)")
+    ap.add_argument("--frozen-dir", type=Path, default=None,
+                    help="frozen sample directory with MANIFEST_HASHES.txt (e.g. ../pr_mci_transfer_sample/frozen); "
+                         "implies --skip-old and skips the old rules evaluator")
     args = ap.parse_args()
-    for name, h in EXPECTED_HASHES.items():
-        got = _sha(HERE / "frozen" / name)
+    frozen = HERE / "frozen"
+    hashes = dict(EXPECTED_HASHES)
+    if args.frozen_dir is not None:
+        frozen = args.frozen_dir.resolve()
+        hashes = {}
+        for ln in (frozen / "MANIFEST_HASHES.txt").read_text(encoding="utf-8").splitlines():
+            if ln.strip():
+                h, name = ln.split()
+                hashes[name] = h
+        if set(hashes) != {"inputs_manifest.json", "expected_manifest.json"}:
+            print("ERROR: MANIFEST_HASHES.txt incompleto", file=sys.stderr)
+            return 2
+        args.skip_old = True
+    _early = Path(args.out) if Path(args.out).is_absolute() else (Path.cwd() / args.out).resolve()
+    if _early.exists():
+        print(f"ERROR: {_early.name} ya existe y conserva una medición anterior; usa --out con otro archivo.", file=sys.stderr)
+        return 7
+    for name, h in hashes.items():
+        got = _sha(frozen / name)
         if got != h:
             print(f"ERROR: {name} hash {got} != frozen {h}", file=sys.stderr)
             return 2
@@ -144,7 +164,7 @@ def main() -> int:
     if not key:
         print("ERROR: NVIDIA_API_KEY no disponible (entorno o .env). Ejecución en vivo pendiente.", file=sys.stderr)
         return 3
-    cases = json.loads((HERE / "frozen" / "inputs_manifest.json").read_text(encoding="utf-8"))["cases"]
+    cases = json.loads((frozen / "inputs_manifest.json").read_text(encoding="utf-8"))["cases"]
     if args.only:
         keep = set(args.only.split(","))
         cases = [c for c in cases if c["case_id"] in keep]
@@ -185,7 +205,8 @@ def main() -> int:
             grade = (out.get("reliability") or {}).get("grade")
             props = [p.get("name") + ":" + str(p.get("grade")) for p in ((out.get("reliability") or {}).get("proposed_operations") or [])]
             print(f"{case['case_id']} {case['pr_id']}: {row['verdict']} / {row['routing']} ({row['outcome_category']}) grade={grade} proposed={props} {wall_ms} ms", flush=True)
-            row["rules_v2_postreview_code_config"] = run_rules_v2(case)
+            if args.frozen_dir is None:
+                row["rules_v2_postreview_code_config"] = run_rules_v2(case)
             if ev2 is not None:
                 try:
                     row["gate_v4_vocab2"] = run_gate_v4_vocab2(case, ev2, reader)
@@ -208,7 +229,8 @@ def main() -> int:
         "claim_layer_branch": _git("rev-parse", "--abbrev-ref", "HEAD", cwd=CL_ROOT),
         "code_dirty": {"platform_api": bool(_git("status", "--porcelain", "--", "api", cwd=PLATFORM)),
                        "claim_layer_src": bool(_git("status", "--porcelain", "--", "src", cwd=CL_ROOT))},
-        "frozen_manifest_hashes": EXPECTED_HASHES,
+        "frozen_dir": str(frozen.relative_to(CL_ROOT)) if frozen.is_relative_to(CL_ROOT) else str(frozen),
+        "frozen_manifest_hashes": hashes,
         "prompt_version": (rows[0]["response"].get("provenance", {}).get("prompt_version") if rows else None),
         "old_evaluator_settings": None if args.skip_old else {
             "gate_v4_vocab2": "eval_v2vocab.evaluate_pr, CODE_CHANGE_VOCAB_V2 620ebd71..., Nemotron timeout=180 retries=3 thinking=off",
@@ -223,8 +245,8 @@ def main() -> int:
     out_path = Path(args.out)
     if not out_path.is_absolute():
         out_path = (Path.cwd() / out_path).resolve()
-    if out_path.exists() and out_path.resolve() == OUT.resolve():
-        print(f"ERROR: {OUT.name} conserva la primera medición; usa --out con otro archivo.", file=sys.stderr)
+    if out_path.exists():
+        print(f"ERROR: {out_path.name} ya existe y conserva una medición anterior; usa --out con otro archivo.", file=sys.stderr)
         return 7
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(text + "\n", encoding="utf-8")

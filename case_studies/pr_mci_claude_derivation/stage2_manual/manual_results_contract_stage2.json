@@ -1,0 +1,314 @@
+[
+ {
+  "case_id": "C07",
+  "claim": "Added test file `frontend/packages/db/supabase/tests/database/03-organization_members_rls.test.sql` with 8 test cases",
+  "verdict": "derived",
+  "outcome": "verified_derivation",
+  "routing": "PASS",
+  "reasons": [
+   "DERIVATION_VERIFIED_AND_MATCHES_CLAIM"
+  ],
+  "computed": 8,
+  "reliability": {
+   "grade": "A",
+   "grade_label": "literal_premises_and_core_operations",
+   "guarantee": "Texto fuente comprobado y operaciones del núcleo de Deltoryx.",
+   "weakest_links": [],
+   "elements": [
+    {
+     "kind": "step",
+     "id": "s1",
+     "operation": "count_lines",
+     "grade": "A"
+    },
+    {
+     "kind": "premise",
+     "id": "p1",
+     "fidelity": "literal_quote",
+     "grade": "A",
+     "value": null,
+     "document_id": "file_01"
+    }
+   ],
+   "proposed_operations": [],
+   "policy": {
+    "pass_min_grade": "B"
+   },
+   "pass_allowed_by_grade": true,
+   "binding": {
+    "revision_mode": "added",
+    "diff_premises": {
+     "p1": {
+      "files": [
+       "frontend/packages/db/supabase/tests/database/03-organization_members_rls.test.sql"
+      ],
+      "sides": [
+       "+"
+      ],
+      "head_lines": [
+       1,
+       288
+      ],
+      "base_lines": null,
+      "document_lines": [
+       4,
+       292
+      ]
+     }
+    },
+    "revision_binding": "document_revision_verified",
+    "premise_revisions": [
+     "file_01@5a8cc6187755"
+    ],
+    "path": "computed",
+    "attribute_binding": "operation:count_lines",
+    "subject_binding": "lexical"
+   }
+  },
+  "defects": [],
+  "steps": [
+   {
+    "operation": "count_lines",
+    "recomputed_value": 8,
+    "grade": "A"
+   }
+  ],
+  "plan": {
+   "claim_target": {
+    "subject": "frontend/packages/db/supabase/tests/database/03-organization_members_rls.test.sql",
+    "predicate": "test cases",
+    "value": 8,
+    "unit": "count",
+    "polarity": 1,
+    "revision": "added"
+   },
+   "premises": [
+    {
+     "claim_id": "p1",
+     "document_id": "file_01",
+     "line_start": 4,
+     "line_end": 292,
+     "entity": "frontend/packages/db/supabase/tests/database/03-organization_members_rls.test.sql",
+     "event": "SELECT ok",
+     "predicate": "added test file",
+     "value": null,
+     "unit": null,
+     "direction": "neutral",
+     "polarity": 1
+    }
+   ],
+   "steps": [
+    {
+     "step_id": "s1",
+     "operation": "count_lines",
+     "premises": [
+      "p1"
+     ],
+     "conclusion_id": "c1",
+     "parameters": {
+      "line_prefix": "+",
+      "contains": "SELECT ok("
+     }
+    }
+   ],
+   "derived_conclusion_id": "c1",
+   "missing_premises": [],
+   "assumptions": [],
+   "suggested_rules": []
+  }
+ },
+ {
+  "case_id": "C13",
+  "claim": "Implemented `porto create-merchant` command for creating merchant accounts with secp256k1 keys",
+  "verdict": "refuted",
+  "outcome": "verified_refutation",
+  "routing": "ESCALATE",
+  "reasons": [
+   "RELIABILITY_BELOW_PASS_THRESHOLD:C<B",
+   "CLAIM_CONTRADICTS_COMPUTED_CONCLUSION"
+  ],
+  "computed": false,
+  "reliability": {
+   "grade": "C",
+   "grade_label": "model_composed_operation_executed_by_deltoryx",
+   "guarantee": "Composición propuesta por Nemotron, interpretada y re-ejecutada por Deltoryx.",
+   "weakest_links": [
+    {
+     "kind": "step",
+     "id": "s2",
+     "operation": "registered",
+     "grade": "C"
+    }
+   ],
+   "elements": [
+    {
+     "kind": "step",
+     "id": "s2",
+     "operation": "registered",
+     "grade": "C"
+    },
+    {
+     "kind": "step",
+     "id": "s1",
+     "operation": "count_lines",
+     "grade": "A"
+    },
+    {
+     "kind": "premise",
+     "id": "p1",
+     "fidelity": "literal_quote",
+     "grade": "A",
+     "value": null,
+     "document_id": "file_06"
+    }
+   ],
+   "proposed_operations": [
+    {
+     "name": "registered",
+     "description": "Registrado si el nombre aparece al menos una vez",
+     "inputs": [
+      "n"
+     ],
+     "expression": {
+      "op": "gt",
+      "args": [
+       {
+        "input": "n"
+       },
+       {
+        "const": 0
+       }
+      ]
+     },
+     "output_type": "boolean",
+     "output_unit": null,
+     "grade": "C",
+     "grade_label": "model_composed_operation_executed_by_deltoryx",
+     "definition_digest": "517b061bca0d3caabc32b56c080e721d06459a835ecbf11c33e8fd7044011fb9"
+    }
+   ],
+   "policy": {
+    "pass_min_grade": "B"
+   },
+   "pass_allowed_by_grade": false,
+   "binding": {
+    "revision_mode": "added",
+    "diff_premises": {
+     "p1": {
+      "files": [
+       "src/cli/index.ts"
+      ],
+      "sides": [
+       "+"
+      ],
+      "head_lines": [
+       1,
+       26
+      ],
+      "base_lines": null,
+      "document_lines": [
+       4,
+       29
+      ]
+     }
+    },
+    "revision_binding": "document_revision_verified",
+    "premise_revisions": [
+     "file_06@c94103ad2873"
+    ],
+    "path": "computed",
+    "attribute_binding": "operation:registered",
+    "subject_binding": "lexical"
+   }
+  },
+  "defects": [],
+  "steps": [
+   {
+    "operation": "count_lines",
+    "recomputed_value": 0,
+    "grade": "A"
+   },
+   {
+    "operation": "registered",
+    "recomputed_value": false,
+    "grade": "C"
+   }
+  ],
+  "plan": {
+   "claim_target": {
+    "subject": "porto",
+    "predicate": "registers create-merchant command",
+    "value": true,
+    "unit": null,
+    "polarity": 1,
+    "revision": "added"
+   },
+   "premises": [
+    {
+     "claim_id": "p1",
+     "document_id": "file_06",
+     "line_start": 4,
+     "line_end": 29,
+     "entity": "src/cli/index.ts",
+     "event": "command",
+     "predicate": "CLI entry file",
+     "value": null,
+     "unit": null,
+     "direction": "neutral",
+     "polarity": 1
+    }
+   ],
+   "steps": [
+    {
+     "step_id": "s1",
+     "operation": "count_lines",
+     "premises": [
+      "p1"
+     ],
+     "conclusion_id": "c1",
+     "parameters": {
+      "line_prefix": "+",
+      "contains": "create-merchant"
+     }
+    },
+    {
+     "step_id": "s2",
+     "operation": "registered",
+     "premises": [
+      "c1"
+     ],
+     "conclusion_id": "c2",
+     "parameters": {}
+    }
+   ],
+   "proposed_operations": [
+    {
+     "name": "registered",
+     "description": "Registrado si el nombre aparece al menos una vez",
+     "inputs": [
+      "n"
+     ],
+     "expression": {
+      "op": "gt",
+      "args": [
+       {
+        "input": "n"
+       },
+       {
+        "const": 0
+       }
+      ]
+     },
+     "output_type": "boolean",
+     "output_unit": null
+    }
+   ],
+   "derived_conclusion_id": "c2",
+   "missing_premises": [],
+   "assumptions": [
+    "src/cli/index.ts es nuevo (status added): su contenido completo está en el diff."
+   ],
+   "suggested_rules": []
+  }
+ }
+]

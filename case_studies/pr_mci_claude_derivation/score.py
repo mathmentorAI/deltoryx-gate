@@ -8,13 +8,16 @@ import statistics
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-E = {c["case_id"]: c for c in json.loads((HERE / "frozen/expected_manifest.json").read_text())["cases"]}
-I = {c["case_id"]: c for c in json.loads((HERE / "frozen/inputs_manifest.json").read_text())["cases"]}
 _ap = argparse.ArgumentParser()
+_ap.add_argument("--frozen-dir", default="frozen", help="frozen sample dir (relative to this folder)")
 _ap.add_argument("--live", default="results/live_results.json")
 _ap.add_argument("--review", default="results/justification_review.json")
 _ap.add_argument("--out", default="results/scored.json")
 _args = _ap.parse_args()
+FROZEN = (HERE / _args.frozen_dir).resolve()
+E = {c["case_id"]: c for c in json.loads((FROZEN / "expected_manifest.json").read_text())["cases"]}
+I = {c["case_id"]: c for c in json.loads((FROZEN / "inputs_manifest.json").read_text())["cases"]}
+N = len(E)
 L = json.loads((HERE / _args.live).read_text())
 R = json.loads((HERE / _args.review).read_text())["cases"]
 rows = {r["case_id"]: r for r in L["cases"]}
@@ -51,17 +54,17 @@ cat = collections.Counter(R[c]["category"] for c in E)
 infer = [c for c in E if E[c]["requires_inference"]]
 out["metrics"] = {
     "confusion_expected_x_observed": {k: dict(v) for k, v in conf.items()},
-    "verdict_acceptable": f"{sum(p['verdict_acceptable'] for p in out['per_case'])}/20",
-    "correctly_verified (verdict acceptable + valid justification)": f"{cat['correct_verified']}/20",
-    "label_ok_bad_justification": f"{cat['label_ok_bad_justification']}/20",
+    "verdict_acceptable": f"{sum(p['verdict_acceptable'] for p in out['per_case'])}/{N}",
+    "correctly_verified (verdict acceptable + valid justification)": f"{cat['correct_verified']}/{N}",
+    "label_ok_bad_justification": f"{cat['label_ok_bad_justification']}/{N}",
     "false_acceptances (PASS on refuted|insufficient reference)": f"{sum(rows[c]['routing']=='PASS' for c in non_supported)}/{len(non_supported)}",
     "incorrect_refutations (refuted on non-refuted reference)": f"{sum(rows[c]['verdict']=='refuted' for c in not_refuted)}/{len(not_refuted)}",
     "justified_abstentions (abstention with acceptable verdict + valid justification)": f"{sum(R[c]['category']=='correct_verified' for c in abstained)}/{len(abstained)}",
     "resolvable_cases_ending_in_abstention_or_unresolved": f"{sum(rows[c]['verdict'] in ('insufficient_evidence','unresolved') for c in resolvable)}/{len(resolvable)}",
-    "operational_errors (truncated planner output, final)": f"{cat['operational_error']}/20",
-    "verifier_abstentions (unresolved by defect/unsupported op, final)": f"{cat['verifier_abstention']}/20",
-    "provider_errors": f"{sum(rows[c]['outcome_category']=='provider_error' for c in E)}/20",
-    "routing_match": f"{sum(rows[c]['routing']==E[c]['expected_routing'] for c in E)}/20",
+    "operational_errors (truncated planner output, final)": f"{cat['operational_error']}/{N}",
+    "verifier_abstentions (unresolved by defect/unsupported op, final)": f"{cat['verifier_abstention']}/{N}",
+    "provider_errors": f"{sum(rows[c]['outcome_category']=='provider_error' for c in E)}/{N}",
+    "routing_match": f"{sum(rows[c]['routing']==E[c]['expected_routing'] for c in E)}/{N}",
     "inference_cases_resolved_with_valid_derivation": f"{sum(R[c]['category']=='correct_verified' and rows[c]['verdict'] in ('derived','refuted') for c in infer)}/{len(infer)}",
     "first_attempt_malformed": f"{sum(1 for c in E for a in rows[c]['response']['telemetry']['attempt_traces'] if a.get('outcome_category')=='malformed_proposal')}/{sum(len(rows[c]['response']['telemetry']['attempt_traces']) for c in E)} attempts",
 }
@@ -81,15 +84,19 @@ out["telemetry"] = {
     "client_end_to_end_ms": mstat([rows[c]["client_wall_ms"] for c in E]),
     "tokens_sum": sum(t["total_tokens"] for t in T),
 }
+HAS_OLD = all("gate_v4_vocab2" in rows[c] for c in E)
 g = collections.Counter()
-for c in E:
+for c in (E if HAS_OLD else ()):
     st = rows[c].get("gate_v4_vocab2", {}).get("claim_status") or {}
     g["supported" if st.get("supported") else ("unverifiable" if st.get("unverifiable") else "other")] += 1
-out["old_evaluators"]["gate_v4_vocab2_claim_status"] = dict(g)
-out["old_evaluators"]["gate_v4_vocab2_pr_gate"] = dict(collections.Counter(rows[c].get("gate_v4_vocab2", {}).get("gate") for c in E))
-out["old_evaluators"]["gate_v4_vocab2_CONSISTENT_on_non_supported_reference"] = f"{sum(rows[c].get('gate_v4_vocab2',{}).get('gate')=='CONSISTENT' for c in non_supported)}/{len(non_supported)}"
-out["old_evaluators"]["rules_v2_P_placeholder_fired"] = f"{sum('P_placeholder' in rows[c]['rules_v2_postreview_code_config']['signals'] for c in E)}/20"
-out["source"] = {"live": _args.live, "review": _args.review, "prompt_version": L.get("prompt_version"),
+if not HAS_OLD:
+    out["old_evaluators"] = {"note": "evaluadores anteriores no ejecutados en esta muestra"}
+else:
+  out["old_evaluators"]["gate_v4_vocab2_claim_status"] = dict(g)
+  out["old_evaluators"]["gate_v4_vocab2_pr_gate"] = dict(collections.Counter(rows[c].get("gate_v4_vocab2", {}).get("gate") for c in E))
+  out["old_evaluators"]["gate_v4_vocab2_CONSISTENT_on_non_supported_reference"] = f"{sum(rows[c].get('gate_v4_vocab2',{}).get('gate')=='CONSISTENT' for c in non_supported)}/{len(non_supported)}"
+  out["old_evaluators"]["rules_v2_P_placeholder_fired"] = f"{sum('P_placeholder' in rows[c]['rules_v2_postreview_code_config']['signals'] for c in E)}/{N}"
+out["source"] = {"frozen_dir": _args.frozen_dir, "live": _args.live, "review": _args.review, "prompt_version": L.get("prompt_version"),
                  "claim_layer_commit": L.get("claim_layer_commit"), "platform_commit": L.get("platform_commit")}
 valid_inf = [c for c in infer if R[c]["category"] == "correct_verified" and rows[c]["verdict"] in ("derived", "refuted")]
 tok_total = sum(t["total_tokens"] for t in T)

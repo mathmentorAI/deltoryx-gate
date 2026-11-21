@@ -1,0 +1,273 @@
+[
+ {
+  "case_id": "C07",
+  "claim": "Added test file `frontend/packages/db/supabase/tests/database/03-organization_members_rls.test.sql` with 8 test cases",
+  "verdict": "derived",
+  "outcome": "verified_derivation",
+  "routing": "PASS",
+  "reasons": [
+   "DERIVATION_VERIFIED_AND_MATCHES_CLAIM"
+  ],
+  "computed": 8,
+  "reliability": {
+   "grade": "A",
+   "grade_label": "literal_premises_and_core_operations",
+   "guarantee": "Texto fuente comprobado y operaciones del núcleo de Deltoryx.",
+   "weakest_links": [],
+   "elements": [
+    {
+     "kind": "step",
+     "id": "s1",
+     "operation": "count_lines",
+     "grade": "A"
+    },
+    {
+     "kind": "premise",
+     "id": "p1",
+     "fidelity": "literal_quote",
+     "grade": "A",
+     "value": null,
+     "document_id": "file_01"
+    }
+   ],
+   "proposed_operations": [],
+   "policy": {
+    "pass_min_grade": "B"
+   },
+   "pass_allowed_by_grade": true,
+   "binding": {
+    "revision_binding": "document_revision_verified",
+    "premise_revisions": [
+     "file_01@5a8cc6187755"
+    ],
+    "path": "computed",
+    "attribute_binding": "operation:count_lines",
+    "subject_binding": "lexical"
+   }
+  },
+  "defects": [],
+  "steps": [
+   {
+    "operation": "count_lines",
+    "recomputed_value": 8,
+    "grade": "A"
+   }
+  ],
+  "plan": {
+   "claim_target": {
+    "subject": "frontend/packages/db/supabase/tests/database/03-organization_members_rls.test.sql",
+    "predicate": "test cases",
+    "value": 8,
+    "unit": "count",
+    "polarity": 1
+   },
+   "premises": [
+    {
+     "claim_id": "p1",
+     "document_id": "file_01",
+     "quote": "File: frontend/packages/db/supabase/tests/database/03-organization_members_rls.test.sql (status: added)\nUnified diff from base to head ('-' = base only, '+' = head only, ' ' = unchanged context):\n@@ -0,0 +1,288 @@\n+-- Test file for is_current_user_org_member function and RLS policies\n+BEGIN;\n+\n+-- Load the pgtap extension\n+SELECT plan(8);\n+\n+-- Set role to postgres for preparation\n+SET ROLE postgres;\n+\n+-- Create test users\n+SELECT tests.create_supabase_user('org_owner@example.com', 'org_owner');\n+SELECT tests.create_supabase_user('non_member@example.com', 'non_member');\n+SELECT tests.create_supabase_user('other_user@example.com', 'other_user');\n+SELECT tests.create_supabase_user('new_member@example.com', 'new_member');\n+SELECT tests.create_supabase_user('temp_user@example.com', 'temp_user');\n+\n+-- Get user IDs and setup test data\n+DO $$\n+DECLARE\n+    v_owner_id uuid;\n+    v_other_user_id uuid;\n+BEGIN\n+    -- Get user IDs\n+    SELECT tests.get_supabase_uid('org_owner@example.com') INTO v_owner_id;\n+    SELECT tests.get_supabase_uid('other_user@example.com') INTO v_other_user_id;\n+\n+    -- Create test organization\n+    INSERT INTO organizations (id, name)\n+    VALUES ('33333333-3333-3333-3333-333333333333', 'Test Org 1')\n+    ON CONFLICT DO NOTHING;\n+\n+    -- Add org_owner to organization\n+    INSERT INTO organization_members (id, user_id, organization_id)\n+    VALUES (\n+        'dddddddd-dddd-dddd-dddd-dddddddddddd',\n+        v_owner_id,\n+        '33333333-3333-3333-3333-333333333333'\n+    )\n+    ON CONFLICT DO NOTHING;\n+\n+    -- Add other_user to organization for delete test\n+    INSERT INTO organization_members (id, user_id, organization_id)\n+    VALUES (\n+        'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',\n+        v_other_user_id,\n+        '33333333-3333-3333-3333-333333333333'\n+    )\n+    ON CONFLICT DO NOTHING;\n+END $$;\n+\n+-- Test 1: is_current_user_org_member function returns true for an org member\n+DO $$\n+DECLARE\n+    v_owner_id uuid;\n+BEGIN\n+    -- Get user ID\n+    SELECT tests.get_supabase_uid('org_owner@example.com') INTO v_owner_id;\n+\n+    -- Set auth context for this test\n+    EXECUTE format('SET LOCAL ROLE authenticated; SET LOCAL \"request.jwt.claims\" = ''{\"sub\": \"%s\"}''', v_owner_id);\n+END $$;\n+\n+SELECT ok(\n+    is_current_user_org_member('33333333-3333-3333-3333-333333333333'),\n+    'is_current_user_org_member returns true for an org member'\n+);\n+\n+-- Reset authentication context\n+RESET ROLE;\n+\n+-- Test 2: is_current_user_org_member function returns false for a non-member\n+DO $$\n+DECLARE\n+    v_non_member_id uuid;\n+BEGIN\n+    -- Get user ID\n+    SELECT tests.get_supabase_uid('non_member@example.com') INTO v_non_member_id;\n+\n+    -- Set auth context for this test\n+    EXECUTE format('SET LOCAL ROLE authenticated; SET LOCAL \"request.jwt.claims\" = ''{\"sub\": \"%s\"}''', v_non_member_id);\n+END $$;\n+\n+SELECT ok(\n+    NOT is_current_user_org_member('33333333-3333-3333-3333-333333333333'),\n+    'is_current_user_org_member returns false for a non-member'\n+);\n+\n+-- Reset authentication context\n+RESET ROLE;\n+\n+-- Test 3: RLS - Org member can select other members in their org\n+DO $$\n+DECLARE\n+    v_owner_id uuid;\n+BEGIN\n+    -- Get user ID\n+    SELECT tests.get_supabase_uid('org_owner@example.com') INTO v_owner_id;\n+\n+    -- Set auth context for this test\n+    EXECUTE format('SET LOCAL ROLE authenticated; SET LOCAL \"request.jwt.claims\" = ''{\"sub\": \"%s\"}''', v_owner_id);\n+END $$;\n+\n+SELECT ok(\n+    EXISTS(\n+        SELECT 1 FROM organization_members\n+        WHERE organization_id = '33333333-3333-3333-3333-333333333333'\n+    ),\n+    'Org member can select other members in their org'\n+);\n+\n+-- Reset authentication context\n+RESET ROLE;\n+\n+-- Test 4: RLS - Non-member cannot select org members\n+DO $$\n+DECLARE\n+    v_non_member_id uuid;\n+BEGIN\n+    -- Get user ID\n+    SELECT tests.get_supabase_uid('non_member@example.com') INTO v_non_member_id;\n+\n+    -- Set auth context for this test\n+    EXECUTE format('SET LOCAL ROLE authenticated; SET LOCAL \"request.jwt.claims\" = ''{\"sub\": \"%s\"}''', v_non_member_id);\n+END $$;\n+\n+SELECT ok(\n+    NOT EXISTS(\n+        SELECT 1 FROM organization_members\n+        WHERE organization_id = '33333333-3333-3333-3333-333333333333'\n+    ),\n+    'Non-member cannot select org members'\n+);\n+\n+-- Reset authentication context\n+RESET ROLE;\n+\n+-- Test 5: RLS - Non-member can add themselves as a new member\n+-- TODO: Security concern - This RLS policy allows any authenticated user to add themselves to any organization without invitation.\n+-- This could pose a security risk in a production environment. Consider updating the RLS policy to only allow:\n+-- 1. Users who have received an invitation via the invitation system\n+-- 2. Or users explicitly approved by existing organization members\n+-- The current test confirms the existing behavior but the policy itself should be reviewed.\n+DO $$\n+DECLARE\n+    v_non_member_id uuid;\n+BEGIN\n+    -- Get non-member ID\n+    SELECT tests.get_supabase_uid('non_member@example.com') INTO v_non_member_id;\n+\n+    -- Set auth context for this test\n+    EXECUTE format('SET LOCAL ROLE authenticated; SET LOCAL \"request.jwt.claims\" = ''{\"sub\": \"%s\"}''', v_non_member_id);\n+\n+    -- Try to add non-member to the organization\n+    INSERT INTO organization_members (user_id, organization_id)\n+    VALUES (v_non_member_id, '33333333-3333-3333-3333-333333333333');\n+END $$;\n+\n+-- Reset authentication context\n+RESET ROLE;\n+\n+-- Check the result\n+SELECT ok(\n+    EXISTS(\n+        SELECT 1 FROM organization_members\n+        WHERE user_id = (SELECT tests.get_supabase_uid('non_member@example.com'))\n+        AND organization_id = '33333333-3333-3333-3333-333333333333'\n+    ),\n+    'Non-member can add themselves as a new member'\n+);\n+\n+-- Test 6: RLS - Org member can add another user to their org\n+DO $$\n+DECLARE\n+    v_owner_id uuid;\n+    v_new_member_id uuid;\n+BEGIN\n+    -- Get user IDs\n+    SELECT tests.get_supabase_uid('org_owner@example.com') INTO v_owner_id;\n+    SELECT tests.get_supabase_uid('new_member@example.com') INTO v_new_member_id;\n+\n+    -- Set auth context for this test\n+    EXECUTE format('SET LOCAL ROLE authenticated; SET LOCAL \"request.jwt.claims\" = ''{\"sub\": \"%s\"}''', v_owner_id);\n+\n+    -- Try to add new_member to the organization\n+    INSERT INTO organization_members (user_id, organization_id)\n+    VALUES (v_new_member_id, '33333333-3333-3333-3333-333333333333');\n+END $$;\n+\n+-- Reset authentication context\n+RESET ROLE;\n+\n+-- Check the result\n+SELECT ok(\n+    EXISTS(\n+        SELECT 1 FROM organization_members\n+        WHERE user_id = (SELECT tests.get_supabase_uid('new_member@example.com'))\n+        AND organization_id = '33333333-3333-3333-3333-333333333333'\n+    ),\n+    'Org member can add another user to their org'\n+);\n+\n+-- Test 7: RLS - Non-member cannot add others to an org they do not belong to\n+DO $$\n+DECLARE\n+    v_non_member_id uuid;\n+    v_temp_user_id uuid;\n+BEGIN\n+    -- Get user IDs\n+    SELECT tests.get_supabase_uid('non_member@example.com') INTO v_non_member_id;\n+    SELECT tests.get_supabase_uid('temp_user@example.com') INTO v_temp_user_id;\n+\n+    -- First ensure non_member is not in the organization (added in test 5)\n+    DELETE FROM organization_members\n+    WHERE user_id = v_non_member_id\n+    AND organization_id = '33333333-3333-3333-3333-333333333333';\n+\n+    -- Set auth context for this test\n+    EXECUTE format('SET LOCAL ROLE authenticated; SET LOCAL \"request.jwt.claims\" = ''{\"sub\": \"%s\"}''', v_non_member_id);\n+\n+    -- Try to add temp_user to the organization (should fail)\n+    BEGIN\n+        INSERT INTO organization_members (user_id, organization_id)\n+        VALUES (v_temp_user_id, '33333333-3333-3333-3333-333333333333');\n+    EXCEPTION\n+        WHEN OTHERS THEN\n+            -- Expected to fail\n+            NULL;\n+    END;\n+END $$;\n+\n+-- Reset authentication context\n+RESET ROLE;\n+\n+-- Check the result\n+SELECT ok(\n+    NOT EXISTS(\n+        SELECT 1 FROM organization_members\n+        WHERE user_id = (SELECT tests.get_supabase_uid('temp_user@example.com'))\n+        AND organization_id = '33333333-3333-3333-3333-333333333333'\n+    ),\n+    'Non-member cannot add others to an org they do not belong to'\n+);\n+\n+-- Test 8: RLS - Org member can remove another member from their org\n+DO $$\n+DECLARE\n+    v_owner_id uuid;\n+    v_other_user_id uuid;\n+BEGIN\n+    -- Get user IDs\n+    SELECT tests.get_supabase_uid('org_owner@example.com') INTO v_owner_id;\n+    SELECT tests.get_supabase_uid('other_user@example.com') INTO v_other_user_id;\n+\n+    -- Ensure other_user is in the organization\n+    INSERT INTO organization_members (id, user_id, organization_id)\n+    VALUES (\n+        'ffffffff-ffff-ffff-ffff-ffffffffffff',\n+        v_other_user_id,\n+        '33333333-3333-3333-3333-333333333333'\n+    )\n+    ON CONFLICT DO NOTHING;\n+\n+    -- Set auth context for this test\n+    EXECUTE format('SET LOCAL ROLE authenticated; SET LOCAL \"request.jwt.claims\" = ''{\"sub\": \"%s\"}''', v_owner_id);\n+\n+    -- Delete the other user from the organization\n+    DELETE FROM organization_members\n+    WHERE user_id = v_other_user_id\n+    AND organization_id = '33333333-3333-3333-3333-333333333333';\n+END $$;\n+\n+-- Reset authentication context\n+RESET ROLE;\n+\n+-- Check the result\n+SELECT ok(\n+    NOT EXISTS(\n+        SELECT 1 FROM organization_members\n+        WHERE user_id = (SELECT tests.get_supabase_uid('other_user@example.com'))\n+        AND organization_id = '33333333-3333-3333-3333-333333333333'\n+    ),\n+    'Org member can remove another member from their org'\n+);\n+\n+-- Finish the tests and print a diagnostic count\n+SELECT * FROM finish();\n+\n+ROLLBACK;\n\\ No newline at end of file",
+     "entity": "frontend/packages/db/supabase/tests/database/03-organization_members_rls.test.sql",
+     "event": "SELECT ok",
+     "predicate": "added test file",
+     "value": null,
+     "unit": null,
+     "direction": "neutral",
+     "polarity": 1
+    }
+   ],
+   "steps": [
+    {
+     "step_id": "s1",
+     "operation": "count_lines",
+     "premises": [
+      "p1"
+     ],
+     "conclusion_id": "c1",
+     "parameters": {
+      "line_prefix": "+",
+      "contains": "SELECT ok("
+     }
+    }
+   ],
+   "derived_conclusion_id": "c1",
+   "missing_premises": [],
+   "assumptions": [
+    "Cada caso de test pgTAP es una aserción `SELECT ok(` añadida en el archivo nuevo."
+   ],
+   "suggested_rules": []
+  }
+ },
+ {
+  "case_id": "C13",
+  "claim": "Implemented `porto create-merchant` command for creating merchant accounts with secp256k1 keys",
+  "verdict": "refuted",
+  "outcome": "verified_refutation",
+  "routing": "ESCALATE",
+  "reasons": [
+   "RELIABILITY_BELOW_PASS_THRESHOLD:C<B",
+   "CLAIM_CONTRADICTS_COMPUTED_CONCLUSION"
+  ],
+  "computed": false,
+  "reliability": {
+   "grade": "C",
+   "grade_label": "model_composed_operation_executed_by_deltoryx",
+   "guarantee": "Composición propuesta por Nemotron, interpretada y re-ejecutada por Deltoryx.",
+   "weakest_links": [
+    {
+     "kind": "step",
+     "id": "s2",
+     "operation": "registered",
+     "grade": "C"
+    }
+   ],
+   "elements": [
+    {
+     "kind": "step",
+     "id": "s2",
+     "operation": "registered",
+     "grade": "C"
+    },
+    {
+     "kind": "step",
+     "id": "s1",
+     "operation": "count_lines",
+     "grade": "A"
+    },
+    {
+     "kind": "premise",
+     "id": "p1",
+     "fidelity": "literal_quote",
+     "grade": "A",
+     "value": null,
+     "document_id": "file_06"
+    }
+   ],
+   "proposed_operations": [
+    {
+     "name": "registered",
+     "description": "Un comando está registrado si su nombre aparece al menos una vez",
+     "inputs": [
+      "n"
+     ],
+     "expression": {
+      "op": "gt",
+      "args": [
+       {
+        "input": "n"
+       },
+       {
+        "const": 0
+       }
+      ]
+     },
+     "output_type": "boolean",
+     "output_unit": null,
+     "grade": "C",
+     "grade_label": "model_composed_operation_executed_by_deltoryx",
+     "definition_digest": "517b061bca0d3caabc32b56c080e721d06459a835ecbf11c33e8fd7044011fb9"
+    }
+   ],
+   "policy": {
+    "pass_min_grade": "B"
+   },
+   "pass_allowed_by_grade": false,
+   "binding": {
+    "revision_binding": "document_revision_verified",
+    "premise_revisions": [
+     "file_06@c94103ad2873"
+    ],
+    "path": "computed",
+    "attribute_binding": "operation:registered",
+    "subject_binding": "lexical"
+   }
+  },
+  "defects": [],
+  "steps": [
+   {
+    "operation": "count_lines",
+    "recomputed_value": 0,
+    "grade": "A"
+   },
+   {
+    "operation": "registered",
+    "recomputed_value": false,
+    "grade": "C"
+   }
+  ],
+  "plan": {
+   "claim_target": {
+    "subject": "porto",
+    "predicate": "registers create-merchant command",
+    "value": true,
+    "unit": null,
+    "polarity": 1
+   },
+   "premises": [
+    {
+     "claim_id": "p1",
+     "document_id": "file_06",
+     "quote": "File: src/cli/index.ts (status: added)\nUnified diff from base to head ('-' = base only, '+' = head only, ' ' = unchanged context):\n@@ -0,0 +1,26 @@\n+#!/usr/bin/env node\n+import { cac } from 'cac'\n+\n+import pkgJson from '../package.json' with { type: 'json' }\n+import * as Commands from './internal/commands.js'\n+import * as Utils from './internal/utils.js'\n+\n+const cli = cac('porto')\n+\n+cli.command('[root]', 'Display usage').action(cli.outputHelp)\n+\n+cli\n+  .command('create-account [alias: ca]', 'Create a Porto Account')\n+  .alias('ca')\n+  .option(\n+    '-c, --chain <chain>',\n+    `Chain name (available: ${Utils.getChainNames().join(', ')})`,\n+    { default: 'base-sepolia' },\n+  )\n+  .option('-r, --rpc <rpc_url>', 'RPC server URL')\n+  .action(Commands.createAccount)\n+\n+cli.help()\n+cli.version(pkgJson.version)\n+\n+cli.parse()",
+     "entity": "src/cli/index.ts",
+     "event": "command",
+     "predicate": "CLI entry file",
+     "value": null,
+     "unit": null,
+     "direction": "neutral",
+     "polarity": 1
+    }
+   ],
+   "steps": [
+    {
+     "step_id": "s1",
+     "operation": "count_lines",
+     "premises": [
+      "p1"
+     ],
+     "conclusion_id": "c1",
+     "parameters": {
+      "line_prefix": "+",
+      "contains": "create-merchant"
+     }
+    },
+    {
+     "step_id": "s2",
+     "operation": "registered",
+     "premises": [
+      "c1"
+     ],
+     "conclusion_id": "c2",
+     "parameters": {}
+    }
+   ],
+   "proposed_operations": [
+    {
+     "name": "registered",
+     "description": "Un comando está registrado si su nombre aparece al menos una vez",
+     "inputs": [
+      "n"
+     ],
+     "expression": {
+      "op": "gt",
+      "args": [
+       {
+        "input": "n"
+       },
+       {
+        "const": 0
+       }
+      ]
+     },
+     "output_type": "boolean",
+     "output_unit": null
+    }
+   ],
+   "derived_conclusion_id": "c2",
+   "missing_premises": [],
+   "assumptions": [
+    "src/cli/index.ts es un archivo nuevo (status added): su contenido completo está en el diff.",
+    "Los comandos del CLI se registran con cli.command(...) en ese archivo de entrada."
+   ],
+   "suggested_rules": []
+  }
+ }
+]

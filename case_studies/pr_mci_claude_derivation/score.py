@@ -91,10 +91,29 @@ out["old_evaluators"]["gate_v4_vocab2_CONSISTENT_on_non_supported_reference"] = 
 out["old_evaluators"]["rules_v2_P_placeholder_fired"] = f"{sum('P_placeholder' in rows[c]['rules_v2_postreview_code_config']['signals'] for c in E)}/20"
 out["source"] = {"live": _args.live, "review": _args.review, "prompt_version": L.get("prompt_version"),
                  "claim_layer_commit": L.get("claim_layer_commit"), "platform_commit": L.get("platform_commit")}
+valid_inf = [c for c in infer if R[c]["category"] == "correct_verified" and rows[c]["verdict"] in ("derived", "refuted")]
+tok_total = sum(t["total_tokens"] for t in T)
+plan_total = sum(t["planning_latency_ms"] for t in T)
+e2e_total = sum(rows[c]["client_wall_ms"] for c in E)
+out["cost"] = {
+    "valid_inferences": f"{len(valid_inf)}/{len(infer)}",
+    "tokens_total": tok_total, "planning_ms_total": round(plan_total, 1), "end_to_end_ms_total": round(e2e_total, 1),
+    "tokens_per_valid_inference": (round(tok_total / len(valid_inf), 1) if valid_inf else "indefinido (0 inferencias válidas)"),
+    "end_to_end_ms_per_valid_inference": (round(e2e_total / len(valid_inf), 1) if valid_inf else "indefinido (0 inferencias válidas)"),
+}
+attempts = [a for c in E for a in rows[c]["response"]["telemetry"]["attempt_traces"]]
+out["per_attempt"] = {
+    "attempts_total": len(attempts),
+    "tokens_per_attempt": mstat([(a.get("usage") or {}).get("total_tokens") for a in attempts]),
+    "planner_latency_ms_per_attempt": mstat([a.get("latency_ms") for a in attempts]),
+    "by_case": {c: [{"attempt": a.get("attempt"), "outcome": a.get("outcome_category"), "latency_ms": a.get("latency_ms"),
+                     "verifier_latency_ms": a.get("verifier_latency_ms"), "tokens": (a.get("usage") or {}).get("total_tokens")}
+                    for a in rows[c]["response"]["telemetry"]["attempt_traces"]] for c in sorted(E)},
+}
 grades = collections.Counter((rows[c]["response"].get("reliability") or {}).get("grade") for c in E)
 out["metrics"]["reliability_grades_final"] = {str(k): v for k, v in grades.items()}
 out["metrics"]["cases_with_planner_proposed_operations"] = sum(
     bool((rows[c]["response"]["provenance"].get("raw_proposal") or {}).get("proposed_operations")) for c in E)
 out["metrics"]["pass_routing_count"] = sum(rows[c]["routing"] == "PASS" for c in E)
 (HERE / _args.out).write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-print(json.dumps({k: out[k] for k in ("metrics", "telemetry", "old_evaluators")}, indent=1, ensure_ascii=False))
+print(json.dumps({k: out[k] for k in ("metrics", "telemetry", "cost", "old_evaluators")}, indent=1, ensure_ascii=False))

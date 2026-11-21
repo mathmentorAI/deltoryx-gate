@@ -198,3 +198,53 @@ La matriz de confusión de veredictos es idéntica en ambas mediciones (derived:
 ## Respuesta actualizada a la pregunta de decisión
 
 Deltoryx sigue pudiendo defender las mismas dos abstenciones (C16, C18) y **0 aceptaciones indebidas**. Ahora además ninguna conclusión que dependa de una interpretación de Nemotron llega a `PASS`. Lo que **no** se puede defender todavía es que un grado A signifique «la conclusión responde a la afirmación»: C15 y C14 muestran dos vías (atributo distinto y evidencia circular del autor) por las que una cadena con todos sus eslabones literales sigue siendo inválida.
+
+---
+
+# Tercera medición, M3 (etapa 1: vinculación, evidencia que reformula la afirmación, recuentos reproducibles)
+
+**Configuración.**
+- Revisión ejecutada: plataforma `48d936c` y claim-layer `94e3d4f`, sin cambios locales.
+- Prompt `v4-derivation-planner-3`; catálogo con `count_lines`.
+- PR: 21-nov 20:41 UTC (`results/live_results_stage1.json`). Temporal: 20:43 UTC (`benchmarks/v4_derivation_planner_live_results_stage1.json`).
+- Mismos manifiestos congelados. Revisión manual: `results/justification_review_stage1.json`. Métricas: `results/scored_stage1.json`.
+
+| Métrica (denominador) | M1 | M2 | **M3** |
+|---|---|---|---|
+| Inferencias resueltas con derivación válida (12) | 0 | 0 | **0** |
+| Falsas aceptaciones (11) | 0 | 0 | **0** |
+| Refutaciones incorrectas (16) | 1 | 1 (grado A) | **0** |
+| Correctamente verificados (20) | 2 | 2 | 2 |
+| Abstenciones justificadas / abstenciones totales | 2/18 | 2/18 | 2/18 |
+| Abstenciones del verificador (20) | 10 | 16 | 17 |
+| Errores operativos (20) | 6 | 0 | 0 |
+| Rutas PASS (20) | 1 | 0 | 0 |
+| Intentos malformados | 15/36 | 3/35 | 6/37 |
+| Tokens totales · por inferencia válida | 343 771 · indefinido | 378 908 · indefinido | 404 179 · **indefinido (0 inferencias válidas)** |
+| Extremo a extremo total · por inferencia válida | 602,8 s · indefinido | 811,0 s · indefinido | 913,3 s · **indefinido** |
+| Planificación por intento, mediana [rango] | — | — | ver `scored_stage1.json` → `per_attempt` |
+| Benchmark temporal | 14/14 (v2) | 13/14 | **14/14** (1 reintento) |
+
+Los tiempos y tokens de cada intento (primer intento y reintento) están en `scored_*.json → per_attempt.by_case`, para que el coste incurrido sea visible aunque el caso no se resuelva.
+
+## Cambios por caso M2 → M3
+
+| Caso | M2 | M3 | Qué cambió |
+|---|---|---|---|
+| C15 | refuted / RETRY, grado A (incorrecta) | unresolved / RETRY, `conclusion_binding_defect` | Corregido: el atributo de la premisa («file status») no es el afirmado. |
+| C14 | unresolved (agregación tras citar `PR_TEMPLATE.md`) | unresolved, citas no literales | Nemotron propone `add(77, 132)` sobre las cabeceras de hunk; las citas multilínea no son literales. Riesgo detectado: 209 ≠ 207 habría refutado una afirmación cierta (convenio `wc -l`). |
+| C11 | unresolved | unresolved | Primer uso de `count_lines`, sobre una premisa con valor lista y cita no literal. |
+| C05 | unresolved (bloqueado por `suggested_rules`) | unresolved, defecto de premisa | Ya no lo bloquea la regla sugerida sin usar; primera operación propuesta con expresión ejecutable, sobre valores interpretados («H2»). |
+| C17 | unresolved, defecto de premisa | unresolved, objetivo malformado | Variación del planificador. |
+| C03 | derived / ESCALATE (E) | igual | Sin PASS. |
+| C16, C18 | insufficient / ESCALATE | igual | Abstenciones correctas. |
+| Resto (C01, C02, C04, C06–C10, C12, C13, C19, C20) | unresolved | unresolved | Defectos de anclaje: citas multilínea, correspondencia entre cláusulas, valores interpretados. |
+
+**Benchmark temporal.** NT3 vuelve a «evidencia insuficiente» porque las reglas sugeridas sin usar ya no bloquean: 14/14 y 0 falsas aceptaciones.
+
+**Diagnóstico de por qué Nemotron no produce derivaciones válidas.**
+1. **Copia bloques de código o diff reformateados** (indentación, prefijos) y la cita deja de ser literal (C01, C11, C13, C14).
+2. **Asigna valores interpretados** («H2», `true`, listas) en lugar de valores que aparecen en la cita.
+3. **Enlaza la entidad con el contenido** cuando la ruta del archivo está en la cabecera y el valor en otra línea, y la comprobación de cláusula lo rechaza (C06–C08, C19).
+
+El análisis manual de la etapa 2 (`stage2_manual/`) muestra que, con citas correctas, el contrato actual ya expresa y verifica derivaciones de este tipo.

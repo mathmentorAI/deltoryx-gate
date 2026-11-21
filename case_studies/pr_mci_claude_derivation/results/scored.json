@@ -634,5 +634,322 @@
   "prompt_version": null,
   "claim_layer_commit": "b7295f7e5b3cf34d9f132e8e4dd152a3320ac0a9",
   "platform_commit": "4fd6ed9b6e592a3de1121585b9f6bebb0c959609"
+ },
+ "cost": {
+  "valid_inferences": "0/12",
+  "tokens_total": 343771,
+  "planning_ms_total": 602292.6,
+  "end_to_end_ms_total": 602771.6,
+  "tokens_per_valid_inference": "indefinido (0 inferencias válidas)",
+  "end_to_end_ms_per_valid_inference": "indefinido (0 inferencias válidas)"
+ },
+ "per_attempt": {
+  "attempts_total": 36,
+  "tokens_per_attempt": {
+   "n": 36,
+   "median": 8073.5,
+   "min": 3214,
+   "max": 24332
+  },
+  "planner_latency_ms_per_attempt": {
+   "n": 36,
+   "median": 16419.1,
+   "min": 4600.9,
+   "max": 35360.8
+  },
+  "by_case": {
+   "C01": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 9129.499,
+     "verifier_latency_ms": 19.668,
+     "tokens": 3709
+    },
+    {
+     "attempt": 2,
+     "outcome": "unsupported_operation_or_rule",
+     "latency_ms": 14508.502,
+     "verifier_latency_ms": 1.508,
+     "tokens": 3877
+    }
+   ],
+   "C02": [
+    {
+     "attempt": 1,
+     "outcome": "malformed_proposal",
+     "latency_ms": 27590.669,
+     "verifier_latency_ms": null,
+     "tokens": 15264
+    },
+    {
+     "attempt": 2,
+     "outcome": "malformed_proposal",
+     "latency_ms": 22634.48,
+     "verifier_latency_ms": null,
+     "tokens": 15295
+    }
+   ],
+   "C03": [
+    {
+     "attempt": 1,
+     "outcome": "verified_derivation",
+     "latency_ms": 9792.192,
+     "verifier_latency_ms": 9.012,
+     "tokens": 4222
+    }
+   ],
+   "C04": [
+    {
+     "attempt": 1,
+     "outcome": "malformed_proposal",
+     "latency_ms": 19653.002,
+     "verifier_latency_ms": null,
+     "tokens": 7501
+    },
+    {
+     "attempt": 2,
+     "outcome": "malformed_proposal",
+     "latency_ms": 35249.399,
+     "verifier_latency_ms": null,
+     "tokens": 7532
+    }
+   ],
+   "C05": [
+    {
+     "attempt": 1,
+     "outcome": "malformed_proposal",
+     "latency_ms": 26395.56,
+     "verifier_latency_ms": null,
+     "tokens": 7522
+    },
+    {
+     "attempt": 2,
+     "outcome": "unsupported_operation_or_rule",
+     "latency_ms": 17149.698,
+     "verifier_latency_ms": 21.265,
+     "tokens": 7374
+    }
+   ],
+   "C06": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 7856.137,
+     "verifier_latency_ms": 2.358,
+     "tokens": 4065
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 10568.062,
+     "verifier_latency_ms": 6.897,
+     "tokens": 4493
+    }
+   ],
+   "C07": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 20152.741,
+     "verifier_latency_ms": 33.671,
+     "tokens": 8469
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 6024.495,
+     "verifier_latency_ms": 9.567,
+     "tokens": 8017
+    }
+   ],
+   "C08": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 8161.315,
+     "verifier_latency_ms": 3.543,
+     "tokens": 4116
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 8266.704,
+     "verifier_latency_ms": 3.096,
+     "tokens": 4495
+    }
+   ],
+   "C09": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 11214.108,
+     "verifier_latency_ms": 23.824,
+     "tokens": 10105
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 18166.538,
+     "verifier_latency_ms": 29.179,
+     "tokens": 10715
+    }
+   ],
+   "C10": [
+    {
+     "attempt": 1,
+     "outcome": "malformed_proposal",
+     "latency_ms": 31659.941,
+     "verifier_latency_ms": null,
+     "tokens": 8960
+    },
+    {
+     "attempt": 2,
+     "outcome": "malformed_proposal",
+     "latency_ms": 19131.929,
+     "verifier_latency_ms": null,
+     "tokens": 8991
+    }
+   ],
+   "C11": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 25203.605,
+     "verifier_latency_ms": 31.699,
+     "tokens": 22228
+    },
+    {
+     "attempt": 2,
+     "outcome": "malformed_proposal",
+     "latency_ms": 29571.902,
+     "verifier_latency_ms": null,
+     "tokens": 24332
+    }
+   ],
+   "C12": [
+    {
+     "attempt": 1,
+     "outcome": "malformed_proposal",
+     "latency_ms": 9263.232,
+     "verifier_latency_ms": 2.131,
+     "tokens": 8130
+    },
+    {
+     "attempt": 2,
+     "outcome": "malformed_proposal",
+     "latency_ms": 10953.929,
+     "verifier_latency_ms": 0.901,
+     "tokens": 8377
+    }
+   ],
+   "C13": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 7089.782,
+     "verifier_latency_ms": 18.096,
+     "tokens": 20543
+    },
+    {
+     "attempt": 2,
+     "outcome": "unsupported_operation_or_rule",
+     "latency_ms": 18296.686,
+     "verifier_latency_ms": 16.735,
+     "tokens": 21119
+    }
+   ],
+   "C14": [
+    {
+     "attempt": 1,
+     "outcome": "malformed_proposal",
+     "latency_ms": 28366.065,
+     "verifier_latency_ms": null,
+     "tokens": 18233
+    },
+    {
+     "attempt": 2,
+     "outcome": "malformed_proposal",
+     "latency_ms": 4949.417,
+     "verifier_latency_ms": 3.798,
+     "tokens": 16537
+    }
+   ],
+   "C15": [
+    {
+     "attempt": 1,
+     "outcome": "verified_refutation",
+     "latency_ms": 8263.012,
+     "verifier_latency_ms": 8.391,
+     "tokens": 4304
+    }
+   ],
+   "C16": [
+    {
+     "attempt": 1,
+     "outcome": "corpus_insufficient_evidence",
+     "latency_ms": 6128.025,
+     "verifier_latency_ms": 0.608,
+     "tokens": 3214
+    }
+   ],
+   "C17": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 11035.668,
+     "verifier_latency_ms": 5.939,
+     "tokens": 4921
+    },
+    {
+     "attempt": 2,
+     "outcome": "malformed_proposal",
+     "latency_ms": 26547.789,
+     "verifier_latency_ms": null,
+     "tokens": 6852
+    }
+   ],
+   "C18": [
+    {
+     "attempt": 1,
+     "outcome": "corpus_insufficient_evidence",
+     "latency_ms": 4600.853,
+     "verifier_latency_ms": 2.084,
+     "tokens": 9367
+    }
+   ],
+   "C19": [
+    {
+     "attempt": 1,
+     "outcome": "malformed_proposal",
+     "latency_ms": 35360.818,
+     "verifier_latency_ms": null,
+     "tokens": 9142
+    },
+    {
+     "attempt": 2,
+     "outcome": "malformed_proposal",
+     "latency_ms": 20518.63,
+     "verifier_latency_ms": null,
+     "tokens": 9173
+    }
+   ],
+   "C20": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 16516.238,
+     "verifier_latency_ms": 11.96,
+     "tokens": 5922
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 16321.966,
+     "verifier_latency_ms": 9.177,
+     "tokens": 6655
+    }
+   ]
+  }
  }
 }

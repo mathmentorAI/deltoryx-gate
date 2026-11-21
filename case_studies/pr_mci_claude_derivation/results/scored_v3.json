@@ -636,5 +636,315 @@
   "prompt_version": "v4-derivation-planner-3",
   "claim_layer_commit": "fba49d2c2304f39a2d2338c65165b35a72e1dec2",
   "platform_commit": "b8108d5789845f762598720613c673c52c6d127b"
+ },
+ "cost": {
+  "valid_inferences": "0/12",
+  "tokens_total": 378908,
+  "planning_ms_total": 810400.4,
+  "end_to_end_ms_total": 810996.5,
+  "tokens_per_valid_inference": "indefinido (0 inferencias válidas)",
+  "end_to_end_ms_per_valid_inference": "indefinido (0 inferencias válidas)"
+ },
+ "per_attempt": {
+  "attempts_total": 35,
+  "tokens_per_attempt": {
+   "n": 35,
+   "median": 8836,
+   "min": 3706,
+   "max": 24428
+  },
+  "planner_latency_ms_per_attempt": {
+   "n": 35,
+   "median": 14384.4,
+   "min": 2830.4,
+   "max": 104810.4
+  },
+  "by_case": {
+   "C01": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 6238.006,
+     "verifier_latency_ms": 19.046,
+     "tokens": 4184
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 3522.985,
+     "verifier_latency_ms": 1.815,
+     "tokens": 4323
+    }
+   ],
+   "C02": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 35771.959,
+     "verifier_latency_ms": 53.536,
+     "tokens": 16727
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 19881.01,
+     "verifier_latency_ms": 27.69,
+     "tokens": 16894
+    }
+   ],
+   "C03": [
+    {
+     "attempt": 1,
+     "outcome": "verified_derivation",
+     "latency_ms": 8134.589,
+     "verifier_latency_ms": 4.816,
+     "tokens": 4714
+    }
+   ],
+   "C04": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 104810.437,
+     "verifier_latency_ms": 35.995,
+     "tokens": 13603
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 65087.282,
+     "verifier_latency_ms": 36.316,
+     "tokens": 19285
+    }
+   ],
+   "C05": [
+    {
+     "attempt": 1,
+     "outcome": "unsupported_operation_or_rule",
+     "latency_ms": 26040.793,
+     "verifier_latency_ms": 20.788,
+     "tokens": 8294
+    }
+   ],
+   "C06": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 9466.382,
+     "verifier_latency_ms": 2.898,
+     "tokens": 4534
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 12704.094,
+     "verifier_latency_ms": 3.143,
+     "tokens": 4712
+    }
+   ],
+   "C07": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 9996.319,
+     "verifier_latency_ms": 10.456,
+     "tokens": 7591
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 9288.985,
+     "verifier_latency_ms": 10.169,
+     "tokens": 7685
+    }
+   ],
+   "C08": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 9517.247,
+     "verifier_latency_ms": 3.438,
+     "tokens": 4596
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 15130.768,
+     "verifier_latency_ms": 5.107,
+     "tokens": 5251
+    }
+   ],
+   "C09": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 13389.037,
+     "verifier_latency_ms": 20.425,
+     "tokens": 10591
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 12943.379,
+     "verifier_latency_ms": 18.921,
+     "tokens": 11172
+    }
+   ],
+   "C10": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 94622.977,
+     "verifier_latency_ms": 29.488,
+     "tokens": 11444
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 24621.159,
+     "verifier_latency_ms": 7.166,
+     "tokens": 14750
+    }
+   ],
+   "C11": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 27007.334,
+     "verifier_latency_ms": 20.702,
+     "tokens": 22745
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 19433.563,
+     "verifier_latency_ms": 37.697,
+     "tokens": 24428
+    }
+   ],
+   "C12": [
+    {
+     "attempt": 1,
+     "outcome": "malformed_proposal",
+     "latency_ms": 12465.888,
+     "verifier_latency_ms": 2.068,
+     "tokens": 8584
+    },
+    {
+     "attempt": 2,
+     "outcome": "malformed_proposal",
+     "latency_ms": 36401.858,
+     "verifier_latency_ms": 1.513,
+     "tokens": 8836
+    }
+   ],
+   "C13": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 14353.007,
+     "verifier_latency_ms": 16.24,
+     "tokens": 21012
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 14384.385,
+     "verifier_latency_ms": 10.088,
+     "tokens": 21492
+    }
+   ],
+   "C14": [
+    {
+     "attempt": 1,
+     "outcome": "malformed_proposal",
+     "latency_ms": 14093.482,
+     "verifier_latency_ms": 3.524,
+     "tokens": 17581
+    },
+    {
+     "attempt": 2,
+     "outcome": "corpus_insufficient_evidence",
+     "latency_ms": 10438.143,
+     "verifier_latency_ms": 16.522,
+     "tokens": 17107
+    }
+   ],
+   "C15": [
+    {
+     "attempt": 1,
+     "outcome": "verified_refutation",
+     "latency_ms": 10458.015,
+     "verifier_latency_ms": 6.22,
+     "tokens": 4952
+    }
+   ],
+   "C16": [
+    {
+     "attempt": 1,
+     "outcome": "corpus_insufficient_evidence",
+     "latency_ms": 4486.932,
+     "verifier_latency_ms": 0.617,
+     "tokens": 3706
+    }
+   ],
+   "C17": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 35041.546,
+     "verifier_latency_ms": 7.439,
+     "tokens": 6032
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 25079.507,
+     "verifier_latency_ms": 9.137,
+     "tokens": 6592
+    }
+   ],
+   "C18": [
+    {
+     "attempt": 1,
+     "outcome": "corpus_insufficient_evidence",
+     "latency_ms": 2830.43,
+     "verifier_latency_ms": 2.066,
+     "tokens": 9859
+    }
+   ],
+   "C19": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 27224.33,
+     "verifier_latency_ms": 19.288,
+     "tokens": 10079
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 41897.14,
+     "verifier_latency_ms": 18.728,
+     "tokens": 12274
+    }
+   ],
+   "C20": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 15699.588,
+     "verifier_latency_ms": 6.121,
+     "tokens": 6120
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 17937.861,
+     "verifier_latency_ms": 8.692,
+     "tokens": 7159
+    }
+   ]
+  }
  }
 }

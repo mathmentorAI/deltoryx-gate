@@ -21,6 +21,51 @@ La unidad que el modelo construye para cada consulta es una derivación en `Just
 
 La implementación se evaluará también con paráfrasis reservadas y propuestas con el ancla o el signo alterados. Se registrarán afirmaciones correctamente verificadas por minuto, cobertura, aceptaciones erróneas, coste de inferencia y minutos de revisión humana. El tiempo incluirá extracción, construcción del grafo, comprobación y reintentos. Los benchmarks por dominio aportan evidencia de progreso cuando ejercitan este recorrido.
 
+### Evidencia del primer hito (21 de noviembre de 2026): viabilidad de extremo a extremo
+
+**Qué se ha demostrado.** El recorrido completo funciona con un modelo real. El consumidor entrega fuentes y una afirmación, Nemotron propone una derivación, Deltoryx comprueba cada premisa y ejecuta las operaciones, y la respuesta separa el dictamen sobre la afirmación de la decisión operativa. Todos los casos entraron por la misma interfaz, con el mismo prompt (`v4-derivation-planner-2`, digest `ba80052a…`) y el mismo catálogo de operaciones. Ningún caso usó un grafo preparado ni una regla elegida por caso.
+
+**Benchmark en vivo: 14/14.** Modelo `nvidia/nemotron-3-ultra-550b-a55b` (temperatura 0, `max_tokens` 2048, sin razonamiento extendido). Datos completos, con propuesta original, grafo admitido, resultado recalculado y motivos, en `benchmarks/v4_derivation_planner_live_results.json`.
+
+| Caso | Afirmación | Esperado | Observado | Conclusión calculada | Decisión |
+| --- | --- | --- | --- | --- | --- |
+| T1 | La cita fue el miércoles. | derivada | derivada | miércoles | PASS |
+| T2 | La cita fue el jueves. | refutada | refutada | miércoles | RETRY |
+| T3 | La cita fue el miércoles. (sin ancla) | evidencia insuficiente | evidencia insuficiente | — | ESCALATE |
+| T4 | La cita fue el domingo. | derivada | derivada | domingo | PASS |
+| T5 | La cita fue el miércoles. (ancla cumpleaños) | refutada | refutada | domingo | RETRY |
+| NT1 | Margen restante 350 EUR | derivada | derivada | 350 EUR | PASS |
+| NT2 | Margen restante 450 EUR | refutada | refutada | 350 EUR | RETRY |
+| NT3 | Margen restante 350 EUR (falta el gasto) | evidencia insuficiente | evidencia insuficiente | — | ESCALATE |
+| H1 | La reunión tuvo lugar el martes. | derivada | derivada | martes | PASS |
+| H2 | El encuentro ocurrió el lunes. (sin ancla) | evidencia insuficiente | evidencia insuficiente | — | ESCALATE |
+| H3 | El acuerdo se firmó el sábado. (dos anclas) | derivada | derivada | sábado | PASS |
+| H4 | El acuerdo se firmó el lunes. (dos anclas) | refutada | refutada | sábado | RETRY |
+| H5 | La entrega venció el viernes. | refutada | refutada | sábado | RETRY |
+| H6 | Quedan 750 USD en la Fase Beta. | derivada | derivada | 750 USD | PASS |
+
+T1–T5 y NT1–NT3 son los casos de aceptación (8/8, ejecutados el 20 de noviembre). H1–H6 son paráfrasis reservadas (6/6, ejecutadas el 21 de noviembre). Se declararon antes de ejecutarlas, con el prompt ya fijado, siguiendo los ejes de variación descritos en `paraphrase_selection_protocol`. No hubo aceptaciones erróneas, errores del proveedor ni reintentos. Coste medio por afirmación: 1 llamada, unos 3.480 tokens, unos 6,7 s de planificación y unos 10 ms de verificación. Rendimiento en serie: unas 8,9 afirmaciones verificadas por minuto.
+
+**API de la plataforma en vivo: 4/4.** `POST /api/v1/v4/claims/verify` se ejecutó sobre uvicorn real, por HTTP, con Nemotron real, en los commits limpios `fcca663` (plataforma) y `4f52c54` (claim-layer). Script: `scripts/live_claims_api_check.py`. Respuestas: `evidence/v4_claims_api_live_run.json` en el repositorio de la plataforma.
+
+| Caso | Dictamen | Decisión | Justificación devuelta |
+| --- | --- | --- | --- |
+| H3, dos anclas, la referencia es el lanzamiento | derivada (sábado) | PASS | ancla «el lanzamiento oficial ocurrió el lunes» `doc_1[27:66]`; desplazamiento −2 de `doc_1[68:126]`; `weekday_shift = sábado` |
+| H4, la misma fuente, se afirma lunes | refutada (calcula sábado) | RETRY | el mismo cálculo; el diagnóstico señala que «Ayer era miércoles» − 2 daría lunes, pero es un ancla incorrecta |
+| T3, referencia sin ancla | evidencia insuficiente | ESCALATE | falta la premisa `anchor_weekday`; no se calcula nada |
+| H6, resta entre documentos | derivada (750 USD) | PASS | 2.400 USD de `contrato[0:48]`, 1.650 USD de `factura[0:45]`; `sub = 750 USD`, cifra que no aparece en ninguna fuente |
+
+En los cuatro casos `calibrated_correctness_probability` es `null` y `calibration_status` es `uncalibrated`. La garantía que se declara es una deducción exacta bajo premisas explícitas, cuya fidelidad se comprueba contra citas literales. No se trata de una probabilidad.
+
+**Qué no demuestra.** Con 14 casos se comprueba que la arquitectura funciona de extremo a extremo con un modelo real, no que escale ni que generalice. Las paráfrasis reservadas las redactó la misma sesión que fijó el prompt: son reservadas respecto a la ejecución, pero no las eligió alguien independiente. El rendimiento medido es en serie, con un único proveedor, y el coste está dominado por la latencia de planificación.
+
+**Trabajo futuro explícito.**
+1. *Evaluación independiente.* Un conjunto de afirmaciones redactado y etiquetado por terceros que no hayan visto el prompt ni el catálogo, con más dominios y operaciones, y que mida cobertura, aceptaciones erróneas y minutos de revisión humana.
+2. *Prueba bajo carga.* Ejecución concurrente para medir el rendimiento sostenido (afirmaciones verificadas por minuto), la latencia p95/p99, los límites del proveedor, el coste por afirmación y el comportamiento ante fallos y reintentos. Es la prueba de que la verificación puede crecer al ritmo de la generación.
+3. *Calibración.* Calibración empírica sobre la evaluación independiente para poder emitir `calibrated_correctness_probability` donde sea aplicable.
+
+**Perfiles de unidades.** `STANDARD_UNITS` conserva su huella histórica (`8fb557d4…`), de la que dependen los estudios congelados (PR-MCI). Las etiquetas en español viven en el perfil explícito `SPANISH_UNITS` (`edcc833d…`, idéntico a las unidades vigentes durante el benchmark). `verify_claim`, la CLI y la API aceptan `unit_profile` = `auto` | `standard` | `es`, y la elección queda registrada en la telemetría de cada resultado.
+
 **El modelo propone; la política determinista decide.** Es la regla del paper de marzo ("los LLM no son responsables del razonamiento central") con los contratos formales del manuscrito revisado del 19 de octubre. Ningún modelo emite `supported`/`contradicted`: esa decisión la toma código sobre el registro.
 
 Motivo: el diagnóstico del 23 de octubre (`verifier_failure_diagnosis.md`) mostró que en v3 el modelo leía bien la fuente y aun así aprobaba afirmaciones con un campo cambiado, y que el validador aceptaba `supported` siempre que el modelo marcase las casillas como verdaderas. Además, el vocabulario improvisado de los casos hacía imposible una comparación exacta (`percent_per_annum` frente a `percent per annum`).

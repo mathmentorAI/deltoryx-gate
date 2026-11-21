@@ -1,0 +1,626 @@
+{
+ "per_case": [
+  {
+   "case_id": "C01",
+   "pr_id": "2886171819",
+   "head_sha": "7b58015ee861",
+   "claim": "The fix ensures this_order is always at least 1",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "unresolved",
+   "observed_routing": "ESCALATE",
+   "outcome_category": "unsupported_operation_or_rule",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "+ this_order = max(1, min(...)) partido en 3 líneas del diff",
+    "operation": "identity (propuesta); sugerida max_lower_bound",
+    "justification": "n/a",
+    "note": "La cita multilínea normalizada no es subcadena literal (prefijos '+' e indentación); Nemotron pidió una regla max(a,b)>=a no existente."
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C02",
+   "pr_id": "2889875255",
+   "head_sha": "6738cfb15981",
+   "claim": "Integration with threat modeling, attack tree, mitigations, and test case generation",
+   "situation": "S2",
+   "expected": "refuted",
+   "expected_routing": "RETRY",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "malformed_proposal",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "operational_error",
+    "decisive_evidence": "—",
+    "operation": "—",
+    "justification": "n/a",
+    "note": "Respuesta truncada en ambos intentos (34 kB de evidencia, max_tokens 2048)."
+   },
+   "first_attempt": "malformed_proposal",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C03",
+   "pr_id": "2964743634",
+   "head_sha": "00ec1b658263",
+   "claim": "Add TTY environment check to `cargo insta review`",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "derived",
+   "observed_routing": "PASS",
+   "outcome_category": "verified_derivation",
+   "verdict_acceptable": true,
+   "review": {
+    "category": "label_ok_bad_justification",
+    "decisive_evidence": "c1 = identity(p1) con p1 = línea +CHANGELOG (texto del autor); p2 = hunk de cli.rs con entidad 'cargo insta review' que no aparece en la cita",
+    "operation": "identity x2 (sin cálculo)",
+    "justification": "defective",
+    "note": "La conclusión se apoya en el CHANGELOG del autor; la premisa de código pasó la comprobación de entidad sin contener la entidad. Valor booleano 'true' asignado por Nemotron."
+   },
+   "first_attempt": "verified_derivation",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C04",
+   "pr_id": "2975165913",
+   "head_sha": "7c98b89f2eab",
+   "claim": "Updated all links pointing to /notebooks/Commands/ to now point to /docs/examples/Commands/ following repository reorganization.",
+   "situation": "S3",
+   "expected": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "malformed_proposal",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "operational_error",
+    "decisive_evidence": "—",
+    "operation": "—",
+    "justification": "n/a",
+    "note": "Respuesta truncada en ambos intentos."
+   },
+   "first_attempt": "malformed_proposal",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C05",
+   "pr_id": "2986431376",
+   "head_sha": "af12d91e9e14",
+   "claim": "Fix heading hierarchy to follow consistent H1 -> H2 -> H3 structure",
+   "situation": "S3",
+   "expected": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "observed": "unresolved",
+   "observed_routing": "ESCALATE",
+   "outcome_category": "unsupported_operation_or_rule",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "7 pares -/+ de cabeceras (### -> ##, #### -> ###)",
+    "operation": "identity x7; sugerida heading_hierarchy_consistency",
+    "justification": "n/a",
+    "note": "Se abstiene por regla no soportada, no por alcance de la evidencia; enrutado ESCALATE como el esperado."
+   },
+   "first_attempt": "malformed_proposal",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C06",
+   "pr_id": "3037457814",
+   "head_sha": "291dea32a330",
+   "claim": "This PR adds the Language Server (https://github.com/isaacphi/mcp-language-server) to the code analysis & quality category.",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "premise_grounding_defect",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "+ - [isaacphi/mcp-language-server](...) en docs/code-analysis--quality.md",
+    "operation": "identity x3",
+    "justification": "n/a",
+    "note": "Rechazo por correspondencia de cláusula: el archivo (cabecera) y la línea añadida están en cláusulas distintas."
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C07",
+   "pr_id": "3047699666",
+   "head_sha": "d6e0df6d133b",
+   "claim": "Added test file `frontend/packages/db/supabase/tests/database/03-organization_members_rls.test.sql` with 8 test cases",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "premise_grounding_defect",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "SELECT plan(8) + ruta del archivo añadido",
+    "operation": "identity x2 (sin eq/recuento)",
+    "justification": "n/a",
+    "note": "ENTITY_VALUE_CLAUSE_MISMATCH: 'test file' no está en la cláusula de plan(8). El chequeo de cláusula bloquea el enlace archivo↔contenido que exige la inferencia."
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "supported": 1
+    }
+   }
+  },
+  {
+   "case_id": "C08",
+   "pr_id": "3069923749",
+   "head_sha": "ee87963235a0",
+   "claim": "Adds fields for `cargo-insta` version and the output of `cargo insta --version` to the bug report issue template.",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "premise_grounding_defect",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "+ id: cargo-insta-version / cargo-insta-command-version",
+    "operation": "identity x2",
+    "justification": "n/a",
+    "note": "'bug report issue template' es el significado de la ruta .github/ISSUE_TEMPLATE/1-bug.yml, no texto de la cláusula."
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C09",
+   "pr_id": "3119417980",
+   "head_sha": "7c14c023d687",
+   "claim": "Add includeStackTrace option to reduce LLM token usage by 80-90%",
+   "situation": "S3",
+   "expected": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "premise_grounding_defect",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "intentó usar las cadenas '⚠️ ... save 80-90% tokens' escritas por el autor",
+    "operation": "identity",
+    "justification": "n/a",
+    "note": "La trampa de texto del autor quedó bloqueada, pero por desajuste de cláusula, no por reconocer autoría."
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C10",
+   "pr_id": "3132739442",
+   "head_sha": "a7797dc5ccbe",
+   "claim": "Consolidate algorithmic constants into comprehensive constants header",
+   "situation": "S3",
+   "expected": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "malformed_proposal",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "operational_error",
+    "decisive_evidence": "—",
+    "operation": "—",
+    "justification": "n/a",
+    "note": "Respuesta truncada en ambos intentos."
+   },
+   "first_attempt": "malformed_proposal",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C11",
+   "pr_id": "3135266974",
+   "head_sha": "d9e86877a77b",
+   "claim": "Implements full `Learner` protocol (`partial_fit`, `sample`, `predict`, `decay`)",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "malformed_proposal",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "operational_error",
+    "decisive_evidence": "—",
+    "operation": "—",
+    "justification": "n/a",
+    "note": "Intento 1: 6 citas no literales; intento 2 truncado."
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C12",
+   "pr_id": "3146561196",
+   "head_sha": "dc77327c65ad",
+   "claim": "Build will fail if versions are inconsistent or package-lock.json is out of date",
+   "situation": "S3",
+   "expected": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "malformed_proposal",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "—",
+    "operation": "identity x3",
+    "justification": "n/a",
+    "note": "claim_target reescrito como condición ({'condition': ...}); el verificador lo rechaza como desajuste con la afirmación."
+   },
+   "first_attempt": "malformed_proposal",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C13",
+   "pr_id": "3152317896",
+   "head_sha": "f4ee968ed9cc",
+   "claim": "Implemented `porto create-merchant` command for creating merchant accounts with secp256k1 keys",
+   "situation": "S2",
+   "expected": "refuted",
+   "expected_routing": "RETRY",
+   "observed": "unresolved",
+   "observed_routing": "ESCALATE",
+   "outcome_category": "unsupported_operation_or_rule",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": ".command('create-account [alias: ca]', ...) en src/cli/index.ts",
+    "operation": "identity x3; sugeridas command_alias_equivalence, account_type_classification",
+    "justification": "n/a",
+    "note": "Nemotron recompuso cli\\n  .command(...) en una sola línea: cita no literal. Además pidió una regla de 'equivalencia de alias' que habría acercado create-account a create-merchant (peligroso si se hubiera aceptado)."
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C14",
+   "pr_id": "3196885081",
+   "head_sha": "56c48436d5f1",
+   "claim": "mcp/: Server registry & orchestration (207 lines total)",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "malformed_proposal",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "@@ -0,0 +1,77 @@ y +1,132 (sin salto final)",
+    "operation": "identity (sin add)",
+    "justification": "n/a",
+    "note": "CLAIM_TARGET_MISMATCH falso: (207, 'lines') sí corresponde a la afirmación; 'lines' no es unidad declarada. Nunca llegó a sumar."
+   },
+   "first_attempt": "malformed_proposal",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C15",
+   "pr_id": "3197644488",
+   "head_sha": "b52399fca463",
+   "claim": "docs: add release notes for v0.0.4",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "refuted",
+   "observed_routing": "RETRY",
+   "outcome_category": "verified_refutation",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "incorrect_refutation",
+    "decisive_evidence": "Changed files: - docs/release-notes/v0.0.4.md (added)",
+    "operation": "identity",
+    "justification": "defective",
+    "note": "claim_target.value='v0.0.4' frente a premisa value=true: el comparador trata tipos incomparables como contradicción y emite verified_refutation."
+   },
+   "first_attempt": "verified_refutation",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C16",
+   "pr_id": "3204772289",
+   "head_sha": "2bde5d2d8a50",
+   "claim": "Added GUI Controller functionality to LangConnect for managing MCP (Model Context Protocol) servers through a web UI.",
+   "situation": "S2",
+   "expected": "refuted",
+   "expected_routing": "RETRY",
+   "observed": "insufficient_evidence",
+   "observed_routing": "ESCALATE",
+   "outcome_category": "corpus_insufficient_evidence",
+   "verdict_acceptable": true,
+   "review": {
+    "category": "correct_verified",
+    "decisive_evidence": "Files changed: 0 / Lines added: 0 / Lines deleted: 0",
+    "operation": "ninguna (missing_premises)",
+    "justification": "valid",
+    "note": "Alternativa aceptable (insufficient_evidence) justificada por diff vacío. La refutación exigía una regla 'añadir código ⇒ ≥1 archivo' no disponible."
+   },
+   "first_attempt": "corpus_insufficient_evidence",
+   "old_gate_v4_vocab2": {
+    "gate": "INCONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C17",
+   "pr_id": "3206405036",
+   "head_sha": "7f9f9949d2f9",
+   "claim": "Added comprehensive test for undefined opts scenario",
+   "situation": "S3",
+   "expected": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "malformed_proposal",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "operational_error",
+    "decisive_evidence": "—",
+    "operation": "—",
+    "justification": "n/a",
+    "note": "Intento 1 con defecto de cita; intento 2 truncado."
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C18",
+   "pr_id": "3214876564",
+   "head_sha": "9fab87c771ca",
+   "claim": "Uses SHA-256 hash of plan content for consistent keys",
+   "situation": "S2",
+   "expected": "refuted",
+   "expected_routing": "RETRY",
+   "observed": "insufficient_evidence",
+   "observed_routing": "ESCALATE",
+   "outcome_category": "corpus_insufficient_evidence",
+   "verdict_acceptable": true,
+   "review": {
+    "category": "correct_verified",
+    "decisive_evidence": "+ const memoryKey = `action_${responseAction}_${uuidv4()}`; ausencia de sha/hash",
+    "operation": "ninguna (missing_premises)",
+    "justification": "valid",
+    "note": "Alternativa aceptable. Nemotron identificó el contraejemplo (uuidv4) en prosa, pero el motor no puede formalizar 'aleatorio ≠ hash determinista': intento fallido de refutar, no refutación demostrada."
+   },
+   "first_attempt": "corpus_insufficient_evidence",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C19",
+   "pr_id": "3245466752",
+   "head_sha": "2bbe1568cabf",
+   "claim": "This PR fixes the output to include the server name as the root key",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "malformed_proposal",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "operational_error",
+    "decisive_evidence": "—",
+    "operation": "—",
+    "justification": "n/a",
+    "note": "Respuesta truncada en ambos intentos."
+   },
+   "first_attempt": "malformed_proposal",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  },
+  {
+   "case_id": "C20",
+   "pr_id": "3246950577",
+   "head_sha": "15be1f698ea5",
+   "claim": "This resolves an issue where running `pdm export --lockfile pylock.toml` would produce empty requirements.txt files.",
+   "situation": "S3",
+   "expected": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "premise_grounding_defect",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "—",
+    "operation": "identity x3",
+    "justification": "n/a",
+    "note": "Unidad 'boolean' no declarada y citas multilínea no literales."
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": "CONSISTENT",
+    "claim_status": {
+     "unverifiable": 1
+    }
+   }
+  }
+ ],
+ "metrics": {
+  "confusion_expected_x_observed": {
+   "derived": {
+    "unresolved": 7,
+    "derived": 1,
+    "refuted": 1
+   },
+   "refuted": {
+    "unresolved": 2,
+    "insufficient_evidence": 2
+   },
+   "insufficient_evidence": {
+    "unresolved": 7
+   }
+  },
+  "verdict_acceptable": "3/20",
+  "correctly_verified (verdict acceptable + valid justification)": "2/20",
+  "label_ok_bad_justification": "1/20",
+  "false_acceptances (PASS on refuted|insufficient reference)": "0/11",
+  "incorrect_refutations (refuted on non-refuted reference)": "1/16",
+  "justified_abstentions (abstention with acceptable verdict + valid justification)": "2/18",
+  "resolvable_cases_ending_in_abstention_or_unresolved": "11/13",
+  "operational_errors (truncated planner output, final)": "6/20",
+  "verifier_abstentions (unresolved by defect/unsupported op, final)": "10/20",
+  "provider_errors": "0/20",
+  "routing_match": "3/20",
+  "inference_cases_resolved_with_valid_derivation": "0/12",
+  "first_attempt_malformed": "15/36 attempts",
+  "admitted_premises_final": 12,
+  "admitted_premises_with_literal_quote_check": 12,
+  "admitted_premises_value_set_by_nemotron_interpretation (non-numeric)": 12,
+  "executed_operations": {
+   "identity": 3
+  }
+ },
+ "telemetry": {
+  "calls_total": 36,
+  "retries_total": 16,
+  "total_tokens": {
+   "n": 20,
+   "median": 14964.5,
+   "min": 3214,
+   "max": 46560
+  },
+  "planning_latency_ms": {
+   "n": 20,
+   "median": 27778.9,
+   "min": 4600.9,
+   "max": 55879.4
+  },
+  "verifier_latency_ms": {
+   "n": 20,
+   "median": 7.5,
+   "min": 0.0,
+   "max": 53.0
+  },
+  "api_total_latency_ms": {
+   "n": 20,
+   "median": 27829.4,
+   "min": 4604.6,
+   "max": 55882.5
+  },
+  "client_end_to_end_ms": {
+   "n": 20,
+   "median": 27833.4,
+   "min": 4609.3,
+   "max": 55893.6
+  },
+  "tokens_sum": 343771
+ },
+ "old_evaluators": {
+  "gate_v4_vocab2_claim_status": {
+   "unverifiable": 19,
+   "supported": 1
+  },
+  "gate_v4_vocab2_pr_gate": {
+   "CONSISTENT": 19,
+   "INCONSISTENT": 1
+  },
+  "gate_v4_vocab2_CONSISTENT_on_non_supported_reference": "10/11",
+  "rules_v2_P_placeholder_fired": "8/20"
+ }
+}

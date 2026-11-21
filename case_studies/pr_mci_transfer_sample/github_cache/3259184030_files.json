@@ -1,0 +1,38 @@
+[
+ {
+  "sha": "3e55f66c0a7e3e3b0b066640fcb060ffd43d4517",
+  "filename": ".changeset/happy-cherries-yawn.md",
+  "status": "added",
+  "additions": 5,
+  "deletions": 0,
+  "changes": 5,
+  "blob_url": "https://github.com/lingodotdev/lingo.dev/blob/e2bfc72ed47959d9b44877763e552fe41b4d4579/.changeset%2Fhappy-cherries-yawn.md",
+  "raw_url": "https://github.com/lingodotdev/lingo.dev/raw/e2bfc72ed47959d9b44877763e552fe41b4d4579/.changeset%2Fhappy-cherries-yawn.md",
+  "contents_url": "https://api.github.com/repos/lingodotdev/lingo.dev/contents/.changeset%2Fhappy-cherries-yawn.md?ref=e2bfc72ed47959d9b44877763e552fe41b4d4579",
+  "patch": "@@ -0,0 +1,5 @@\n+---\n+\"lingo.dev\": minor\n+---\n+\n+Add Discord link to CLI help text"
+ },
+ {
+  "sha": "bf96ede87fe7ecb455691ce64441da3af0afbfd2",
+  "filename": "packages/cli/src/cli/cmd/may-the-fourth.ts",
+  "status": "modified",
+  "additions": 5,
+  "deletions": 2,
+  "changes": 7,
+  "blob_url": "https://github.com/lingodotdev/lingo.dev/blob/e2bfc72ed47959d9b44877763e552fe41b4d4579/packages%2Fcli%2Fsrc%2Fcli%2Fcmd%2Fmay-the-fourth.ts",
+  "raw_url": "https://github.com/lingodotdev/lingo.dev/raw/e2bfc72ed47959d9b44877763e552fe41b4d4579/packages%2Fcli%2Fsrc%2Fcli%2Fcmd%2Fmay-the-fourth.ts",
+  "contents_url": "https://api.github.com/repos/lingodotdev/lingo.dev/contents/packages%2Fcli%2Fsrc%2Fcli%2Fcmd%2Fmay-the-fourth.ts?ref=e2bfc72ed47959d9b44877763e552fe41b4d4579",
+  "patch": "@@ -86,8 +86,11 @@ async function renderHero() {\n     )} - open-source, AI-powered i18n CLI for web & mobile localization.`,\n   );\n   console.log(\" \");\n+  console.log(chalk.hex(colors.blue)(\"📚 Docs: https://lingo.dev/go/docs\"));\n   console.log(\n-    chalk.hex(colors.blue)(\"⭐ GitHub Repo: https://lingo.dev/go/gh\"),\n+    chalk.hex(colors.blue)(\"⭐ Star the repo: https://lingo.dev/go/gh\"),\n+  );\n+  console.log(\n+    chalk.hex(colors.blue)(\"🎮 Join Discord: https://lingo.dev/go/discord\"),\n   );\n-  console.log(chalk.hex(colors.blue)(\"💬 24/7 Support: hi@lingo.dev\"));\n }"
+ },
+ {
+  "sha": "019b335fc2e040d25598401abde066e55ed3c373",
+  "filename": "packages/cli/src/cli/utils/ui.ts",
+  "status": "modified",
+  "additions": 10,
+  "deletions": 10,
+  "changes": 20,
+  "blob_url": "https://github.com/lingodotdev/lingo.dev/blob/e2bfc72ed47959d9b44877763e552fe41b4d4579/packages%2Fcli%2Fsrc%2Fcli%2Futils%2Fui.ts",
+  "raw_url": "https://github.com/lingodotdev/lingo.dev/raw/e2bfc72ed47959d9b44877763e552fe41b4d4579/packages%2Fcli%2Fsrc%2Fcli%2Futils%2Fui.ts",
+  "contents_url": "https://api.github.com/repos/lingodotdev/lingo.dev/contents/packages%2Fcli%2Fsrc%2Fcli%2Futils%2Fui.ts?ref=e2bfc72ed47959d9b44877763e552fe41b4d4579",
+  "patch": "@@ -32,25 +32,25 @@ export async function renderHero() {\n   );\n   console.log(\"\");\n \n-  const label1 = \"⭐ GitHub Repo:\";\n-  const label2 = \"📚 Docs:\";\n-  const label3 = \"💬 24/7 Support:\";\n+  const label1 = \"📚 Docs:\";\n+  const label2 = \"⭐ Star the repo:\";\n+  const label3 = \"🎮 Join Discord:\";\n   const maxLabelWidth = 17; // Approximate visual width accounting for emoji\n \n   console.log(\n-    `${chalk.hex(colors.blue)(label1.padEnd(maxLabelWidth))} ${chalk.hex(\n-      colors.blue,\n-    )(\"https://lingo.dev/go/gh\")}`,\n-  );\n-  console.log(\n-    `${chalk.hex(colors.blue)(label2.padEnd(maxLabelWidth + 1))} ${chalk.hex(\n+    `${chalk.hex(colors.blue)(label1.padEnd(maxLabelWidth + 1))} ${chalk.hex(\n       colors.blue,\n     )(\"https://lingo.dev/go/docs\")}`,\n   ); // Docs emoji seems narrower\n+  console.log(\n+    `${chalk.hex(colors.blue)(label2.padEnd(maxLabelWidth))} ${chalk.hex(\n+      colors.blue,\n+    )(\"https://lingo.dev/go/gh\")}`,\n+  );\n   console.log(\n     `${chalk.hex(colors.blue)(label3.padEnd(maxLabelWidth + 1))} ${chalk.hex(\n       colors.blue,\n-    )(\"hi@lingo.dev\")}`,\n+    )(\"https://lingo.dev/go/discord\")}`,\n   );\n }\n "
+ }
+]

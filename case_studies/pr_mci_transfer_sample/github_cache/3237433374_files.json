@@ -1,0 +1,49 @@
+[
+ {
+  "sha": "20df62a5de3a461195c30ff4a87843a9bc02d5bd",
+  "filename": "apps/web/client/src/app/privacy-policy/page.tsx",
+  "status": "modified",
+  "additions": 5,
+  "deletions": 5,
+  "changes": 10,
+  "blob_url": "https://github.com/onlook-dev/onlook/blob/02a9fcb66a01e78020a4922f187ac480e6f729c5/apps%2Fweb%2Fclient%2Fsrc%2Fapp%2Fprivacy-policy%2Fpage.tsx",
+  "raw_url": "https://github.com/onlook-dev/onlook/raw/02a9fcb66a01e78020a4922f187ac480e6f729c5/apps%2Fweb%2Fclient%2Fsrc%2Fapp%2Fprivacy-policy%2Fpage.tsx",
+  "contents_url": "https://api.github.com/repos/onlook-dev/onlook/contents/apps%2Fweb%2Fclient%2Fsrc%2Fapp%2Fprivacy-policy%2Fpage.tsx?ref=02a9fcb66a01e78020a4922f187ac480e6f729c5",
+  "patch": "@@ -12,7 +12,7 @@ export default function PrivacyPage() {\n \n                     <div className=\"prose prose-invert max-w-none\">\n                         <p className=\"text-foreground-secondary mb-8\">\n-                            If you have any questions, please write to us at [email protected]\n+                            If you have any questions, please write to us at contact@onlook.com\n                         </p>\n \n                         <h2 className=\"text-2xl font-light text-foreground-primary mt-12 mb-6\">Introduction</h2>\n@@ -190,13 +190,13 @@ export default function PrivacyPage() {\n \n                         <h2 className=\"text-2xl font-light text-foreground-primary mt-12 mb-6\">Personal Data of Children</h2>\n                         <p className=\"text-foreground-secondary mb-6\">\n-                            As noted in the Terms of Use, we do not knowingly collect or solicit Personal Data from children under 13 years of age; if you are a child under the age of 13, please do not attempt to register for or otherwise use the Services or send us any Personal Data. If we learn we have collected Personal Data from a child under 13 years of age, we will delete that information as quickly as possible. If you believe that a child under 13 years of age may have provided Personal Data to us, please contact us at [email protected].\n+                            As noted in the Terms of Use, we do not knowingly collect or solicit Personal Data from children under 13 years of age; if you are a child under the age of 13, please do not attempt to register for or otherwise use the Services or send us any Personal Data. If we learn we have collected Personal Data from a child under 13 years of age, we will delete that information as quickly as possible. If you believe that a child under 13 years of age may have provided Personal Data to us, please contact us at contact@onlook.com.\n                         </p>\n \n                         <h2 className=\"text-2xl font-light text-foreground-primary mt-12 mb-6\">Other State Law Privacy Rights</h2>\n                         <h3 className=\"text-xl font-light text-foreground-primary mt-8 mb-4\">California Resident Rights</h3>\n                         <p className=\"text-foreground-secondary mb-6\">\n-                            Under California Civil Code Sections 1798.83-1798.84, California residents are entitled to contact us to prevent disclosure of Personal Data to third parties for such third parties' direct marketing purposes; in order to submit such a request, please contact us at [email protected].\n+                            Under California Civil Code Sections 1798.83-1798.84, California residents are entitled to contact us to prevent disclosure of Personal Data to third parties for such third parties' direct marketing purposes; in order to submit such a request, please contact us at contact@onlook.com.\n                         </p>\n \n                         <h3 className=\"text-xl font-light text-foreground-primary mt-8 mb-4\">Nevada Resident Rights</h3>\n@@ -210,11 +210,11 @@ export default function PrivacyPage() {\n                         </p>\n                         <ul className=\"text-foreground-secondary mb-6 list-disc pl-6\">\n                             <li>https://onlook.dev/</li>\n-                            <li>contact@onlook.dev</li>\n+                            <li>contact@onlook.com</li>\n                         </ul>\n                     </div>\n                 </div>\n             </main>\n         </WebsiteLayout>\n     );\n-} \n\\ No newline at end of file\n+}    \n\\ No newline at end of file"
+ },
+ {
+  "sha": "fac055441cc8e4679124cff184578beb2811606b",
+  "filename": "apps/web/client/src/app/terms-of-service/page.tsx",
+  "status": "modified",
+  "additions": 3,
+  "deletions": 3,
+  "changes": 6,
+  "blob_url": "https://github.com/onlook-dev/onlook/blob/02a9fcb66a01e78020a4922f187ac480e6f729c5/apps%2Fweb%2Fclient%2Fsrc%2Fapp%2Fterms-of-service%2Fpage.tsx",
+  "raw_url": "https://github.com/onlook-dev/onlook/raw/02a9fcb66a01e78020a4922f187ac480e6f729c5/apps%2Fweb%2Fclient%2Fsrc%2Fapp%2Fterms-of-service%2Fpage.tsx",
+  "contents_url": "https://api.github.com/repos/onlook-dev/onlook/contents/apps%2Fweb%2Fclient%2Fsrc%2Fapp%2Fterms-of-service%2Fpage.tsx?ref=02a9fcb66a01e78020a4922f187ac480e6f729c5",
+  "patch": "@@ -12,7 +12,7 @@ export default function TermsPage() {\n \n                     <div className=\"prose prose-invert max-w-none\">\n                         <p className=\"text-foreground-secondary mb-8\">\n-                            If you have any questions, please write to us at [email protected]\n+                            If you have any questions, please write to us at contact@onlook.com\n                         </p>\n \n                         <h2 className=\"text-2xl font-light text-foreground-primary mt-12 mb-6\">Introduction</h2>\n@@ -56,7 +56,7 @@ export default function TermsPage() {\n \n                         <h2 className=\"text-2xl font-light text-foreground-primary mt-12 mb-6\">6. Communications</h2>\n                         <p className=\"text-foreground-secondary mb-6\">\n-                            You agree that Onlook may send you emails concerning our products and services, as well as those of third parties. You may opt out of promotional emails by responding to the promotional email itself or emailing us at [email protected].\n+                            You agree that Onlook may send you emails concerning our products and services, as well as those of third parties. You may opt out of promotional emails by responding to the promotional email itself or emailing us at contact@onlook.com.\n                         </p>\n \n                         <h2 className=\"text-2xl font-light text-foreground-primary mt-12 mb-6\">7. Suspension; Termination</h2>\n@@ -93,4 +93,4 @@ export default function TermsPage() {\n             </main>\n         </WebsiteLayout>\n     );\n-} \n\\ No newline at end of file\n+}  \n\\ No newline at end of file"
+ },
+ {
+  "sha": "c56564b2333fcaef1f715d908002b6f194bd4302",
+  "filename": "bun.lockb",
+  "status": "modified",
+  "additions": 0,
+  "deletions": 0,
+  "changes": 0,
+  "blob_url": "https://github.com/onlook-dev/onlook/blob/02a9fcb66a01e78020a4922f187ac480e6f729c5/bun.lockb",
+  "raw_url": "https://github.com/onlook-dev/onlook/raw/02a9fcb66a01e78020a4922f187ac480e6f729c5/bun.lockb",
+  "contents_url": "https://api.github.com/repos/onlook-dev/onlook/contents/bun.lockb?ref=02a9fcb66a01e78020a4922f187ac480e6f729c5"
+ },
+ {
+  "sha": "b94fb1b79b1c59831403d952c7dbb7054bd476a5",
+  "filename": "docs/content/docs/developer/contributing.mdx",
+  "status": "modified",
+  "additions": 2,
+  "deletions": 2,
+  "changes": 4,
+  "blob_url": "https://github.com/onlook-dev/onlook/blob/02a9fcb66a01e78020a4922f187ac480e6f729c5/docs%2Fcontent%2Fdocs%2Fdeveloper%2Fcontributing.mdx",
+  "raw_url": "https://github.com/onlook-dev/onlook/raw/02a9fcb66a01e78020a4922f187ac480e6f729c5/docs%2Fcontent%2Fdocs%2Fdeveloper%2Fcontributing.mdx",
+  "contents_url": "https://api.github.com/repos/onlook-dev/onlook/contents/docs%2Fcontent%2Fdocs%2Fdeveloper%2Fcontributing.mdx?ref=02a9fcb66a01e78020a4922f187ac480e6f729c5",
+  "patch": "@@ -8,7 +8,7 @@ description: How to contribute to the Onlook project\n We welcome contributions to Onlook! This guide will help you get started with contributing to the project.\n \n When contributing to this repository, please first discuss the change you wish to make via [issues](https://github.com/onlook-dev/onlook/issues),\n-[Discord](https://discord.gg/hERDfFZCsH), [email](mailto:contact@onlook.dev), or any other method with the owners of this repository before making a change. \n+[Discord](https://discord.gg/hERDfFZCsH), [email](mailto:contact@onlook.com), or any other method with the owners of this repository before making a change. \n \n Please note we have a [code of conduct](https://github.com/onlook-dev/onlook/blob/main/CODE_OF_CONDUCT.md), please follow it in all your interactions with the project.\n \n@@ -62,4 +62,4 @@ We use [TypeScript](https://www.typescriptlang.org/) for type safety.\n To check types of the web client, run:\n ```bash\n cd apps/web/client && bun run typecheck\n-```\n\\ No newline at end of file\n+```"
+ }
+]

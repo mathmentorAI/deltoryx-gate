@@ -1,0 +1,38 @@
+[
+ {
+  "sha": "0ce73cdd596c27f47a7d57294ff2149e95f8fb7f",
+  "filename": ".github/workflows/ci.yml",
+  "status": "modified",
+  "additions": 1,
+  "deletions": 1,
+  "changes": 2,
+  "blob_url": "https://github.com/MontrealAI/AGI-Alpha-Agent-v0/blob/78765b1bc4cd1d7e2d8364fe49a368f20454ef44/.github%2Fworkflows%2Fci.yml",
+  "raw_url": "https://github.com/MontrealAI/AGI-Alpha-Agent-v0/raw/78765b1bc4cd1d7e2d8364fe49a368f20454ef44/.github%2Fworkflows%2Fci.yml",
+  "contents_url": "https://api.github.com/repos/MontrealAI/AGI-Alpha-Agent-v0/contents/.github%2Fworkflows%2Fci.yml?ref=78765b1bc4cd1d7e2d8364fe49a368f20454ef44",
+  "patch": "@@ -642,7 +642,7 @@ jobs:\n         run: |\n           docker build -t \"$DOCKER_IMAGE:ci\" \\\n             -f alpha_factory_v1/demos/alpha_agi_insight_v1/infrastructure/Dockerfile \\\n-            .\n+            alpha_factory_v1/demos/alpha_agi_insight_v1\n       - name: Smoke test image\n         run: |\n           docker run --rm -e RUN_MODE=cli \"$DOCKER_IMAGE:ci\" simulate --horizon 1 --offline"
+ },
+ {
+  "sha": "cf53d3317f51f53a19523be0acb1f48fb4914fd8",
+  "filename": "DISCLAIMER_SNIPPET.md",
+  "status": "added",
+  "additions": 1,
+  "deletions": 0,
+  "changes": 1,
+  "blob_url": "https://github.com/MontrealAI/AGI-Alpha-Agent-v0/blob/78765b1bc4cd1d7e2d8364fe49a368f20454ef44/DISCLAIMER_SNIPPET.md",
+  "raw_url": "https://github.com/MontrealAI/AGI-Alpha-Agent-v0/raw/78765b1bc4cd1d7e2d8364fe49a368f20454ef44/DISCLAIMER_SNIPPET.md",
+  "contents_url": "https://api.github.com/repos/MontrealAI/AGI-Alpha-Agent-v0/contents/DISCLAIMER_SNIPPET.md?ref=78765b1bc4cd1d7e2d8364fe49a368f20454ef44",
+  "patch": "@@ -0,0 +1 @@\n+This repository is a conceptual research prototype. References to \"AGI\" and \"superintelligence\" describe aspirational goals and do not indicate the presence of a real general intelligence. Use at your own risk. Nothing herein constitutes financial advice. MontrealAI and the maintainers accept no liability for losses incurred from using this software."
+ },
+ {
+  "sha": "4cede537eeb4d5d21c1fd4a2d0d12489a5999958",
+  "filename": "check_env.py",
+  "status": "modified",
+  "additions": 2,
+  "deletions": 2,
+  "changes": 4,
+  "blob_url": "https://github.com/MontrealAI/AGI-Alpha-Agent-v0/blob/78765b1bc4cd1d7e2d8364fe49a368f20454ef44/check_env.py",
+  "raw_url": "https://github.com/MontrealAI/AGI-Alpha-Agent-v0/raw/78765b1bc4cd1d7e2d8364fe49a368f20454ef44/check_env.py",
+  "contents_url": "https://api.github.com/repos/MontrealAI/AGI-Alpha-Agent-v0/contents/check_env.py?ref=78765b1bc4cd1d7e2d8364fe49a368f20454ef44",
+  "patch": "@@ -486,11 +486,11 @@ def main(argv: Optional[List[str]] = None) -> int:\n     missing = missing_required + missing_optional\n     if missing:\n         print(\"WARNING: Missing packages:\", \", \".join(missing))\n-        if auto and (wheelhouse or network_ok):\n+        if auto and missing_required and (wheelhouse or network_ok):\n             cmd = [sys.executable, \"-m\", \"pip\", \"install\", \"--quiet\"]\n             if wheelhouse:\n                 cmd += [\"--no-index\", \"--find-links\", wheelhouse]\n-            packages = [PIP_NAMES.get(pkg, pkg) for pkg in missing]\n+            packages = [PIP_NAMES.get(pkg, pkg) for pkg in missing_required]\n             cmd += packages\n             print(\n                 f\"Attempting automatic install (timeout {pip_timeout}s):\","
+ }
+]

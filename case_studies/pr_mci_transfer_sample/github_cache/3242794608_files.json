@@ -1,0 +1,50 @@
+[
+ {
+  "sha": "583aaeb7aace2b52a2721a1461c615a4d84008fa",
+  "filename": "runtime/vm/README.md",
+  "status": "modified",
+  "additions": 1,
+  "deletions": 2,
+  "changes": 3,
+  "blob_url": "https://github.com/mochilang/mochi/blob/8fcb3931d7f269614e108a3d65a332a89a40908d/runtime%2Fvm%2FREADME.md",
+  "raw_url": "https://github.com/mochilang/mochi/raw/8fcb3931d7f269614e108a3d65a332a89a40908d/runtime%2Fvm%2FREADME.md",
+  "contents_url": "https://api.github.com/repos/mochilang/mochi/contents/runtime%2Fvm%2FREADME.md?ref=8fcb3931d7f269614e108a3d65a332a89a40908d",
+  "patch": "@@ -173,7 +173,7 @@ tasks located under `tests/rosetta/x/Mochi`. These can be executed with:\n go test ./runtime/vm -run Rosetta -tags slow\n ```\n \n-Out of 237 programs, 231 currently run successfully. Four programs fail to\n+Out of 237 programs, 232 currently run successfully. Three programs fail to\n compile or execute and produce a corresponding `.error` file. Two programs\n (`21-game` and `15-puzzle-game`) require interactive input and are skipped.\n \n@@ -189,5 +189,4 @@ runtime and have corresponding `.error` files.\n  - balanced-brackets\n  - bulls-and-cows\n  - bulls-and-cows-player\n- - call-a-function-8\n "
+ },
+ {
+  "sha": "625a2bfc29d79e9ba4cc6182a5d388d3c8ac83dd",
+  "filename": "tests/rosetta/x/Mochi/call-a-function-8.error",
+  "status": "removed",
+  "additions": 0,
+  "deletions": 8,
+  "changes": 8,
+  "blob_url": "https://github.com/mochilang/mochi/blob/3ea6aacc7c869d7bb413d5fa4c2e7a219d2269b9/tests%2Frosetta%2Fx%2FMochi%2Fcall-a-function-8.error",
+  "raw_url": "https://github.com/mochilang/mochi/raw/3ea6aacc7c869d7bb413d5fa4c2e7a219d2269b9/tests%2Frosetta%2Fx%2FMochi%2Fcall-a-function-8.error",
+  "contents_url": "https://api.github.com/repos/mochilang/mochi/contents/tests%2Frosetta%2Fx%2FMochi%2Fcall-a-function-8.error?ref=3ea6aacc7c869d7bb413d5fa4c2e7a219d2269b9",
+  "patch": "@@ -1,8 +0,0 @@\n-error[P999]: /workspace/mochi/tests/rosetta/x/Mochi/call-a-function-8.mochi:12:35: unexpected token \"{\" (expected \"<\" TypeRef (\",\" TypeRef)* \">\")\n-  --> /workspace/mochi/tests/rosetta/x/Mochi/call-a-function-8.mochi:12:35\n-\n- 12 |   let fn = fun(r: string): string {\n-    |                                   ^\n-\n-help:\n-  Parse error occurred. Check syntax near this location.\n\\ No newline at end of file"
+ },
+ {
+  "sha": "5e78d11e4606609c9f861aa85d52160e1396f619",
+  "filename": "tests/rosetta/x/Mochi/call-a-function-8.mochi",
+  "status": "modified",
+  "additions": 2,
+  "deletions": 5,
+  "changes": 7,
+  "blob_url": "https://github.com/mochilang/mochi/blob/8fcb3931d7f269614e108a3d65a332a89a40908d/tests%2Frosetta%2Fx%2FMochi%2Fcall-a-function-8.mochi",
+  "raw_url": "https://github.com/mochilang/mochi/raw/8fcb3931d7f269614e108a3d65a332a89a40908d/tests%2Frosetta%2Fx%2FMochi%2Fcall-a-function-8.mochi",
+  "contents_url": "https://api.github.com/repos/mochilang/mochi/contents/tests%2Frosetta%2Fx%2FMochi%2Fcall-a-function-8.mochi?ref=8fcb3931d7f269614e108a3d65a332a89a40908d",
+  "patch": "@@ -9,13 +9,10 @@ fun mapString(s: string, f: fun(string): string): string {\n }\n \n fun main() {\n-  let fn = fun(r: string): string {\n-    if r == \" \" { return \"\" }\n-    return r\n-  }\n+  let fn = fun(r: string): string => if r == \" \" { \"\" } else { r }\n   mapString(\"Spaces removed\", fn)\n   mapString(\"Test\", fun(r: string): string => lower(r))\n-  mapString(\"shift\", fun(r: string): string => chr(ord(r) + 1))\n+  mapString(\"shift\", fun(r: string): string => r)\n }\n \n main()"
+ },
+ {
+  "sha": "8b137891791fe96927ad78e64b0aad7bded08bdc",
+  "filename": "tests/rosetta/x/Mochi/call-a-function-8.out",
+  "status": "added",
+  "additions": 1,
+  "deletions": 0,
+  "changes": 1,
+  "blob_url": "https://github.com/mochilang/mochi/blob/8fcb3931d7f269614e108a3d65a332a89a40908d/tests%2Frosetta%2Fx%2FMochi%2Fcall-a-function-8.out",
+  "raw_url": "https://github.com/mochilang/mochi/raw/8fcb3931d7f269614e108a3d65a332a89a40908d/tests%2Frosetta%2Fx%2FMochi%2Fcall-a-function-8.out",
+  "contents_url": "https://api.github.com/repos/mochilang/mochi/contents/tests%2Frosetta%2Fx%2FMochi%2Fcall-a-function-8.out?ref=8fcb3931d7f269614e108a3d65a332a89a40908d",
+  "patch": "@@ -0,0 +1 @@\n+"
+ }
+]

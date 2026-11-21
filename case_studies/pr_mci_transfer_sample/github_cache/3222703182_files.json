@@ -1,0 +1,26 @@
+[
+ {
+  "sha": "cb5be4f71eb67215a5600feaa1c7705e93d7c821",
+  "filename": "compiler/x/c/compiler.go",
+  "status": "modified",
+  "additions": 32,
+  "deletions": 0,
+  "changes": 32,
+  "blob_url": "https://github.com/mochilang/mochi/blob/f22daa7df952247eb9c124af87a72595d461e8e5/compiler%2Fx%2Fc%2Fcompiler.go",
+  "raw_url": "https://github.com/mochilang/mochi/raw/f22daa7df952247eb9c124af87a72595d461e8e5/compiler%2Fx%2Fc%2Fcompiler.go",
+  "contents_url": "https://api.github.com/repos/mochilang/mochi/contents/compiler%2Fx%2Fc%2Fcompiler.go?ref=f22daa7df952247eb9c124af87a72595d461e8e5",
+  "patch": "@@ -5728,6 +5728,38 @@ func (c *Compiler) emitJSONExpr(e *parser.Expr) {\n \t\tc.indent--\n \t\tc.writeln(\"}\")\n \t\tc.writeln(\"printf(\\\"]\\\");\")\n+\t} else if t, ok := c.exprType(e).(types.ListType); ok {\n+\t\tif st, ok2 := t.Elem.(types.StructType); ok2 {\n+\t\t\tloop := c.newLoopVar()\n+\t\t\tc.writeln(\"printf(\\\"[\\\");\")\n+\t\t\tc.writeln(fmt.Sprintf(\"for(int %s=0; %s<%s.len; %s++){\", loop, loop, argExpr, loop))\n+\t\t\tc.indent++\n+\t\t\tc.writeln(fmt.Sprintf(\"if(%s>0) printf(\\\",\\\");\", loop))\n+\t\t\tc.writeln(fmt.Sprintf(\"%s it = %s.data[%s];\", sanitizeTypeName(st.Name), argExpr, loop))\n+\t\t\tc.writeln(\"printf(\\\"{\\\");\")\n+\t\t\tfor i, field := range st.Order {\n+\t\t\t\tif i > 0 {\n+\t\t\t\t\tc.writeln(\"printf(\\\",\\\");\")\n+\t\t\t\t}\n+\t\t\t\tc.writeln(fmt.Sprintf(\"_json_string(\\\"%s\\\");\", field))\n+\t\t\t\tc.writeln(\"printf(\\\":\\\");\")\n+\t\t\t\tfe := fmt.Sprintf(\"it.%s\", sanitizeName(field))\n+\t\t\t\tswitch st.Fields[field].(type) {\n+\t\t\t\tcase types.IntType, types.BoolType:\n+\t\t\t\t\tc.writeln(fmt.Sprintf(\"_json_int(%s);\", fe))\n+\t\t\t\tcase types.FloatType:\n+\t\t\t\t\tc.writeln(fmt.Sprintf(\"_json_float(%s);\", fe))\n+\t\t\t\tcase types.StringType:\n+\t\t\t\t\tc.writeln(fmt.Sprintf(\"_json_string(%s);\", fe))\n+\t\t\t\t}\n+\t\t\t}\n+\t\t\tc.writeln(\"printf(\\\"}\\\");\")\n+\t\t\tc.indent--\n+\t\t\tc.writeln(\"}\")\n+\t\t\tc.writeln(\"printf(\\\"]\\\");\")\n+\t\t} else {\n+\t\t\tc.writeln(fmt.Sprintf(\"_json_int(%s.len);\", argExpr))\n+\t\t}\n \t} else if isFloatArg(e, c.env) {\n \t\tc.writeln(fmt.Sprintf(\"_json_float(%s);\", argExpr))\n \t} else if isStringArg(e, c.env) {"
+ },
+ {
+  "sha": "f2f12d1b733ff2c043824521f4b150144fa331fe",
+  "filename": "tests/machine/x/c/README.md",
+  "status": "modified",
+  "additions": 10,
+  "deletions": 0,
+  "changes": 10,
+  "blob_url": "https://github.com/mochilang/mochi/blob/f22daa7df952247eb9c124af87a72595d461e8e5/tests%2Fmachine%2Fx%2Fc%2FREADME.md",
+  "raw_url": "https://github.com/mochilang/mochi/raw/f22daa7df952247eb9c124af87a72595d461e8e5/tests%2Fmachine%2Fx%2Fc%2FREADME.md",
+  "contents_url": "https://api.github.com/repos/mochilang/mochi/contents/tests%2Fmachine%2Fx%2Fc%2FREADME.md?ref=f22daa7df952247eb9c124af87a72595d461e8e5",
+  "patch": "@@ -139,3 +139,13 @@ Checklist:\n - [ ] Allow inline assembly blocks\n - [ ] Support 64-bit integer types\n - [ ] Generate debug symbols for gdb\n+- [ ] Improve constant folding for arithmetic expressions\n+- [ ] Add support for struct method receivers\n+- [ ] Implement union type pattern matching\n+- [ ] Generate C99 designated initializers\n+- [ ] Support builtin regex operations\n+- [ ] Provide configuration for custom allocators\n+- [ ] Implement dead code elimination pass\n+- [ ] Add benchmarking harness for generated C\n+- [ ] Support optional parameters in functions\n+- [ ] Document runtime error handling conventions"
+ }
+]

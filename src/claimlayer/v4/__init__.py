@@ -117,6 +117,9 @@ from .planner import (
     PlannerCallResult,
     PlannerTelemetry,
     verify_claim,
+    UNIT_PROFILE_CHOICES,
+    detect_text_language,
+    resolve_unit_profile,
     verify_plan,
 )
 from .premise_grounding import (
@@ -168,7 +171,7 @@ from .verifiers import (
     VerifierRegistry,
     VerifierResult,
 )
-from .vocabulary import CONDITION_STATUSES, STANDARD_UNITS, FieldSpec, PredicateSpec, Unit, UnitRegistry, UnmappedProposal, Vocabulary
+from .vocabulary import CONDITION_STATUSES, SPANISH_UNITS, SPANISH_UNIT_ALIASES, STANDARD_UNITS, UNIT_PROFILES, FieldSpec, PredicateSpec, Unit, UnitRegistry, UnmappedProposal, Vocabulary
 from .autovocab import build_vocabulary, propose_vocabulary, with_entities
 from .triage import LANES, draft_vocabulary, segment_text, triage, verify_draft
 from ..semantic.models import EvidenceRef, SourceDocument, StructuredQuery
@@ -176,7 +179,7 @@ from ..semantic.adapters import OpenAICompatibleModel
 
 __all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'UnitEvaluation', 'evaluate_unit_admissibility',
            'Vocabulary', 'PredicateSpec', 'FieldSpec', 'Unit', 'UnitRegistry',
-           'STANDARD_UNITS', 'CONDITION_STATUSES', 'UnmappedProposal', 'EpistemicProfile', 'DEFAULT_PROFILE', 'EXPLICIT',
+           'STANDARD_UNITS', 'SPANISH_UNITS', 'SPANISH_UNIT_ALIASES', 'UNIT_PROFILES', 'CONDITION_STATUSES', 'UnmappedProposal', 'EpistemicProfile', 'DEFAULT_PROFILE', 'EXPLICIT',
            'AcceptancePolicy', 'EvidenceUnit', 'TransitiveRule', 'LLMProposalReader', 'ProposalReader', 'RecordedProposalReader',
            'READER_PROMPT', 'STRICT_READER_PROMPT', 'STRICT_PROMPT_VERSION', 'REREAD_PROMPT', 'REREAD_PROMPT_VERSION', 'SourceDocument', 'EvidenceRef', 'StructuredQuery', 'OpenAICompatibleModel',
            'TIER_PRIMARY', 'TIER_ANNEX', 'TIER_EXTERNAL', 'propose_vocabulary', 'build_vocabulary', 'with_entities',
@@ -212,6 +215,6 @@ __all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'UnitEvaluation', 'evaluate_unit_a
            'compute_date_offset', 'compute_weekday_shift', 'normalize_day_offset', 'normalize_weekday',
            'DERIVATION_PLANNER_PROMPT', 'DERIVATION_PLANNER_PROMPT_VERSION', 'CertaintyReport',
            'ClaimDerivationPlanner', 'ClaimVerificationResult', 'ClaimVerifier', 'DerivationPlanner',
-           'OperationalRouting', 'PlannerCallResult', 'PlannerTelemetry', 'verify_claim', 'verify_plan',
+           'OperationalRouting', 'PlannerCallResult', 'PlannerTelemetry', 'verify_claim', 'verify_plan', 'UNIT_PROFILE_CHOICES', 'detect_text_language', 'resolve_unit_profile',
            'PremiseGroundingResult', 'diagnose_alternate_anchors', 'verify_claim_target_correspondence',
            'verify_premise_grounding', 'verify_step_anchor_correspondence']

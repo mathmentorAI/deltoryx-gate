@@ -9,7 +9,7 @@ explicitly define.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import re
@@ -241,6 +241,18 @@ class UnitRegistry:
             registry.add(unit)
         return registry
 
+    def with_aliases(self, aliases: Mapping[str, tuple[str, ...]]) -> 'UnitRegistry':
+        """Return a NEW registry whose units carry extra labels. Names, dimensions and
+        factors are unchanged, and the receiver (and its fingerprint) is not modified."""
+        unknown = sorted(set(aliases) - set(self._units))
+        if unknown:
+            raise ValueError(f'Aliases given for undeclared units: {unknown}')
+        units = []
+        for name, unit in self._units.items():
+            extra = tuple(a for a in aliases.get(name, ()) if a not in unit.aliases)
+            units.append(replace(unit, aliases=unit.aliases + extra) if extra else unit)
+        return UnitRegistry(units)
+
     def lookup(self, label: str | None, path: str = 'unit') -> Unit:
         if not isinstance(label, str) or not label.strip():
             raise UnmappedProposal('unit_required', path, label)
@@ -287,7 +299,7 @@ class UnitRegistry:
 # Conversions are declared only where they are exact. Calendar days, business days and
 # months are different dimensions: converting between them requires a calendar policy.
 STANDARD_UNITS = UnitRegistry([
-    Unit('percent', 'ratio', '1', ('%', 'pct', 'per cent', 'por ciento', 'porcentaje')),
+    Unit('percent', 'ratio', '1', ('%', 'pct', 'per cent')),
     Unit('fraction', 'ratio', '100', ()),
     Unit('percentage_point', 'ratio_difference', '1', ('pp', 'percentage points', 'percentage point')),
     Unit('basis_point', 'ratio_difference', '0.01', ('bp', 'bps', 'basis points')),
@@ -295,23 +307,47 @@ STANDARD_UNITS = UnitRegistry([
     Unit('percentage_points_per_annum', 'annual_rate_difference', '1', ('percentage points per annum', 'pp per annum')),
     Unit('basis_points_per_annum', 'annual_rate_difference', '0.01', ('bps per annum', 'bp/yr', 'bps/yr', 'basis points per annum')),
     Unit('multiple', 'multiplier', '1', ('times', 'x', 'multiplier')),
-    Unit('calendar_days', 'duration_calendar_days', '1', ('days', 'day', 'calendar day', 'día', 'días', 'dia', 'dias', 'día natural', 'días naturales')),
-    Unit('weeks', 'duration_calendar_days', '7', ('week', 'semana', 'semanas')),
-    Unit('business_days', 'duration_business_days', '1', ('business day', 'working days', 'working day', 'día hábil', 'días hábiles', 'dia habil', 'dias habiles', 'día laborable', 'días laborables')),
-    Unit('months', 'duration_months', '1', ('month', 'mes', 'meses')),
-    Unit('years', 'duration_months', '12', ('year', 'año', 'años', 'ano', 'anos')),
-    Unit('hours', 'duration_hours', '1', ('hour', 'hora', 'horas')),
+    Unit('calendar_days', 'duration_calendar_days', '1', ('days', 'day', 'calendar day')),
+    Unit('weeks', 'duration_calendar_days', '7', ('week',)),
+    Unit('business_days', 'duration_business_days', '1', ('business day', 'working days', 'working day')),
+    Unit('months', 'duration_months', '1', ('month',)),
+    Unit('years', 'duration_months', '12', ('year',)),
+    Unit('hours', 'duration_hours', '1', ('hour',)),
     Unit('hours_per_week', 'hours_per_week', '1', ('hours/week', 'hours a week')),
     Unit('hours_per_day', 'hours_per_day', '1', ('hours/day', 'hours a day')),
     Unit('count', 'count', '1', ('items', 'number')),
-    Unit('USD', 'currency:USD', '1', ('US dollars', 'dollars', '$', 'dólares', 'dolares', 'dólar', 'dolar')),
+    Unit('USD', 'currency:USD', '1', ('US dollars', 'dollars', '$')),
     Unit('EUR', 'currency:EUR', '1', ('euros', 'euro', '€')),
-    Unit('GBP', 'currency:GBP', '1', ('pounds sterling', '£', 'libras', 'libra')),
+    Unit('GBP', 'currency:GBP', '1', ('pounds sterling', '£')),
     Unit('USD_per_year', 'currency_rate:USD/year', '1', ('USD per year', 'USD annually', 'USD per annum')),
     Unit('USD_per_month', 'currency_rate:USD/year', '12', ('USD per month', 'USD monthly')),
     Unit('EUR_per_year', 'currency_rate:EUR/year', '1', ('EUR per year', 'EUR per annum')),
     Unit('EUR_per_month', 'currency_rate:EUR/year', '12', ('EUR per month',)),
 ])
+
+
+# Spanish-language unit labels, kept OUT of STANDARD_UNITS on purpose: STANDARD_UNITS is
+# fingerprinted by frozen vocabularies and preregistrations (e.g. PR-MCI phase 3), so any
+# new label there is a compatibility break. This profile only adds labels; unit names,
+# dimensions and conversion factors are identical to STANDARD_UNITS.
+SPANISH_UNIT_ALIASES: dict[str, tuple[str, ...]] = {
+    'percent': ('por ciento', 'porcentaje'),
+    'calendar_days': ('día', 'días', 'dia', 'dias', 'día natural', 'días naturales'),
+    'weeks': ('semana', 'semanas'),
+    'business_days': ('día hábil', 'días hábiles', 'dia habil', 'dias habiles', 'día laborable', 'días laborables'),
+    'months': ('mes', 'meses'),
+    'years': ('año', 'años', 'ano', 'anos'),
+    'hours': ('hora', 'horas'),
+    'USD': ('dólares', 'dolares', 'dólar', 'dolar'),
+    'GBP': ('libras', 'libra'),
+}
+SPANISH_UNITS = STANDARD_UNITS.with_aliases(SPANISH_UNIT_ALIASES)
+
+# Named, explicit unit profiles. Callers select one by name; nothing mutates STANDARD_UNITS.
+UNIT_PROFILES: dict[str, UnitRegistry] = {
+    'standard': STANDARD_UNITS,
+    'es': SPANISH_UNITS,
+}
 
 
 @dataclass(frozen=True)

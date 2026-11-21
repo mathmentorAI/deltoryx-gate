@@ -203,7 +203,7 @@ def _cmd_verify_claim(args: argparse.Namespace) -> int:
 
     if getattr(args, "plan_json", None):
         plan_payload: Any = json.loads(Path(args.plan_json).read_text(encoding="utf-8"))
-        result = verify_plan(docs, args.claim, plan_payload, as_of=args.as_of)
+        result = verify_plan(docs, args.claim, plan_payload, as_of=args.as_of, unit_profile=args.unit_profile)
     else:
         api_key = os.environ.get(args.api_key_env, "").strip()
         if not api_key:
@@ -241,6 +241,7 @@ def _cmd_verify_claim(args: argparse.Namespace) -> int:
             model=model,
             as_of=args.as_of,
             max_retries=int(args.max_retries),
+            unit_profile=args.unit_profile,
         )
 
     rendered = json.dumps(result.to_dict(), indent=2, ensure_ascii=False)
@@ -279,6 +280,8 @@ def main(argv: list[str] | None = None) -> int:
     p_vc.add_argument("--max-retries", type=int, default=1, help="Bounded planner repair retries")
     p_vc.add_argument("--enable-thinking", action="store_true", help="Enable model thinking if supported")
     p_vc.add_argument("--as-of", default=None, help="Optional explicit reference date")
+    p_vc.add_argument("--unit-profile", choices=("auto", "standard", "es"), default="auto",
+                      help="Unit-label profile: 'auto' picks 'es' for Spanish text, else 'standard'")
     p_vc.add_argument("--out", type=Path, default=None, help="Optional path to write JSON verification artifact")
 
     p_mcp = sub.add_parser("mcp", help="Start ClaimLayer MCP server over stdio")

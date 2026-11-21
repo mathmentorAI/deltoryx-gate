@@ -8,6 +8,8 @@ separates epistemic verdict, operational routing, and certainty/calibration.
 """
 from __future__ import annotations
 
+import re
+
 from dataclasses import asdict, dataclass, field
 from decimal import Decimal, InvalidOperation
 import time
@@ -42,7 +44,7 @@ from .premise_grounding import (
     verify_step_anchor_correspondence,
 )
 from .verifiers import DEFAULT_VERIFIER_REGISTRY, VerifierContext, VerifierRegistry, VerifierResult
-from .vocabulary import STANDARD_UNITS, UnitRegistry, UnmappedProposal, label_key, normalize_date
+from .vocabulary import STANDARD_UNITS, UNIT_PROFILES, UnitRegistry, UnmappedProposal, label_key, normalize_date
 
 DERIVATION_PLANNER_PROMPT_VERSION = "v4-derivation-planner-2"
 
@@ -326,6 +328,8 @@ class PlannerTelemetry:
     verifier_latency_ms: float = 0.0
     total_latency_ms: float = 0.0
     attempt_traces: tuple[dict[str, Any], ...] = ()
+    unit_profile: str | None = None
+    unit_registry_fingerprint: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -344,6 +348,8 @@ class PlannerTelemetry:
             "verifier_latency_ms": round(self.verifier_latency_ms, 3),
             "total_latency_ms": round(self.total_latency_ms, 3),
             "attempt_traces": list(self.attempt_traces),
+            "unit_profile": self.unit_profile,
+            "unit_registry_fingerprint": self.unit_registry_fingerprint,
         }
 
 
@@ -782,6 +788,8 @@ def _base_telemetry(
     catalog: OperationCatalog,
     verifier_ms: float,
     external_telemetry: Mapping[str, Any] | None = None,
+    unit_profile: str | None = None,
+    unit_registry_fingerprint: str | None = None,
 ) -> PlannerTelemetry:
     ext = dict(external_telemetry or {})
     plan_ms = float(ext.get("planning_latency_ms") or 0.0)
@@ -802,8 +810,74 @@ def _base_telemetry(
         verifier_latency_ms=verifier_ms,
         total_latency_ms=total_ms,
         attempt_traces=tuple(ext.get("attempt_traces") or ()),
+        unit_profile=unit_profile,
+        unit_registry_fingerprint=unit_registry_fingerprint,
     )
 
+
+
+# ---------------------------------------------------------------------------
+# Explicit unit-profile selection
+# ---------------------------------------------------------------------------
+
+UNIT_PROFILE_CHOICES = ("auto", "standard", "es")
+
+_ES_MARKERS = frozenset(
+    "el la los las del que y es fue era son hoy ayer mañana días dias antes después despues "
+    "con por una un su sus se para al lo como quedé quedamos cuando entre sobre está esta".split()
+)
+_EN_MARKERS = frozenset(
+    "the and of is was were are today yesterday tomorrow days before after with by an his her "
+    "its for to as on at that this when between".split()
+)
+
+
+def detect_text_language(*texts: str) -> str:
+    """Deterministic lexical language guess used ONLY to choose a unit-label profile.
+
+    Returns 'es', 'en' or 'und'. It never touches premises or verdicts: it only decides which
+    surface labels (e.g. 'días', 'dólares') the unit registry recognises. The choice is recorded
+    in telemetry so every result stays reproducible.
+    """
+    joined = " ".join(t for t in texts if isinstance(t, str)).lower()
+    tokens = re.findall(r"[a-záéíóúüñ]+", joined)
+    es = sum(1 for t in tokens if t in _ES_MARKERS)
+    en = sum(1 for t in tokens if t in _EN_MARKERS)
+    if re.search(r"[ñ¿¡áéíóú]", joined):
+        es += 2
+    if es > en:
+        return "es"
+    if en > es:
+        return "en"
+    return "und"
+
+
+def resolve_unit_profile(unit_profile: str, claim: str, source_texts: Sequence[str]) -> tuple[str, UnitRegistry]:
+    """Map 'auto' | 'standard' | 'es' to a named registry from UNIT_PROFILES."""
+    if unit_profile not in UNIT_PROFILE_CHOICES:
+        raise ValueError(f"unit_profile must be one of {UNIT_PROFILE_CHOICES}, got {unit_profile!r}")
+    name = unit_profile
+    if name == "auto":
+        name = "es" if detect_text_language(claim, *source_texts) == "es" else "standard"
+    return name, UNIT_PROFILES[name]
+
+
+def _resolve_derivation_profile(
+    domain_profile: DomainProfile | None,
+    unit_profile: str,
+    claim: str,
+    docs_map: Mapping[str, SourceDocument],
+) -> tuple[DomainProfile, str, str]:
+    """Return (profile, unit_profile_label, unit_registry_fingerprint).
+
+    An explicitly supplied DomainProfile always wins (its own units are used unchanged).
+    Otherwise a default profile is built over the named unit profile.
+    """
+    if domain_profile is not None:
+        reg = domain_profile.effective_unit_registry()
+        return domain_profile, f"domain_profile:{domain_profile.profile_id}", digest(reg.describe())
+    name, reg = resolve_unit_profile(unit_profile, claim, [d.text for d in docs_map.values()])
+    return DomainProfile(profile_id="default", unit_registry=reg), name, digest(reg.describe())
 
 # ---------------------------------------------------------------------------
 # Deterministic Plan Verification & Recalculation Engine
@@ -824,11 +898,14 @@ def verify_plan(
     verifier_registry: VerifierRegistry | None = None,
     as_of: str | None = None,
     telemetry: Mapping[str, Any] | None = None,
+    unit_profile: str = "auto",
 ) -> ClaimVerificationResult:
     """Deterministically validate a structured proposal, ground premises, execute operations, and contrast `claim`."""
     t_ver0 = time.monotonic()
     docs_map, _ = normalize_sources(sources)
-    profile = domain_profile or DomainProfile(profile_id="default")
+    profile, unit_profile_label, unit_registry_fp = _resolve_derivation_profile(
+        domain_profile, unit_profile, claim, docs_map
+    )
     registry = profile.effective_unit_registry()
     eff_verifiers = _effective_verifier_registry(verifier_registry, catalog)
 
@@ -872,6 +949,8 @@ def verify_plan(
             catalog=catalog,
             verifier_ms=ver_ms,
             external_telemetry=telemetry,
+            unit_profile=unit_profile_label,
+            unit_registry_fingerprint=unit_registry_fp,
         )
         return ClaimVerificationResult(
             original_claim=claim,
@@ -1623,7 +1702,10 @@ class ClaimVerifier:
         domain_profile: DomainProfile | None = None,
         verifier_registry: VerifierRegistry | None = None,
         max_retries: int = 1,
+        unit_profile: str = "auto",
     ) -> None:
+        if unit_profile not in UNIT_PROFILE_CHOICES:
+            raise ValueError(f"unit_profile must be one of {UNIT_PROFILE_CHOICES}, got {unit_profile!r}")
         if planner is not None:
             self.planner: DerivationPlanner = planner
         elif model is not None:
@@ -1634,6 +1716,8 @@ class ClaimVerifier:
             raise ValueError("max_retries must be in [0, 5].")
         self.catalog = catalog
         self.domain_profile = domain_profile or DomainProfile(profile_id="default")
+        self._explicit_domain_profile = domain_profile
+        self.unit_profile = unit_profile
         self.verifier_registry = verifier_registry
         self.max_retries = max_retries
 
@@ -1651,6 +1735,9 @@ class ClaimVerifier:
     ) -> ClaimVerificationResult:
         t_total0 = time.monotonic()
         docs_map, docs_list = normalize_sources(sources)
+        profile, unit_profile_label, unit_registry_fp = _resolve_derivation_profile(
+            self._explicit_domain_profile, self.unit_profile, claim, docs_map
+        )
 
         calls = 0
         retries = 0
@@ -1668,7 +1755,7 @@ class ClaimVerifier:
                 sources=docs_list,
                 claim=claim,
                 catalog=self.catalog,
-                domain_profile=self.domain_profile,
+                domain_profile=profile,
                 repair_feedback=repair_feedback,
             )
             calls += 1
@@ -1718,6 +1805,8 @@ class ClaimVerifier:
                     verifier_latency_ms=round(verifier_ms_acc, 3),
                     total_latency_ms=total_ms,
                     attempt_traces=tuple(attempt_traces),
+                    unit_profile=unit_profile_label,
+                    unit_registry_fingerprint=unit_registry_fp,
                 )
                 certainty = _build_certainty_report(
                     epistemic_verdict="unresolved",
@@ -1726,7 +1815,7 @@ class ClaimVerifier:
                     rejected_count=0,
                     checks_applied=(),
                     docs_map=docs_map,
-                    profile=self.domain_profile,
+                    profile=profile,
                     assessment=None,
                 )
                 return ClaimVerificationResult(
@@ -1762,9 +1851,10 @@ class ClaimVerifier:
                 claim,
                 call_res.proposal,
                 catalog=self.catalog,
-                domain_profile=self.domain_profile,
+                domain_profile=self._explicit_domain_profile,
                 verifier_registry=self.verifier_registry,
                 as_of=as_of,
+                unit_profile=self.unit_profile,
             )
             verifier_ms_acc += ver_res.telemetry.verifier_latency_ms
             attempt_traces.append({
@@ -1814,6 +1904,8 @@ class ClaimVerifier:
             verifier_latency_ms=round(verifier_ms_acc, 3),
             total_latency_ms=total_ms,
             attempt_traces=tuple(attempt_traces),
+            unit_profile=unit_profile_label,
+            unit_registry_fingerprint=unit_registry_fp,
         )
         return ClaimVerificationResult(
             original_claim=last_result.original_claim,
@@ -1856,6 +1948,7 @@ def verify_claim(
     verifier_registry: VerifierRegistry | None = None,
     as_of: str | None = None,
     max_retries: int = 1,
+    unit_profile: str = "auto",
 ) -> ClaimVerificationResult:
     """Public single-call entrypoint verifying a natural-language claim against sources via planner + v4 core."""
     verifier = ClaimVerifier(
@@ -1865,5 +1958,6 @@ def verify_claim(
         domain_profile=domain_profile,
         verifier_registry=verifier_registry,
         max_retries=max_retries,
+        unit_profile=unit_profile,
     )
     return verifier.verify(sources, claim, as_of=as_of)

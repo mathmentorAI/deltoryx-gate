@@ -109,6 +109,8 @@ from .planner import (
     DERIVATION_PLANNER_PROMPT,
     DERIVATION_PLANNER_PROMPT_VERSION,
     DERIVATION_PLANNER_PROMPT_V2,
+    DERIVATION_PLANNER_PROMPT_V3,
+    DERIVATION_PLANNER_PROMPT_VERSION_V3,
     DERIVATION_PLANNER_PROMPT_VERSION_V2,
     CertaintyReport,
     ClaimDerivationPlanner,
@@ -231,6 +233,6 @@ __all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'UnitEvaluation', 'evaluate_unit_a
            'compute_date_offset', 'compute_weekday_shift', 'normalize_day_offset', 'normalize_weekday',
            'DERIVATION_PLANNER_PROMPT', 'DERIVATION_PLANNER_PROMPT_VERSION', 'CertaintyReport',
            'ClaimDerivationPlanner', 'ClaimVerificationResult', 'ClaimVerifier', 'DerivationPlanner',
-           'OperationalRouting', 'PlannerCallResult', 'PlannerTelemetry', 'verify_claim', 'verify_plan', 'DERIVATION_PLANNER_PROMPT_V2', 'DERIVATION_PLANNER_PROMPT_VERSION_V2', 'DEFAULT_RELIABILITY_POLICY', 'EXPRESSION_PRIMITIVES', 'GRADES', 'ExpressionError', 'ProposedOperation', 'ReliabilityPolicy', 'evaluate_expression', 'premise_fidelity', 'validate_expression', 'UNIT_PROFILE_CHOICES', 'DEFAULT_PLANNER_BASE_URL', 'DEFAULT_PLANNER_MODEL', 'build_derivation_planner_model', 'detect_text_language', 'resolve_unit_profile',
+           'OperationalRouting', 'PlannerCallResult', 'PlannerTelemetry', 'verify_claim', 'verify_plan', 'DERIVATION_PLANNER_PROMPT_V2', 'DERIVATION_PLANNER_PROMPT_V3', 'DERIVATION_PLANNER_PROMPT_VERSION_V3', 'DERIVATION_PLANNER_PROMPT_VERSION_V2', 'DEFAULT_RELIABILITY_POLICY', 'EXPRESSION_PRIMITIVES', 'GRADES', 'ExpressionError', 'ProposedOperation', 'ReliabilityPolicy', 'evaluate_expression', 'premise_fidelity', 'validate_expression', 'UNIT_PROFILE_CHOICES', 'DEFAULT_PLANNER_BASE_URL', 'DEFAULT_PLANNER_MODEL', 'build_derivation_planner_model', 'detect_text_language', 'resolve_unit_profile',
            'PremiseGroundingResult', 'diagnose_alternate_anchors', 'verify_claim_target_correspondence',
            'verify_premise_grounding', 'verify_step_anchor_correspondence']

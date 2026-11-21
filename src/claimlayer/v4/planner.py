@@ -44,6 +44,7 @@ from .premise_grounding import (
     verify_step_anchor_correspondence,
 )
 from .verifiers import DEFAULT_VERIFIER_REGISTRY, VerifierContext, VerifierRegistry, VerifierResult
+from .diff_evidence import numbered_text, parse_unified_diff, path_matches, resolve_line_range
 from .vocabulary import STANDARD_UNITS, UNIT_PROFILES, UnitRegistry, UnmappedProposal, label_key, normalize_date
 from .reconstruction import (
     DEFAULT_RELIABILITY_POLICY,
@@ -131,9 +132,9 @@ Devuelve ÚNICAMENTE un objeto JSON válido con este esquema exacto:
 
 # v3: the planner may propose operations (closed expression language or model-asserted),
 # and is told that interpreted premise values lower reliability.
-DERIVATION_PLANNER_PROMPT_VERSION = "v4-derivation-planner-3"
+DERIVATION_PLANNER_PROMPT_VERSION_V3 = "v4-derivation-planner-3"
 
-DERIVATION_PLANNER_PROMPT = """Eres el planificador estructurado de derivaciones de Deltoryx Gate.
+DERIVATION_PLANNER_PROMPT_V3 = """Eres el planificador estructurado de derivaciones de Deltoryx Gate.
 Recibes `sources` (documentos con `document_id`, `revision` y `text`), una `claim` (afirmación a contrastar), un catálogo explícito `operations_catalog`, opcionalmente `declared_rules` y `units`, y opcionalmente `repair_feedback` de un intento previo fallido.
 
 Tu tarea es proponer premisas verificables extraídas SOLO de `sources` y un plan acíclico de pasos sobre `operations_catalog` para recalcular el hecho relevante y compararlo con `claim`. Un motor determinista comprobará todas las citas, ejecutará las operaciones y decidirá si `claim` se sostiene, queda refutada o carece de evidencia.
@@ -168,6 +169,89 @@ Devuelve ÚNICAMENTE un objeto JSON válido con este esquema exacto:
       "document_id": "string",
       "revision": "string",
       "quote": "subcadena literal exacta de sources",
+      "entity": "string",
+      "event": "string",
+      "predicate": "string",
+      "value": "JSON",
+      "unit": "string|null",
+      "direction": "before|after|neutral|null",
+      "anchor_reference": "string|null",
+      "polarity": 1
+    }
+  ],
+  "steps": [
+    {
+      "step_id": "s1",
+      "operation": "nombre_operacion_catalogo",
+      "premises": ["p1", "p2"],
+      "conclusion_id": "c1",
+      "rule_id": "string|null",
+      "rule_version": "string|null",
+      "parameters": {},
+      "assumptions": [],
+      "proposed_value": "JSON|null",
+      "proposed_unit": "string|null"
+    }
+  ],
+  "derived_conclusion_id": "c1|null",
+  "missing_premises": [
+    {"role": "string", "description": "string"}
+  ],
+  "assumptions": ["string"],
+  "suggested_rules": [
+    {"rule_id": "string", "description": "string", "premises": ["string"], "conclusion": "string"}
+  ],
+  "proposed_operations": [
+    {"name": "identificador", "description": "string", "inputs": ["a", "b"], "expression": "árbol JSON o null", "output_type": "string", "output_unit": "string|inherit|null"}
+  ]
+}"""
+
+# v4: line-range citations, revision/file binding for diffs, reproducible counts, a generic example.
+DERIVATION_PLANNER_PROMPT_VERSION = "v4-derivation-planner-4"
+
+DERIVATION_PLANNER_PROMPT = """Eres el planificador estructurado de derivaciones de Deltoryx Gate.
+Recibes `sources` (documentos con `document_id`, `revision` y `text`), una `claim` (afirmación a contrastar), un catálogo explícito `operations_catalog`, opcionalmente `declared_rules` y `units`, y opcionalmente `repair_feedback` de un intento previo fallido.
+
+Tu tarea es proponer premisas verificables extraídas SOLO de `sources` y un plan acíclico de pasos sobre `operations_catalog` para recalcular el hecho relevante y compararlo con `claim`. Un motor determinista comprobará todas las citas, ejecutará las operaciones y decidirá si `claim` se sostiene, queda refutada o carece de evidencia.
+
+Reglas estrictas:
+1. `claim` es EXCLUSIVAMENTE el objeto a contrastar. NUNCA uses `claim` como premisa, cita o evidencia, ni tomes datos del reloj del sistema. Extrae en `claim_target` lo que afirma literalmente `claim` sin cambiar su valor, unidad ni polaridad.
+2. Cada premisa en `premises` debe citar un `document_id` y `revision` existentes en `sources` y copiar en `quote` un fragmento LITERAL exacto (subcadena continua) del `text` de ese documento.
+3. Mantén la correspondencia por cláusula elemental: la `quote` debe respaldar exactamente `entity`, `event`, `value`, `unit`, `direction` y `anchor_reference`. No mezcles valores de una cláusula con entidades o eventos de otra cláusula. Cuando la cláusula nombre un sujeto o evento, usa esas mismas palabras literales en `entity`/`event` (no etiquetas abstractas). Para días de la semana usa `unit: null`.
+4. En desplazamientos relativos: expresiones hacia atrás ("antes", "atrás", "previo", "hace", "disminuye", "before", "earlier", "ago", "minus") requieren signo NEGATIVO en `value` (ej. -2) y `direction="before"`; expresiones hacia adelante ("después", "posterior", "luego", "aumenta", "after", "later", "plus") requieren signo POSITIVO y `direction="after"`. Si el texto indica respecto a qué evento/fecha es el desplazamiento, ponlo en `anchor_reference`.
+5. Usa SOLO operaciones declaradas en `operations_catalog` (y `rule_id` declarados en `declared_rules` cuando uses `rule_application`). Respeta estrictamente el orden de operandos del catálogo:
+   - `weekday_shift`: `premises` = `[id_ancla_dia_semana, id_desplazamiento]`
+   - `date_offset`: `premises` = `[id_ancla_fecha_iso, id_desplazamiento]`
+   - `sub`: `premises` = `[id_minuendo, id_sustraendo]`
+   - `div`: `premises` = `[id_numerador, id_denominador]`
+6. Si falta un dato indispensable en `sources` (por ejemplo, falta el ancla temporal o falta un operando necesario), NO lo inventes ni uses el reloj del sistema: deja `steps` vacío, `derived_conclusion_id` en `null` y detalla la carencia en `missing_premises`.
+7. Si necesitas una operación ausente de `operations_catalog` y `declared_rules`, PROPÓNLA en `proposed_operations` y úsala en `steps` con su `name`. Siempre que puedas, defínela con `expression`, un árbol JSON sobre las primitivas de `expression_primitives`: nodos `{"input": "<nombre de entrada>"}`, `{"const": <escalar>}` u `{"op": "<primitiva>", "args": [...]}`. Las entradas se asignan en orden a los `premises` del paso. Deltoryx interpretará y re-ejecutará la expresión (fiabilidad C). Si no puede expresarse así, deja `expression` en `null` y pon el resultado en `proposed_value` del paso: quedará registrado como afirmación tuya, de fiabilidad baja (D). Nunca escribas código de programación.
+9. Cada documento de `sources` trae `numbered_text` (sus líneas numeradas desde 1). Para citar varias líneas, sobre todo en diffs o código, indica `line_start` y `line_end` (inclusive) del documento en lugar de copiar el texto: Deltoryx extraerá la cita literal. Si usas `quote`, debe ser una subcadena exacta.
+10. En diffs unificados, `+` = línea solo en head, `-` = solo en base, ` ` = presente en ambos. Indica en `claim_target.revision` de qué habla la afirmación: `change` (lo que hace el PR; valor por defecto), `head` (estado final), `base` (estado previo), `added` o `removed`. Una conclusión sobre el cambio necesita al menos una línea cambiada; una línea solo de base no sostiene una conclusión sobre head; el contexto sin cambios no demuestra que el PR haya cambiado algo.
+11. Para afirmaciones cuantitativas (número de líneas, tests, entradas, elementos) calcula el recuento con `count_lines` sobre el bloque citado (con `line_prefix` y `contains` si hace falta). Citar un número escrito en una fuente no demuestra un recuento. Las fuentes escritas por el autor que repiten la afirmación no son evidencia independiente. Si el bloque contado contiene «\\ No newline at end of file», fija `line_convention` ("git" o "wc") según lo que diga la afirmación; si no lo dice, déjalo sin fijar y el verificador se abstendrá.
+
+Ejemplo de forma (ajeno a cualquier caso real): fuente `d1` con un diff de `config/limits.yaml` que añade en sus líneas 5-7 tres claves `max_*`; afirmación «El cambio añade tres límites». Plan: `claim_target` = {"subject": "config/limits.yaml", "predicate": "límites añadidos", "value": 3, "unit": "count", "revision": "added"}; premisa `p1` con `document_id` "d1", `line_start` 5, `line_end` 7, `entity` "config/limits.yaml", `event` "max", `value` null; paso `count_lines` sobre `p1` con `parameters` {"line_prefix": "+", "contains": "max_"} → 3. Si la afirmación fuera «al menos tres», añade una operación propuesta `al_menos` con `expression` {"op": "ge", "args": [{"input": "n"}, {"const": 3}]} y úsala sobre el resultado del recuento.
+8b. Prefiere premisas cuyo `value` aparezca literalmente en la `quote` (números, nombres, rutas, identificadores). Un valor que no esté en la cita (por ejemplo `true` como interpretación de una línea) se registra como interpretación tuya y rebaja la fiabilidad al grado más bajo (E).
+8. NUNCA emitas puntuaciones de confianza, probabilidades, dictámenes (`supported`/`refuted`) ni código ejecutable.
+
+Devuelve ÚNICAMENTE un objeto JSON válido con este esquema exacto:
+{
+  "claim_target": {
+    "subject": "string",
+    "predicate": "string",
+    "value": "JSON",
+    "unit": "string|null",
+    "polarity": 1,
+    "revision": "change|head|base|added|removed|null"
+  },
+  "premises": [
+    {
+      "claim_id": "p1",
+      "document_id": "string",
+      "revision": "string",
+      "quote": "subcadena literal exacta de sources (o vacía si usas line_start/line_end)",
+      "line_start": "int|null",
+      "line_end": "int|null",
       "entity": "string",
       "event": "string",
       "predicate": "string",
@@ -280,6 +364,7 @@ class ClaimDerivationPlanner:
                     "document_id": doc.document_id,
                     "revision": doc.revision,
                     "text": doc.text,
+                    **({"numbered_text": numbered_text(doc.text)} if "line_start" in self.prompt and "\n" in doc.text else {}),
                 }
                 for doc in sources
             ],
@@ -817,7 +902,23 @@ def _check_conclusion_binding(
     for pr in dep_premises:
         ev_tokens |= content_tokens(pr.get("entity")) | content_tokens(pr.get("event")) | content_tokens(
             (pr.get("evidence") or {}).get("quote")) | content_tokens(pr.get("anchor_reference"))
+    diff_deps = [pr for pr in dep_premises if pr.get("diff_binding")]
+    rev_mode = str(target.get("revision") or ("change" if diff_deps else "")) or None
+    if diff_deps:
+        sides = [set(pr["diff_binding"].get("sides") or []) for pr in diff_deps]
+        if rev_mode not in ("base", "removed"):
+            for pr, sd in zip(diff_deps, sides):
+                if sd == {"-"}:
+                    defects.append({"code": "BASE_ONLY_EVIDENCE_FOR_HEAD_CLAIM",
+                                    "message": f"La premisa {pr.get('claim_id')} solo cita líneas de base ('-'); no sostiene una conclusión sobre head/cambio."})
+        if rev_mode in ("change", "added") and not any("+" in sd for sd in sides) and not (rev_mode == "change" and any("-" in sd for sd in sides)):
+            defects.append({"code": "NO_CHANGED_LINE_EVIDENCE",
+                            "message": "La afirmación trata del cambio del PR, pero la evidencia citada del diff es solo contexto sin cambios."})
+        if rev_mode == "removed" and not any("-" in sd for sd in sides):
+            defects.append({"code": "NO_REMOVED_LINE_EVIDENCE", "message": "La afirmación trata de algo eliminado y no se cita ninguna línea '-'."})
     info: dict[str, Any] = {
+        "revision_mode": rev_mode,
+        "diff_premises": {str(pr.get("claim_id")): pr["diff_binding"] for pr in diff_deps},
         "revision_binding": "document_revision_verified" if dep_premises else "none",
         "premise_revisions": sorted({str((pr.get("evidence") or {}).get("document_id")) + "@" + str((pr.get("evidence") or {}).get("revision", ""))[:12]
                                      for pr in dep_premises}),
@@ -1368,6 +1469,7 @@ def verify_plan(
     all_defects: list[dict[str, Any]] = []
     checks_applied: list[str] = ["claim_target_correspondence"]
     seen_premise_ids: set[str] = set()
+    diff_maps: dict[str, Any] = {}
 
     for idx, rp in enumerate(raw_premises):
         if not isinstance(rp, Mapping):
@@ -1380,7 +1482,34 @@ def verify_plan(
         seen_premise_ids.add(pid)
         raw_premises_by_id[pid] = rp
 
+        quote_source = "quote"
+        range_defect = None
+        doc_obj = docs_map.get(str(rp.get("document_id") or ""))
+        if rp.get("line_start") is not None and rp.get("line_end") is not None and doc_obj is not None:
+            resolved = resolve_line_range(doc_obj.text, rp.get("line_start"), rp.get("line_end"))
+            if resolved is None or not resolved.strip():
+                range_defect = {"claim_id": pid, "code": "INVALID_LINE_RANGE",
+                                "message": f"Rango de líneas inválido {rp.get('line_start')}-{rp.get('line_end')} en '{doc_obj.document_id}'."}
+            else:
+                rp = {**rp, "quote": resolved}
+                raw_premises_by_id[pid] = rp
+                quote_source = "line_range"
         gr = verify_premise_grounding(rp, docs_map, unit_registry=registry, claim_text=claim)
+        diff_binding = None
+        if doc_obj is not None and gr.evidence_ref is not None:
+            dmap = diff_maps.setdefault(doc_obj.document_id, parse_unified_diff(doc_obj.text))
+            if dmap is not None:
+                diff_binding = dmap.binding_for_span(gr.evidence_ref.start, gr.evidence_ref.end)
+                ent = str(rp.get("entity") or rp.get("subject") or "")
+                ent_codes = {d.code for d in gr.defects if d.code.startswith("ENTITY_")}
+                if ent_codes and path_matches(ent, diff_binding["files"]):
+                    import dataclasses as _dc
+                    kept = tuple(d for d in gr.defects if not d.code.startswith("ENTITY_"))
+                    gr = _dc.replace(gr, defects=kept, grounded=not kept,
+                                     checks_passed=tuple(gr.checks_passed) + ("entity_bound_to_diff_file",))
+        if range_defect is not None:
+            from .fidelity import FidelityFinding
+            gr = __import__("dataclasses").replace(gr, defects=tuple(gr.defects) + (FidelityFinding(code="INVALID_LINE_RANGE", message=range_defect["message"], field="evidence", detail={"claim_id": pid}),), grounded=False)
         checks_applied.extend(gr.checks_passed)
         # Detect if an ungrounded quote came from the claim text itself
         q_str = str(rp.get("quote") or rp.get("verbatim_quote") or "").strip()
@@ -1433,6 +1562,8 @@ def verify_plan(
                 "evidence": gr.to_dict()["evidence"],
                 "matched_clauses": list(gr.matched_clauses),
                 "checks_passed": list(gr.checks_passed),
+                "quote_source": quote_source,
+                "diff_binding": diff_binding,
             })
 
     # Check if any step tries to reference claim_target / claim directly as a premise
@@ -1901,6 +2032,34 @@ def verify_plan(
             defects_out=binding_defects,
             checks_applied=checks_applied + ["conclusion_binding"],
             explanation="Sin resolver: la conclusión no queda vinculada a la afirmación. " + " ".join(d["message"] for d in binding_defects),
+            raw_clean=raw_clean,
+            graph_admitted=False,
+            graph=graph,
+            assessment=assessment,
+            reliability=reliability,
+        )
+    sensitive = [st for st in _dependency_steps(verified_steps_out, conc_id)
+                 if isinstance(st.get("details"), Mapping) and st["details"].get("convention_sensitive")]
+    if sensitive:
+        det = [{"step_id": st["step_id"], "count_git": st["details"].get("count_git"),
+                "count_wc": st["details"].get("count_wc")} for st in sensitive]
+        return _finish(
+            claim_target=target_dict,
+            computed_conclusion=computed_conc_dict,
+            epistemic_verdict="insufficient_evidence",
+            outcome_category="count_convention_ambiguous",
+            routing=OperationalRouting(status="ESCALATE", allowed=False, requires_human=True,
+                                       reasons=("COUNT_CONVENTION_AMBIGUOUS",)),
+            premises_out=grounded_records,
+            steps_out=verified_steps_out,
+            assumptions_out=all_assumptions,
+            defects_out=[{"code": "COUNT_CONVENTION_AMBIGUOUS",
+                          "message": ("El recuento incluye líneas sin salto de línea final y no se fijó convenio "
+                                      "(git las cuenta, wc -l no); el resultado depende del convenio."),
+                          "detail": det}],
+            checks_applied=checks_applied + ["conclusion_binding", "count_convention"],
+            explanation=("Evidencia insuficiente: el recuento depende del convenio de líneas sin salto final "
+                         f"({det}); ni se deriva ni se refuta."),
             raw_clean=raw_clean,
             graph_admitted=False,
             graph=graph,

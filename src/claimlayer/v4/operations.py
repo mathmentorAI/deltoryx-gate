@@ -961,6 +961,11 @@ def _exec_count_lines(
     parameters: line_prefix ('+', '-', ' ' or None) restricts to unified-diff lines of that side;
     contains (literal, case-sensitive) restricts to lines containing it. Diff file headers and the
     '\\ No newline at end of file' marker are never counted.
+
+    line_convention: None (unset), 'git' or 'wc'. A counted line immediately followed by the
+    '\\ No newline' marker has no terminating newline: git/diff stats count it, `wc -l` does not.
+    When such lines are counted and no convention is fixed, the count is convention-dependent and
+    details['convention_sensitive'] is True (the planner then neither derives nor refutes).
     """
     if len(premises) != 1:
         return OperationOutput(ok=False, error_code="COUNT_LINES_REQUIRES_ONE_PREMISE", error_kind="missing_input")
@@ -971,19 +976,35 @@ def _exec_count_lines(
     contains = parameters.get("contains")
     if contains is not None and (not isinstance(contains, str) or not contains):
         return OperationOutput(ok=False, error_code="COUNT_LINES_INVALID_CONTAINS", error_kind="formal_error")
+    convention = parameters.get("line_convention")
+    if convention not in (None, "", "git", "wc"):
+        return OperationOutput(ok=False, error_code="COUNT_LINES_INVALID_CONVENTION", error_kind="formal_error")
     n = 0
+    unterminated = 0
+    last_counted = False
     for line in text.splitlines():
-        if line.startswith("\\ No newline at end of file") or line.startswith("+++") or line.startswith("---"):
+        if line.startswith("\\ No newline at end of file"):
+            if last_counted:
+                unterminated += 1
+            last_counted = False
+            continue
+        last_counted = False
+        if line.startswith("+++") or line.startswith("---"):
             continue
         if prefix and not line.startswith(prefix):
             continue
         if contains is not None and contains not in line:
             continue
         n += 1
+        last_counted = True
+    count_git, count_wc = n, n - unterminated
+    value = count_wc if convention == "wc" else count_git
     return OperationOutput(
-        ok=True, value=n, unit="count",
+        ok=True, value=value, unit="count",
         details={"source_claim_id": premises[0].claim_id, "line_prefix": prefix, "contains": contains,
-                 "counted_lines": n},
+                 "counted_lines": value, "line_convention": convention or None,
+                 "count_git": count_git, "count_wc": count_wc, "unterminated_lines": unterminated,
+                 "convention_sensitive": bool(unterminated) and not convention},
     )
 
 
@@ -1196,7 +1217,7 @@ def build_default_operation_catalog() -> OperationCatalog:
                 name="count_lines",
                 version="1.0.0",
                 family="arithmetic",
-                description="Count lines of one premise's verified literal quote; parameters.line_prefix ('+', '-', ' ') selects a unified-diff side and parameters.contains filters lines containing a literal. Use it to reproduce counts (lines, tests, entries) instead of quoting a number.",
+                description="Count lines of one premise's verified literal quote; parameters.line_prefix ('+', '-', ' ') selects a unified-diff side and parameters.contains filters lines containing a literal. parameters.line_convention ('git' counts a final line without newline, 'wc' does not) must be set when the block contains '\\ No newline at end of file'. Use it to reproduce counts (lines, tests, entries) instead of quoting a number.",
                 inputs=({"role": "quoted_block"},),
                 output_type="quantity",
                 executor=_exec_count_lines,

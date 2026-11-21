@@ -390,6 +390,53 @@ def proposed_operation_specs(ops: Sequence[ProposedOperation]) -> list[Operation
 # Grades
 # ---------------------------------------------------------------------------
 
+QUOTE_CONSUMING_OPS = frozenset({"count_lines"})
+
+_STOP = frozenset("""a al and as at by con de del el en es for from in is la las los of on or para por que se the to un una y this that""".split())
+
+
+def _fold(text: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c)).casefold()
+
+
+def content_tokens(text: Any) -> set[str]:
+    toks = re.findall(r"[a-z0-9][a-z0-9_.]*", _fold(str(text or "")))
+    return {t.strip(".") for t in toks if len(t.strip(".")) >= 2 and t.strip(".") not in _STOP}
+
+
+def _ordered_tokens(text: Any) -> list[str]:
+    toks = re.findall(r"[a-z0-9][a-z0-9_.]*", _fold(str(text or "")))
+    return [x.strip(".") for x in toks if len(x.strip(".")) >= 2 and x.strip(".") not in _STOP]
+
+
+def _lcs_len(a: Sequence[str], b: Sequence[str]) -> int:
+    if not a or not b:
+        return 0
+    prev = [0] * (len(b) + 1)
+    for x in a:
+        cur = [0] * (len(b) + 1)
+        for j, y in enumerate(b, 1):
+            cur[j] = prev[j - 1] + 1 if x == y else max(prev[j], cur[j - 1])
+        prev = cur
+    return prev[-1]
+
+
+def is_claim_restatement(quote: str, claim: str, *, min_tokens: int = 4, threshold: float = 0.8) -> bool:
+    """A quoted span that reproduces the claim's wording in order (>= threshold of the claim's
+    content tokens as an ordered subsequence) accredits only that someone asserted it, not the
+    fact. Ordered matching avoids flagging code that merely shares vocabulary with the claim."""
+    ct = _ordered_tokens(claim)
+    if len(ct) < min_tokens:
+        return False
+    qt = _ordered_tokens(quote)[:4000]
+    # A quote carrying a different number/version is a potential counterexample, not a restatement.
+    digit_tokens = {x for x in ct if any(ch.isdigit() for ch in x)}
+    if digit_tokens and not digit_tokens <= set(qt):
+        return False
+    return _lcs_len(ct, qt) / len(ct) >= threshold
+
+
 def step_grade(operation: str, proposed: Mapping[str, ProposedOperation]) -> str:
     if operation in proposed:
         return proposed[operation].grade
@@ -415,8 +462,10 @@ def compute_reliability(
             return
         seen.add(node_id)
         if node_id in premises:
-            fid = premise_fidelity(premises[node_id].get("value"))
-            elements.append({"kind": "premise", "id": node_id, "fidelity": fid, "grade": "A" if fid == "literal" else "E",
+            consumers = {str(s["operation"]) for s in steps if node_id in (s.get("premises") or ())}
+            fid = ("literal_quote" if consumers and consumers <= QUOTE_CONSUMING_OPS
+                   else premise_fidelity(premises[node_id].get("value")))
+            elements.append({"kind": "premise", "id": node_id, "fidelity": fid, "grade": "A" if fid in ("literal", "literal_quote") else "E",
                              "value": premises[node_id].get("value"),
                              "document_id": (premises[node_id].get("evidence") or {}).get("document_id")})
             return

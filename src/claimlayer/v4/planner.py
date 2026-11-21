@@ -50,7 +50,10 @@ from .reconstruction import (
     EXPRESSION_PRIMITIVES,
     ProposedOperation,
     ReliabilityPolicy,
+    QUOTE_CONSUMING_OPS,
     compute_reliability,
+    content_tokens,
+    is_claim_restatement,
     parse_proposed_operations,
     proposed_operation_specs,
     step_grade,
@@ -751,6 +754,107 @@ def _comparable(val_a: Any, val_b: Any) -> bool:
     return _value_kind(val_a) == _value_kind(val_b) and _value_kind(val_a) != "null"
 
 
+def _dependency_steps(raw_steps: Sequence[Any], conclusion_id: str) -> list[Mapping[str, Any]]:
+    """Steps on which `conclusion_id` depends (transitively), in original order."""
+    by_conc = {str(st.get("conclusion_id")): st for st in raw_steps if isinstance(st, Mapping)}
+    needed: set[int] = set()
+    stack = [conclusion_id]
+    seen: set[str] = set()
+    while stack:
+        nid = stack.pop()
+        if nid in seen:
+            continue
+        seen.add(nid)
+        st = by_conc.get(nid)
+        if st is None:
+            continue
+        needed.add(id(st))
+        stack.extend(str(x) for x in (st.get("premises") or ()))
+    return [st for st in raw_steps if isinstance(st, Mapping) and id(st) in needed]
+
+
+_COUNT_DIMENSIONS = {"count"}
+
+
+def _check_conclusion_binding(
+    *,
+    target: Mapping[str, Any],
+    conc_id: str,
+    premises: Mapping[str, Mapping[str, Any]],
+    steps: Sequence[Mapping[str, Any]],
+    registry: UnitRegistry,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Bind the computed conclusion to the claim's subject, attribute and revision.
+
+    * Restatement path (conclusion = identity of a premise): the premise must carry the claim's
+      attribute and subject; a quantitative claim cannot be proved by quoting a number (a
+      reproducible count/operation is required).
+    * Computed path (core or proposed operation): the attribute is the operation's result; the
+      subject link is recorded as lexical (claim subject words occur in the cited evidence) or as
+      a planner mapping.
+    * Revision: every premise cites a verified document revision (content digest).
+    """
+    by_conc = {str(s["conclusion_id"]): s for s in steps}
+    defects: list[dict[str, Any]] = []
+    t_subj = content_tokens(target.get("subject"))
+    t_attr = content_tokens(target.get("predicate"))
+    node, chain = conc_id, []
+    while node in by_conc and str(by_conc[node]["operation"]) == "identity":
+        chain.append(by_conc[node])
+        node = str((by_conc[node].get("premises") or [""])[0])
+    dep_premises: list[Mapping[str, Any]] = []
+    stack, seen = [conc_id], set()
+    while stack:
+        nid = stack.pop()
+        if nid in seen:
+            continue
+        seen.add(nid)
+        if nid in premises:
+            dep_premises.append(premises[nid])
+        elif nid in by_conc:
+            stack.extend(str(x) for x in (by_conc[nid].get("premises") or ()))
+    ev_tokens = set()
+    for pr in dep_premises:
+        ev_tokens |= content_tokens(pr.get("entity")) | content_tokens(pr.get("event")) | content_tokens(
+            (pr.get("evidence") or {}).get("quote")) | content_tokens(pr.get("anchor_reference"))
+    info: dict[str, Any] = {
+        "revision_binding": "document_revision_verified" if dep_premises else "none",
+        "premise_revisions": sorted({str((pr.get("evidence") or {}).get("document_id")) + "@" + str((pr.get("evidence") or {}).get("revision", ""))[:12]
+                                     for pr in dep_premises}),
+    }
+    if chain and node in premises:
+        pr = premises[node]
+        p_attr = content_tokens(pr.get("predicate")) | content_tokens(pr.get("event"))
+        attr_ok = bool(t_attr) and bool(p_attr) and (t_attr <= p_attr or content_tokens(pr.get("predicate")) <= t_attr and content_tokens(pr.get("predicate")))
+        subj_ok = bool(t_subj & (content_tokens(pr.get("entity")) | content_tokens((pr.get("evidence") or {}).get("quote"))))
+        info.update({"path": "restatement", "attribute_binding": "matched" if attr_ok else "mismatch",
+                     "subject_binding": "lexical" if subj_ok else "mismatch",
+                     "premise_attribute": pr.get("predicate"), "claim_attribute": target.get("predicate")})
+        if not attr_ok:
+            defects.append({"code": "CONCLUSION_ATTRIBUTE_MISMATCH",
+                            "message": f"La conclusión reexpresa el atributo {pr.get('predicate')!r} de la premisa {node}, que no es el atributo afirmado {target.get('predicate')!r}."})
+        if not subj_ok:
+            defects.append({"code": "CONCLUSION_SUBJECT_MISMATCH",
+                            "message": f"El sujeto afirmado {target.get('subject')!r} no aparece en la entidad ni en la cita de la premisa {node}."})
+        tv = target.get("value")
+        if not isinstance(tv, bool) and _to_decimal_safe(tv) is not None:
+            unit = target.get("unit")
+            dim = None
+            if unit:
+                try:
+                    dim = registry.lookup(str(unit)).dimension
+                except UnmappedProposal:
+                    dim = "unknown"
+            if unit in (None, "") or dim in _COUNT_DIMENSIONS:
+                defects.append({"code": "QUANTITATIVE_CLAIM_REQUIRES_REPRODUCIBLE_COUNT",
+                                "message": "Una cifra citada no demuestra un recuento: hace falta una operación reproducible (p. ej. count_lines sobre el bloque citado)."})
+    else:
+        final = by_conc.get(conc_id)
+        info.update({"path": "computed", "attribute_binding": f"operation:{final['operation']}" if final else "none",
+                     "subject_binding": "lexical" if (t_subj & ev_tokens) else "planner_mapping"})
+    return defects, info
+
+
 def _coerce_polarity(raw: Any) -> int:
     if isinstance(raw, str):
         return -1 if raw.strip().lower() in {"-1", "negated", "negative"} else 1
@@ -1173,6 +1277,21 @@ def verify_plan(
             assessment=None,
         )
 
+    # 1b. Only steps on which the conclusion depends are validated, executed or allowed to block.
+    unused_notes: list[str] = []
+    if isinstance(raw_steps, list):
+        if derived_conclusion_id is not None:
+            path_steps = _dependency_steps(raw_steps, str(derived_conclusion_id))
+        else:
+            path_steps = []
+        for st in raw_steps:
+            if isinstance(st, Mapping) and all(st is not ps for ps in path_steps):
+                unused_notes.append(f"unused_step:{st.get('step_id')}:{st.get('operation')}")
+        raw_steps = path_steps
+    path_ops = {str(st.get("operation") or "") for st in (raw_steps or []) if isinstance(st, Mapping)}
+    path_rules = {str(st.get("rule_id")) for st in (raw_steps or []) if isinstance(st, Mapping) and st.get("rule_id")}
+    raw_assumptions.extend(f"note:{n}" for n in unused_notes)
+
     # 2a. Planner-proposed operations: validated as data, executed only through the closed interpreter
     prop_list, prop_defects = parse_proposed_operations(
         raw_clean.get("proposed_operations"), core_catalog=catalog, registry=registry
@@ -1200,15 +1319,18 @@ def verify_plan(
 
     # 2. Check for model-suggested rules or unknown operations / undeclared rules before execution
     limitations: list[str] = []
+    informational_limitations: list[str] = []
     if isinstance(raw_suggested_rules, list) and raw_suggested_rules:
         for sr in raw_suggested_rules:
-            if isinstance(sr, Mapping):
-                rid = sr.get("rule_id") or sr.get("name") or "suggested_rule"
-                desc = sr.get("description") or ""
-                limitations.append(f"UNVERIFIED_SUGGESTED_RULE:{rid}" + (f" ({desc})" if desc else ""))
-                raw_assumptions.append(f"unverified_suggested_rule:{rid}")
+            rid = (sr.get("rule_id") or sr.get("name") or "suggested_rule") if isinstance(sr, Mapping) else str(sr)
+            desc = (sr.get("description") or "") if isinstance(sr, Mapping) else ""
+            entry = f"UNVERIFIED_SUGGESTED_RULE:{rid}" + (f" ({desc})" if desc else "")
+            raw_assumptions.append(f"unverified_suggested_rule:{rid}")
+            # A suggested rule blocks only if the conclusion depends on it.
+            if str(rid) in path_ops or str(rid) in path_rules:
+                limitations.append(entry)
             else:
-                limitations.append(f"UNVERIFIED_SUGGESTED_RULE:{sr}")
+                informational_limitations.append(entry)
 
     for idx, st in enumerate(raw_steps):
         if not isinstance(st, Mapping):
@@ -1268,6 +1390,17 @@ def verify_plan(
             and label_key(q_str) in label_key(claim)
         )
         p_defects = list(gr.defects)
+        if not p_defects and q_str and is_claim_restatement(q_str, claim):
+            from .fidelity import FidelityFinding
+            p_defects.append(
+                FidelityFinding(
+                    code="CLAIM_RESTATEMENT_AS_PREMISE",
+                    message=("La cita reformula la propia afirmación: acredita que alguien la afirma, no el hecho. "
+                             "Debe verificarse con evidencia independiente."),
+                    field="evidence",
+                    detail={"claim_id": pid},
+                )
+            )
         if claim_copied:
             from .fidelity import FidelityFinding
             p_defects.append(
@@ -1315,6 +1448,7 @@ def verify_plan(
                     })
 
     if limitations:
+        limitations = limitations + informational_limitations
         return _finish(
             claim_target=target_dict,
             computed_conclusion=None,
@@ -1390,6 +1524,7 @@ def verify_plan(
                 rejected_out=rejected_records,
                 assumptions_out=raw_assumptions,
                 missing_out=missing_list,
+                limitations_out=informational_limitations,
                 checks_applied=checks_applied,
                 explanation=f"Indeterminada por evidencia insuficiente en las fuentes (sin usar reloj del sistema ni suponer premisas): {desc}",
                 raw_clean=raw_clean,
@@ -1747,6 +1882,31 @@ def verify_plan(
         proposed=proposed_ops,
         policy=rel_policy,
     )
+    binding_defects, binding_info = _check_conclusion_binding(
+        target=target_dict, conc_id=conc_id, premises={r["claim_id"]: r for r in grounded_records},
+        steps=verified_steps_out, registry=registry,
+    )
+    reliability["binding"] = binding_info
+    if binding_defects:
+        return _finish(
+            claim_target=target_dict,
+            computed_conclusion=computed_conc_dict,
+            epistemic_verdict="unresolved",
+            outcome_category="conclusion_binding_defect",
+            routing=OperationalRouting(status="RETRY", allowed=False, requires_human=False,
+                                       reasons=tuple(d["code"] for d in binding_defects)),
+            premises_out=grounded_records,
+            steps_out=verified_steps_out,
+            assumptions_out=all_assumptions,
+            defects_out=binding_defects,
+            checks_applied=checks_applied + ["conclusion_binding"],
+            explanation="Sin resolver: la conclusión no queda vinculada a la afirmación. " + " ".join(d["message"] for d in binding_defects),
+            raw_clean=raw_clean,
+            graph_admitted=False,
+            graph=graph,
+            assessment=assessment,
+            reliability=reliability,
+        )
     if not _comparable(conc_node.value, target_val):
         kinds = {"computed": _value_kind(conc_node.value), "claim_target": _value_kind(target_val)}
         return _finish(
@@ -2080,7 +2240,8 @@ class ClaimVerifier:
 
             # Retry ONLY on repairable planner/grounding defects
             if (
-                ver_res.outcome_category in {"malformed_proposal", "premise_grounding_defect", "incomparable_conclusion"}
+                ver_res.outcome_category in {"malformed_proposal", "premise_grounding_defect", "incomparable_conclusion",
+                                             "conclusion_binding_defect"}
                 and attempt_idx < self.max_retries
             ):
                 repair_feedback = [

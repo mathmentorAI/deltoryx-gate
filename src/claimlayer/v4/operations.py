@@ -951,6 +951,42 @@ def _exec_rule_application(
     )
 
 
+def _exec_count_lines(
+    premises: Sequence[ClaimNode],
+    parameters: Mapping[str, Any],
+    profile: DomainProfile,
+) -> OperationOutput:
+    """Count lines of ONE premise's verified literal quote (reproducible count by Deltoryx).
+
+    parameters: line_prefix ('+', '-', ' ' or None) restricts to unified-diff lines of that side;
+    contains (literal, case-sensitive) restricts to lines containing it. Diff file headers and the
+    '\\ No newline at end of file' marker are never counted.
+    """
+    if len(premises) != 1:
+        return OperationOutput(ok=False, error_code="COUNT_LINES_REQUIRES_ONE_PREMISE", error_kind="missing_input")
+    text = premises[0].text or ""
+    prefix = parameters.get("line_prefix")
+    if prefix not in (None, "", "+", "-", " "):
+        return OperationOutput(ok=False, error_code="COUNT_LINES_INVALID_PREFIX", error_kind="formal_error")
+    contains = parameters.get("contains")
+    if contains is not None and (not isinstance(contains, str) or not contains):
+        return OperationOutput(ok=False, error_code="COUNT_LINES_INVALID_CONTAINS", error_kind="formal_error")
+    n = 0
+    for line in text.splitlines():
+        if line.startswith("\\ No newline at end of file") or line.startswith("+++") or line.startswith("---"):
+            continue
+        if prefix and not line.startswith(prefix):
+            continue
+        if contains is not None and contains not in line:
+            continue
+        n += 1
+    return OperationOutput(
+        ok=True, value=n, unit="count",
+        details={"source_claim_id": premises[0].claim_id, "line_prefix": prefix, "contains": contains,
+                 "counted_lines": n},
+    )
+
+
 def build_default_operation_catalog() -> OperationCatalog:
     """Build the default controlled operation catalog aligned with v4 verifier families."""
     return OperationCatalog(
@@ -1155,6 +1191,15 @@ def build_default_operation_catalog() -> OperationCatalog:
                 inputs=({"role": "quantity", "type": "quantity", "required": True},),
                 output_type="quantity",
                 executor=_exec_unit_conversion,
+            ),
+            OperationSpec(
+                name="count_lines",
+                version="1.0.0",
+                family="arithmetic",
+                description="Count lines of one premise's verified literal quote; parameters.line_prefix ('+', '-', ' ') selects a unified-diff side and parameters.contains filters lines containing a literal. Use it to reproduce counts (lines, tests, entries) instead of quoting a number.",
+                inputs=({"role": "quoted_block"},),
+                output_type="quantity",
+                executor=_exec_count_lines,
             ),
             OperationSpec(
                 name="identity",

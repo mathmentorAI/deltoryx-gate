@@ -97,6 +97,10 @@ DEFAULT_OPERATION_FAMILIES: dict[str, tuple[str, ...]] = {
     "duration": ("temporal",),
     "temporal_order": ("temporal",),
     "temporal": ("temporal",),
+    "weekday_shift": ("temporal",),
+    "day_of_week_shift": ("temporal",),
+    "date_offset": ("temporal",),
+    "calendar_date_shift": ("temporal",),
     "comparison": ("comparison", "quantities"),
     "eq": ("comparison", "quantities"),
     "ne": ("comparison", "quantities"),
@@ -118,6 +122,7 @@ DEFAULT_OPERATION_FAMILIES: dict[str, tuple[str, ...]] = {
     "rule_application": ("explicit_logic",),
     "explicit_logic": ("explicit_logic",),
     "modus_ponens": ("explicit_logic",),
+    "identity": ("explicit_logic",),
     "relation_composition": ("relations",),
     "relations": ("relations",),
     "authority_precedence": ("document_authority",),
@@ -789,6 +794,12 @@ _TEMPORAL_OPS = frozenset({
     "meets",
     "overlaps",
 })
+_CALENDAR_SHIFT_OPS = frozenset({
+    "weekday_shift",
+    "day_of_week_shift",
+    "date_offset",
+    "calendar_date_shift",
+})
 _AGGREGATION_OPS = frozenset({
     "aggregation",
     "agg_sum",
@@ -884,6 +895,9 @@ def infer_conclusion_semantic_domain(
     generic_label = conc_pred_key in _GENERIC_LABELS or label_key(conc.metadata.get("field_type", "")) in {"number", "scalar"}
 
     # Temporal / age & duration discovery (never relies on specific entity names)
+    has_calendar_shift_op = any(
+        label_key(st.operation).replace(" ", "_") in _CALENDAR_SHIFT_OPS for st in inc_steps
+    )
     has_temporal_op = any(
         label_key(st.operation).replace(" ", "_") in _TEMPORAL_OPS for st in inc_steps
     )
@@ -905,11 +919,14 @@ def infer_conclusion_semantic_domain(
     )
 
     is_age_or_duration = bool(
-        has_temporal_op
-        or has_temporal_pred
-        or has_temporal_params
-        or (has_date_premises and (has_duration_unit or has_temporal_question))
-        or (has_temporal_question and (isinstance(conc.value, (int, float)) or isinstance(conc.value, Mapping) or has_date_premises))
+        not has_calendar_shift_op
+        and (
+            has_temporal_op
+            or has_temporal_pred
+            or has_temporal_params
+            or (has_date_premises and (has_duration_unit or has_temporal_question))
+            or (has_temporal_question and (isinstance(conc.value, (int, float)) or isinstance(conc.value, Mapping) or has_date_premises))
+        )
     )
 
     # Quantity discovery

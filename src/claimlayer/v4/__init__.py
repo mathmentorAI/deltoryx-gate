@@ -91,7 +91,41 @@ from .justification import (
     infer_conclusion_semantic_domain,
 )
 from .models import AcceptancePolicy, EvidenceUnit
+from .operations import (
+    CANONICAL_WEEKDAYS_EN,
+    CANONICAL_WEEKDAYS_ES,
+    DEFAULT_OPERATION_CATALOG,
+    OperationCatalog,
+    OperationOutput,
+    OperationSpec,
+    build_default_operation_catalog,
+    compute_date_offset,
+    compute_weekday_shift,
+    normalize_day_offset,
+    normalize_weekday,
+)
 from .paths import TransitiveRule
+from .planner import (
+    DERIVATION_PLANNER_PROMPT,
+    DERIVATION_PLANNER_PROMPT_VERSION,
+    CertaintyReport,
+    ClaimDerivationPlanner,
+    ClaimVerificationResult,
+    ClaimVerifier,
+    DerivationPlanner,
+    OperationalRouting,
+    PlannerCallResult,
+    PlannerTelemetry,
+    verify_claim,
+    verify_plan,
+)
+from .premise_grounding import (
+    PremiseGroundingResult,
+    diagnose_alternate_anchors,
+    verify_claim_target_correspondence,
+    verify_premise_grounding,
+    verify_step_anchor_correspondence,
+)
 from .reader import (
     LLMProposalReader,
     ProposalReader,
@@ -172,4 +206,12 @@ __all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'UnitEvaluation', 'evaluate_unit_a
            'ReviewResult', 'RuleGuidedRepairAdapter', 'ScriptedRepairAgent',
            'review_response', 'verify_review_freshness',
            'CorpusReferenceRegister', 'ReferenceDivergenceCollection', 'TargetedRereadConfig',
-           'build_corpus_reference_register', 'collect_reference_divergences']
+           'build_corpus_reference_register', 'collect_reference_divergences',
+           'CANONICAL_WEEKDAYS_EN', 'CANONICAL_WEEKDAYS_ES', 'DEFAULT_OPERATION_CATALOG',
+           'OperationCatalog', 'OperationOutput', 'OperationSpec', 'build_default_operation_catalog',
+           'compute_date_offset', 'compute_weekday_shift', 'normalize_day_offset', 'normalize_weekday',
+           'DERIVATION_PLANNER_PROMPT', 'DERIVATION_PLANNER_PROMPT_VERSION', 'CertaintyReport',
+           'ClaimDerivationPlanner', 'ClaimVerificationResult', 'ClaimVerifier', 'DerivationPlanner',
+           'OperationalRouting', 'PlannerCallResult', 'PlannerTelemetry', 'verify_claim', 'verify_plan',
+           'PremiseGroundingResult', 'diagnose_alternate_anchors', 'verify_claim_target_correspondence',
+           'verify_premise_grounding', 'verify_step_anchor_correspondence']

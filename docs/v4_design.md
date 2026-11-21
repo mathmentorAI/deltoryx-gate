@@ -4,6 +4,23 @@
 
 ## Principio
 
+### Dirección de producto acordada el 20 de noviembre de 2026
+
+El objetivo es que la capacidad de verificar afirmaciones crezca al ritmo de su generación. El usuario entrega fuentes y una afirmación nueva. Nemotron propone las premisas, sus referencias y una composición de operaciones para comprobarla. Deltoryx contrasta cada premisa con la fuente y su contexto, ejecuta los pasos admitidos y compara la conclusión obtenida con la afirmación original. La explicación debe permitir reproducir el cálculo e identificar qué supuesto cambiaría el resultado.
+
+La unidad que el modelo construye para cada consulta es una derivación en `JustificationGraph`. El operador controla el significado y la versión de las operaciones ejecutables. Una regla nueva sugerida por el modelo se registra como supuesto pendiente de justificación. El resultado distingue deducción exacta bajo premisas explícitas, soporte evidencial y probabilidad calibrada cuando exista calibración aplicable. La decisión epistémica y el enrutamiento operativo se comunican por separado.
+
+**Primer hito de aceptación.** Todos los casos deben pasar por la misma entrada pública de fuentes y afirmación, con el mismo constructor de propuestas y sin un grafo preparado para cada caso.
+
+| Fuente | Afirmación | Resultado esperado |
+| --- | --- | --- |
+| Hoy es viernes y quedé con ella dos días antes. | La cita fue el miércoles. | Derivada. El evento se ancla al viernes y el desplazamiento es de dos días hacia atrás. |
+| La misma fuente | La cita fue el jueves. | Refutada mediante el mismo cálculo, que devuelve miércoles. |
+| Quedé con ella dos días antes. | La cita fue el miércoles. | Indeterminada. Falta el día de referencia. |
+| Hoy es viernes. Su cumpleaños fue el martes y quedé con ella dos días antes de su cumpleaños. | La cita fue el domingo. | Derivada usando el cumpleaños como ancla, incluso al cruzar el límite semanal. |
+
+La implementación se evaluará también con paráfrasis reservadas y propuestas con el ancla o el signo alterados. Se registrarán afirmaciones correctamente verificadas por minuto, cobertura, aceptaciones erróneas, coste de inferencia y minutos de revisión humana. El tiempo incluirá extracción, construcción del grafo, comprobación y reintentos. Los benchmarks por dominio aportan evidencia de progreso cuando ejercitan este recorrido.
+
 **El modelo propone; la política determinista decide.** Es la regla del paper de marzo ("los LLM no son responsables del razonamiento central") con los contratos formales del manuscrito revisado del 19 de octubre. Ningún modelo emite `supported`/`contradicted`: esa decisión la toma código sobre el registro.
 
 Motivo: el diagnóstico del 23 de octubre (`verifier_failure_diagnosis.md`) mostró que en v3 el modelo leía bien la fuente y aun así aprobaba afirmaciones con un campo cambiado, y que el validador aceptaba `supported` siempre que el modelo marcase las casillas como verdaderas. Además, el vocabulario improvisado de los casos hacía imposible una comparación exacta (`percent_per_annum` frente a `percent per annum`).

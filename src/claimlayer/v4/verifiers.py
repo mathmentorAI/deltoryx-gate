@@ -25,6 +25,7 @@ from .domain_profile import DomainProfile
 from .engine import EvidenceLayer, evaluate_unit_admissibility
 from .justification import ClaimNode, InferenceStep, VERIFIER_FAMILIES, VerificationObligation
 from .models import AcceptancePolicy
+from .operations import DEFAULT_OPERATION_CATALOG, normalize_weekday
 from .vocabulary import UnitRegistry, UnmappedProposal, label_key, normalize_date
 
 VERIFIER_STATUSES: tuple[str, ...] = ("verified", "refuted", "unknown", "not_applicable")
@@ -932,11 +933,11 @@ def _safe_date_shift_year(d: date, years_delta: int) -> date:
 
 
 class TemporalVerifier:
-    """Dates, Allen interval relations, derived ages and durations with granularity uncertainty."""
+    """Dates, Allen interval relations, calendar shifts, derived ages and durations with granularity uncertainty."""
 
     family = "temporal"
     verifier_id = "deterministic_temporal_interval"
-    version = "1.1.0"
+    version = "1.2.0"
     guarantee_kind = "deterministic_formal"
 
     def _extract_start_end_bounds(
@@ -1006,6 +1007,26 @@ class TemporalVerifier:
         params = {**context.step.parameters, **obligation.parameters}
         op = str(params.get("temporal_op") or params.get("op") or context.step.operation).lower().strip()
 
+        if params.get("mandatory_check") == "temporal_precision" and context.step.operation.lower().strip() in {
+            "weekday_shift", "day_of_week_shift", "date_offset", "calendar_date_shift"
+        }:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="not_applicable",
+                guarantee_kind=self.guarantee_kind,
+                reasons=("CALENDAR_SHIFT_VERIFIED_SEPARATELY",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+
+        if op in {"weekday_shift", "day_of_week_shift"}:
+            return self._verify_weekday_shift(obligation, context, params)
+
+        if op in {"date_offset", "calendar_date_shift"}:
+            return self._verify_date_offset(obligation, context, params)
+
         if op in {"precedes", "meets", "overlaps", "during", "contains", "temporal_order"}:
             return self._verify_allen_relation(obligation, context, op, params)
 
@@ -1020,6 +1041,157 @@ class TemporalVerifier:
             status="not_applicable",
             guarantee_kind=self.guarantee_kind,
             reasons=(f"UNSUPPORTED_TEMPORAL_OP:{op}",),
+            verifier_id=self.verifier_id,
+            verifier_version=self.version,
+        )
+
+    def _verify_weekday_shift(
+        self,
+        obligation: VerificationObligation,
+        context: VerifierContext,
+        params: Mapping[str, Any],
+    ) -> VerifierResult:
+        out = DEFAULT_OPERATION_CATALOG.execute(
+            "weekday_shift", context.premises, params, context.domain_profile
+        )
+        if not out.ok:
+            status = "unknown" if out.error_kind == "missing_input" else "refuted"
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status=status,
+                guarantee_kind=self.guarantee_kind,
+                evidence=dict(out.details),
+                reasons=(str(out.error_code or "WEEKDAY_SHIFT_ERROR"),),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+        conc_val = context.conclusion.value
+        if conc_val is None:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="unknown",
+                guarantee_kind=self.guarantee_kind,
+                evidence=dict(out.details),
+                reasons=("MISSING_CONCLUSION_WEEKDAY",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+        conc_norm = normalize_weekday(conc_val)
+        if conc_norm is None:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="refuted",
+                guarantee_kind=self.guarantee_kind,
+                evidence={**out.details, "proposed_weekday": conc_val},
+                reasons=("INVALID_CONCLUSION_WEEKDAY",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+        ev = {**out.details, "proposed_weekday": conc_val, "proposed_index": conc_norm[0]}
+        if conc_norm[0] == out.details["target_index"]:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="verified",
+                guarantee_kind=self.guarantee_kind,
+                evidence=ev,
+                assumptions=tuple(context.step.assumptions),
+                reasons=("WEEKDAY_SHIFT_VERIFIED",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+        return VerifierResult(
+            obligation_id=obligation.obligation_id,
+            step_id=context.step.step_id,
+            family=self.family,
+            status="refuted",
+            guarantee_kind=self.guarantee_kind,
+            evidence=ev,
+            assumptions=tuple(context.step.assumptions),
+            reasons=("WEEKDAY_SHIFT_MISMATCH",),
+            verifier_id=self.verifier_id,
+            verifier_version=self.version,
+        )
+
+    def _verify_date_offset(
+        self,
+        obligation: VerificationObligation,
+        context: VerifierContext,
+        params: Mapping[str, Any],
+    ) -> VerifierResult:
+        out = DEFAULT_OPERATION_CATALOG.execute(
+            "date_offset", context.premises, params, context.domain_profile
+        )
+        if not out.ok:
+            status = "unknown" if out.error_kind == "missing_input" else "refuted"
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status=status,
+                guarantee_kind=self.guarantee_kind,
+                evidence=dict(out.details),
+                reasons=(str(out.error_code or "DATE_OFFSET_ERROR"),),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+        conc_val = context.conclusion.value
+        if conc_val is None:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="unknown",
+                guarantee_kind=self.guarantee_kind,
+                evidence=dict(out.details),
+                reasons=("MISSING_CONCLUSION_DATE",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+        cb = _parse_date_bounds(conc_val)
+        if cb is None or cb[2] != "day":
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="refuted",
+                guarantee_kind=self.guarantee_kind,
+                evidence={**out.details, "proposed_date": conc_val},
+                reasons=("INVALID_CONCLUSION_DATE",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+        proposed_iso = cb[0].isoformat()
+        ev = {**out.details, "proposed_date": proposed_iso}
+        if proposed_iso == out.value:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="verified",
+                guarantee_kind=self.guarantee_kind,
+                evidence=ev,
+                assumptions=tuple(context.step.assumptions),
+                reasons=("DATE_OFFSET_VERIFIED",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+        return VerifierResult(
+            obligation_id=obligation.obligation_id,
+            step_id=context.step.step_id,
+            family=self.family,
+            status="refuted",
+            guarantee_kind=self.guarantee_kind,
+            evidence=ev,
+            assumptions=tuple(context.step.assumptions),
+            reasons=("DATE_OFFSET_MISMATCH",),
             verifier_id=self.verifier_id,
             verifier_version=self.version,
         )
@@ -1927,6 +2099,8 @@ class ExplicitLogicVerifier:
             or context.step.operation.lower() in {"waterfall_order", "compare_waterfall", "waterfall_priority", "priority_of_payments"}
         ):
             return self._verify_waterfall_priority(obligation, context, params)
+        if context.step.operation.lower() == "identity" and not (context.step.rule_id or params.get("rule_id")):
+            return self._verify_identity(obligation, context)
         rule_id = context.step.rule_id or params.get("rule_id")
         rule_version = context.step.rule_version or params.get("rule_version")
         if not rule_id:
@@ -2053,6 +2227,75 @@ class ExplicitLogicVerifier:
             guarantee_kind=self.guarantee_kind,
             evidence={"rule_id": rule.rule_id, "rule_version": rule.version},
             reasons=("EXPLICIT_RULE_VERIFIED",),
+            verifier_id=self.verifier_id,
+            verifier_version=self.version,
+        )
+
+    def _verify_identity(
+        self,
+        obligation: VerificationObligation,
+        context: VerifierContext,
+    ) -> VerifierResult:
+        if len(context.premises) != 1:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="unknown",
+                guarantee_kind=self.guarantee_kind,
+                reasons=("IDENTITY_REQUIRES_ONE_PREMISE",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+        prem = context.premises[0]
+        conc = context.conclusion
+        if prem.polarity != conc.polarity:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="refuted",
+                guarantee_kind=self.guarantee_kind,
+                reasons=("IDENTITY_MISMATCH",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+        w_p = normalize_weekday(prem.value)
+        w_c = normalize_weekday(conc.value)
+        if w_p is not None and w_c is not None:
+            matched = w_p[0] == w_c[0]
+        else:
+            np, up = _extract_quantity_pair(prem)
+            nc, uc = _extract_quantity_pair(conc)
+            if np is not None and nc is not None:
+                reg = context.domain_profile.effective_unit_registry()
+                try:
+                    bp, dp, _ = _convert_to_base_decimal(np, up, reg)
+                    bc, dc, _ = _convert_to_base_decimal(nc, uc, reg)
+                    matched = (dp == dc) and (bp == bc)
+                except UnmappedProposal:
+                    matched = canonical(prem.value) == canonical(conc.value) and prem.unit == conc.unit
+            else:
+                matched = canonical(prem.value) == canonical(conc.value) and prem.unit == conc.unit
+        if matched:
+            return VerifierResult(
+                obligation_id=obligation.obligation_id,
+                step_id=context.step.step_id,
+                family=self.family,
+                status="verified",
+                guarantee_kind=self.guarantee_kind,
+                reasons=("IDENTITY_VERIFIED",),
+                verifier_id=self.verifier_id,
+                verifier_version=self.version,
+            )
+        return VerifierResult(
+            obligation_id=obligation.obligation_id,
+            step_id=context.step.step_id,
+            family=self.family,
+            status="refuted",
+            guarantee_kind=self.guarantee_kind,
+            evidence={"premise_value": prem.value, "conclusion_value": conc.value},
+            reasons=("IDENTITY_MISMATCH",),
             verifier_id=self.verifier_id,
             verifier_version=self.version,
         )

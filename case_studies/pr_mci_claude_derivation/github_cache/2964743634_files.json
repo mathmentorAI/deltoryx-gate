@@ -1,0 +1,26 @@
+[
+ {
+  "sha": "0d94072d67706fa586320208e3cf90c8fecf65cc",
+  "filename": "CHANGELOG.md",
+  "status": "modified",
+  "additions": 1,
+  "deletions": 0,
+  "changes": 1,
+  "blob_url": "https://github.com/mitsuhiko/insta/blob/00ec1b6582631ffaeedea37eacb2d4728e1c654c/CHANGELOG.md",
+  "raw_url": "https://github.com/mitsuhiko/insta/raw/00ec1b6582631ffaeedea37eacb2d4728e1c654c/CHANGELOG.md",
+  "contents_url": "https://api.github.com/repos/mitsuhiko/insta/contents/CHANGELOG.md?ref=00ec1b6582631ffaeedea37eacb2d4728e1c654c",
+  "patch": "@@ -12,6 +12,7 @@ All notable changes to insta and cargo-insta are documented here.\n - Add uppercase keyboard shortcuts for bulk operations in `cargo insta review`:\n   `A` to accept all, `R` to reject all, and `S` to skip all remaining snapshots.\n   #745\n+- `cargo insta review` fails with a helpful error message when run in a non-TTY environment.\n \n ## 1.42.2\n "
+ },
+ {
+  "sha": "0fc72779229688ae2f8376dd34503cdd6f4c7c35",
+  "filename": "cargo-insta/src/cli.rs",
+  "status": "modified",
+  "additions": 8,
+  "deletions": 0,
+  "changes": 8,
+  "blob_url": "https://github.com/mitsuhiko/insta/blob/00ec1b6582631ffaeedea37eacb2d4728e1c654c/cargo-insta%2Fsrc%2Fcli.rs",
+  "raw_url": "https://github.com/mitsuhiko/insta/raw/00ec1b6582631ffaeedea37eacb2d4728e1c654c/cargo-insta%2Fsrc%2Fcli.rs",
+  "contents_url": "https://api.github.com/repos/mitsuhiko/insta/contents/cargo-insta%2Fsrc%2Fcli.rs?ref=00ec1b6582631ffaeedea37eacb2d4728e1c654c",
+  "patch": "@@ -264,6 +264,14 @@ fn query_snapshot(\n     show_info: &mut bool,\n     show_diff: &mut bool,\n ) -> Result<Operation, Box<dyn Error>> {\n+    // Check if we're running in a TTY environment\n+    if !term.is_term() {\n+        return Err(err_msg(\n+            \"Interactive review requires a terminal. Use `cargo insta accept` or `cargo insta reject` \\\n+            for non-interactive snapshot management, or run this command in a terminal environment.\"\n+        ));\n+    }\n+\n     loop {\n         term.clear_screen()?;\n "
+ }
+]

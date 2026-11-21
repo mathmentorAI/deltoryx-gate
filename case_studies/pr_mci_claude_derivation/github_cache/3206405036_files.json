@@ -1,0 +1,38 @@
+[
+ {
+  "sha": "362e4fd4e112399003c2000194f2fdb25455e461",
+  "filename": "lib/main.ts",
+  "status": "modified",
+  "additions": 1,
+  "deletions": 1,
+  "changes": 2,
+  "blob_url": "https://github.com/fireship-io/flamethrower/blob/7f9f9949d2f9a6e1f287c70ff44d47c438e04cb6/lib%2Fmain.ts",
+  "raw_url": "https://github.com/fireship-io/flamethrower/raw/7f9f9949d2f9a6e1f287c70ff44d47c438e04cb6/lib%2Fmain.ts",
+  "contents_url": "https://api.github.com/repos/fireship-io/flamethrower/contents/lib%2Fmain.ts?ref=7f9f9949d2f9a6e1f287c70ff44d47c438e04cb6",
+  "patch": "@@ -9,7 +9,7 @@ import { FlamethrowerOptions, FlameWindow } from './interfaces';\n export default (opts?: FlamethrowerOptions): Router => {\n   const router = new Router(opts);\n   // eslint-disable-next-line no-console\n-  opts.log && console.log('🔥 flamethrower engaged');\n+  opts && opts.log && console.log('🔥 flamethrower engaged');\n   if (window) {\n     const flame = window as FlameWindow;\n     flame.flamethrower = router;"
+ },
+ {
+  "sha": "88ccce5059a047964d4e82b6e0cc886515f528f0",
+  "filename": "package-lock.json",
+  "status": "modified",
+  "additions": 2,
+  "deletions": 2,
+  "changes": 4,
+  "blob_url": "https://github.com/fireship-io/flamethrower/blob/7f9f9949d2f9a6e1f287c70ff44d47c438e04cb6/package-lock.json",
+  "raw_url": "https://github.com/fireship-io/flamethrower/raw/7f9f9949d2f9a6e1f287c70ff44d47c438e04cb6/package-lock.json",
+  "contents_url": "https://api.github.com/repos/fireship-io/flamethrower/contents/package-lock.json?ref=7f9f9949d2f9a6e1f287c70ff44d47c438e04cb6",
+  "patch": "@@ -1,12 +1,12 @@\n {\n   \"name\": \"flamethrower-router\",\n-  \"version\": \"0.0.0-meme.8\",\n+  \"version\": \"0.0.0-meme.12\",\n   \"lockfileVersion\": 2,\n   \"requires\": true,\n   \"packages\": {\n     \"\": {\n       \"name\": \"flamethrower-router\",\n-      \"version\": \"0.0.0-meme.8\",\n+      \"version\": \"0.0.0-meme.12\",\n       \"license\": \"ISC\",\n       \"devDependencies\": {\n         \"@playwright/test\": \"^1.25.0\","
+ },
+ {
+  "sha": "d3521374ef16f23c20f746650fcc5e312d5135fa",
+  "filename": "test/main.spec.ts",
+  "status": "modified",
+  "additions": 27,
+  "deletions": 0,
+  "changes": 27,
+  "blob_url": "https://github.com/fireship-io/flamethrower/blob/7f9f9949d2f9a6e1f287c70ff44d47c438e04cb6/test%2Fmain.spec.ts",
+  "raw_url": "https://github.com/fireship-io/flamethrower/raw/7f9f9949d2f9a6e1f287c70ff44d47c438e04cb6/test%2Fmain.spec.ts",
+  "contents_url": "https://api.github.com/repos/fireship-io/flamethrower/contents/test%2Fmain.spec.ts?ref=7f9f9949d2f9a6e1f287c70ff44d47c438e04cb6",
+  "patch": "@@ -101,3 +101,30 @@ test('prefetching works', async ({ page }) => {\n \n \n });\n+\n+test('flamethrower initializes without error when opts is undefined', async ({ page }) => {\n+  // Test that flamethrower can be initialized without options object\n+  await page.goto('/');\n+  \n+  // Add a test script that initializes flamethrower with undefined options\n+  await page.evaluate(() => {\n+    // This should not throw a TypeError\n+    const script = document.createElement('script');\n+    script.textContent = `\n+      // Simulate calling flamethrower without options\n+      try {\n+        // This is a simulation of what happens when opts is undefined\n+        const opts = undefined;\n+        const result = opts && opts.log && console.log('🔥 flamethrower engaged');\n+        window.testResult = 'success';\n+      } catch (error) {\n+        window.testResult = 'error: ' + error.message;\n+      }\n+    `;\n+    document.head.appendChild(script);\n+  });\n+  \n+  // Check that no error occurred\n+  const result = await page.evaluate(() => (window as any).testResult);\n+  expect(result).toBe('success');\n+});"
+ }
+]

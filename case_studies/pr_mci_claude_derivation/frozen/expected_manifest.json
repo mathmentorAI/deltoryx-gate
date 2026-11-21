@@ -1,0 +1,468 @@
+{
+ "verdict_names": "claimlayer.v4 epistemic_verdict: derived | refuted | insufficient_evidence (unresolved = system could not decide)",
+ "cases": [
+  {
+   "case_id": "C01",
+   "pr_id": "2886171819",
+   "situation": "S1",
+   "provenance": "extension",
+   "expected_verdict": "derived",
+   "expected_routing": "PASS",
+   "acceptable_alternative_verdicts": [
+    "insufficient_evidence"
+   ],
+   "minimal_evidence": [
+    "+ this_order = max(1, min(self.config.solver_order, len(self.timesteps) - self.step_index)) en la rama lower_order_final",
+    "rama else: this_order = self.config.solver_order (sin cambios)"
+   ],
+   "acceptable_reasoning": "max(1, x) ≥ 1 para todo x en la rama corregida. 'insufficient_evidence' es aceptable si señala que en la rama else el valor depende de solver_order, no visible en la evidencia.",
+   "requires_inference": true,
+   "prmci_gold_pr_label": "aligned",
+   "prmci_annotator_notes": {
+    "a1": "The PR description accurately identifies the root cause (this_order becoming 0) and the code change (max(1, ...)) directly prevents this condition, matching the described fix.",
+    "a2": "The fix correctly addresses the assertion failure by ensuring this_order never drops below 1, and the description precisely explains both the problem and solution.",
+    "consensus": "Both annotators agree the PR is aligned - the code change directly implements the fix described in the PR message, preventing the assertion error by guaranteeing this_order >= 1."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C02",
+   "pr_id": "2889875255",
+   "situation": "S2",
+   "provenance": "replica",
+   "expected_verdict": "refuted",
+   "expected_routing": "RETRY",
+   "acceptable_alternative_verdicts": [
+    "insufficient_evidence"
+   ],
+   "minimal_evidence": [
+    "main.py: única rama `elif model_provider == \"Amazon Bedrock\":` → get_threat_model_bedrock(...)",
+    "threat_model.py añade get_threat_model_bedrock; attack_tree.py y mitigations.py no cambian; las líneas de import de attack_tree/mitigations (contexto, sin cambios) no incluyen función Bedrock",
+    "trampa: test_cases.py (módulo de generación de casos Gherkin) recibe +227 líneas que son unittest de Bedrock para threat model, no integración de generación de casos"
+   ],
+   "acceptable_reasoning": "Solo la ruta de threat modeling tiene integración Bedrock; las otras tres funciones no la tienen. Citar test_cases.py como prueba de 'test case generation' es una premisa homónima inválida.",
+   "requires_inference": true,
+   "prmci_gold_pr_label": "partial",
+   "prmci_annotator_notes": {
+    "a1": "The description claims integration with threat modeling, attack tree, mitigations, and test case generation, but the code only implements threat_model integration; attack tree, mitigations, and test case generation functions for Bedrock are not present in the changes.",
+    "a2": "While the core Bedrock integration for threat modeling is implemented with credentials management, model discovery, error handling, and tests as described, the PR description overstates the scope by claiming integration with attack tree, mitigations, and test case generation which are not implemented.",
+    "consensus": "Both annotators agree there is partial alignment: the main Bedrock integration feature is correctly implemented, but the description incorrectly claims broader integration across multiple generation functions that were not actually added."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C03",
+   "pr_id": "2964743634",
+   "situation": "S1",
+   "provenance": "extension",
+   "expected_verdict": "derived",
+   "expected_routing": "PASS",
+   "acceptable_alternative_verdicts": [
+    "insufficient_evidence"
+   ],
+   "minimal_evidence": [
+    "cargo-insta/src/cli.rs, fn query_snapshot: + if !term.is_term() { return Err(err_msg(\"Interactive review requires a terminal...\")) }"
+   ],
+   "acceptable_reasoning": "La comprobación TTY se demuestra en el código. El vínculo con `cargo insta review` debe apoyarse en el código (función del bucle interactivo y su mensaje), no solo en la línea de CHANGELOG, que es texto del autor. 'insufficient_evidence' es aceptable si señala que la ruta de llamada desde el comando review no está en la evidencia.",
+   "requires_inference": true,
+   "prmci_gold_pr_label": "aligned",
+   "prmci_annotator_notes": {
+    "a1": "PR title accurately describes the TTY check implementation, and changelog entry confirms the feature matches the code changes.",
+    "a2": "Title clearly states the feature, code implements TTY check with appropriate error message, and changelog documents the behavior.",
+    "consensus": "Both annotators agree the PR title accurately describes the implemented TTY environment check feature."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C04",
+   "pr_id": "2975165913",
+   "situation": "S3",
+   "provenance": "extension",
+   "expected_verdict": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "acceptable_alternative_verdicts": [],
+   "minimal_evidence": [
+    "en los 6 archivos del diff, cada línea − con /notebooks/Commands/ tiene su línea + con /docs/examples/Commands/",
+    "el resto del repositorio (archivos no cambiados) no forma parte de la evidencia"
+   ],
+   "acceptable_reasoning": "La versión débil (los enlaces de los archivos del diff se actualizaron) se sostiene; 'all links' exige conocer archivos no cambiados. NOTA: la etiqueta PR-MCI 'misaligned' se basó en 12 archivos de código presentes en la representación del corpus pero ausentes del diff neto base→head; no es transferible a esta evidencia.",
+   "requires_inference": false,
+   "prmci_gold_pr_label": "misaligned",
+   "prmci_annotator_notes": {
+    "a1": "PR description only mentions link fixes, but code includes substantial unrelated changes: association datamodel updates, new ptable functionality, lexmatch enhancements, and mapping crawler improvements.",
+    "a2": "Description covers only link updates while code changes include new CLI options, association handling improvements, ptable conversion features, and multiple implementation enhancements not mentioned.",
+    "consensus": "Both annotators agree the PR description significantly underrepresents the scope of changes, focusing only on link fixes while omitting major feature additions and code improvements."
+   },
+   "gold_transferability": "not_transferable_corpus_vs_net_diff"
+  },
+  {
+   "case_id": "C05",
+   "pr_id": "2986431376",
+   "situation": "S3",
+   "provenance": "extension",
+   "expected_verdict": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "acceptable_alternative_verdicts": [],
+   "minimal_evidence": [
+    "cambios ### → ## y #### → ### en kubernetes.md",
+    "el inventario completo de cabeceras del documento (incluido el H1) no está en la evidencia"
+   ],
+   "acceptable_reasoning": "Se sostiene 'se subió un nivel a varias cabeceras'. 'Consistent H1 -> H2 -> H3' en todo el documento no es determinable con los fragmentos del diff.",
+   "requires_inference": false,
+   "prmci_gold_pr_label": "aligned",
+   "prmci_annotator_notes": {
+    "a1": "PR description accurately describes both heading hierarchy fixes and comprehensive Kubernetes scheduling documentation addition, matching all code changes.",
+    "a2": "Description matches implementation: heading levels corrected from H4 to H3, and new scheduling section with complete examples and troubleshooting added as described.",
+    "consensus": "Both annotators agree the PR description fully aligns with code changes, covering heading fixes and the new scheduling documentation section."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C06",
+   "pr_id": "3037457814",
+   "situation": "S1",
+   "provenance": "extension",
+   "expected_verdict": "derived",
+   "expected_routing": "PASS",
+   "acceptable_alternative_verdicts": [],
+   "minimal_evidence": [
+    "+ - [isaacphi/mcp-language-server](https://github.com/isaacphi/mcp-language-server): ...",
+    "en docs/code-analysis--quality.md, cuya cabecera describe servidores de análisis estático/calidad"
+   ],
+   "acceptable_reasoning": "Enlaza la línea añadida con el archivo/categoría.",
+   "requires_inference": true,
+   "prmci_gold_pr_label": "aligned",
+   "prmci_annotator_notes": {
+    "a1": "PR description states adding Language Server to code analysis category, and code patch shows exactly one line added with the repository link and description matching the description text.",
+    "a2": "Description matches the single-line addition of the Language Server entry to the markdown documentation file in the correct category.",
+    "consensus": "Both annotators agree the PR description accurately describes the simple documentation addition that was implemented."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C07",
+   "pr_id": "3047699666",
+   "situation": "S1",
+   "provenance": "extension",
+   "expected_verdict": "derived",
+   "expected_routing": "PASS",
+   "acceptable_alternative_verdicts": [],
+   "minimal_evidence": [
+    "archivo añadido con esa ruta",
+    "+SELECT plan(8);",
+    "8 bloques '-- Test N' y 8 aserciones `SELECT ok(`"
+   ],
+   "acceptable_reasoning": "Recuento: plan(8) y 8 aserciones coinciden con el 8 afirmado.",
+   "requires_inference": true,
+   "prmci_gold_pr_label": "aligned",
+   "prmci_annotator_notes": {
+    "a1": "The PR description accurately states it adds 8 test cases for organization_members RLS policies, and the code contains exactly those 8 tests with matching functionality and the security concern noted in test 5.",
+    "a2": "The description precisely matches the implementation - all 8 test cases are present, cover the stated scenarios, and the security concern in test 5 is documented in both the description and code comments.",
+    "consensus": "Both annotators agree the PR description accurately reflects the code changes with all 8 test cases implemented as described, including the security concern documentation."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C08",
+   "pr_id": "3069923749",
+   "situation": "S1",
+   "provenance": "extension",
+   "expected_verdict": "derived",
+   "expected_routing": "PASS",
+   "acceptable_alternative_verdicts": [],
+   "minimal_evidence": [
+    "+ id: cargo-insta-version / label: cargo-insta Version",
+    "+ id: cargo-insta-command-version / label: cargo insta --version output",
+    "archivo .github/ISSUE_TEMPLATE/1-bug.yml (plantilla de bug)"
+   ],
+   "acceptable_reasoning": "Enlaza dos inputs añadidos (líneas +) con el archivo de plantilla de bug. La eliminación de `insta-version` (líneas −, estado base) no es premisa de la conclusión; el 'partial' de PR-MCI se debe a esa omisión, no a la falsedad de esta afirmación.",
+   "requires_inference": true,
+   "prmci_gold_pr_label": "partial",
+   "prmci_annotator_notes": {
+    "a1": "The PR accurately describes the addition of two cargo-insta version fields but omits mention of removing the existing insta-version field, which is a significant change that affects the template structure.",
+    "a2": "The description correctly states what's being added, but the removal of the insta-version field should be mentioned for reviewers to understand the full scope of changes to the bug report template.",
+    "consensus": "Both annotators agree the PR message accurately describes additions but fails to mention the removal of the insta-version field, making it partially aligned with the actual code changes."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C09",
+   "pr_id": "3119417980",
+   "situation": "S3",
+   "provenance": "extension",
+   "expected_verdict": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "acceptable_alternative_verdicts": [],
+   "minimal_evidence": [
+    "opción includeStackTrace en el schema zod, toolHandler (default true) y Unity (GetBoolParameter, GetLogsAsJson omite stackTrace si false)",
+    "'80-90%' solo aparece en cadenas descriptivas escritas por el autor dentro del diff; no hay medición"
+   ],
+   "acceptable_reasoning": "La versión débil (se añadió la opción y elimina el stack trace) se sostiene. La magnitud 80-90% no tiene evidencia independiente. 'derived' sería falsa aceptación por usar texto del autor como premisa.",
+   "requires_inference": false,
+   "prmci_gold_pr_label": "aligned",
+   "prmci_annotator_notes": {
+    "a1": "The PR description accurately describes adding the includeStackTrace parameter to reduce token usage, and the code changes implement this feature across Unity, Node.js, and TypeScript layers with proper defaults and documentation.",
+    "a2": "Code changes match the description perfectly - adds includeStackTrace parameter with conditional stack trace inclusion, updates all relevant files, and includes LLM-friendly documentation as described.",
+    "consensus": "Both annotators agree the PR description accurately reflects the implementation of the includeStackTrace feature to reduce token usage in LLM contexts."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C10",
+   "pr_id": "3132739442",
+   "situation": "S3",
+   "provenance": "replica",
+   "expected_verdict": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "acceptable_alternative_verdicts": [
+    "refuted"
+   ],
+   "minimal_evidence": [
+    "añadido vmec_constants/vmec_algorithm_constants.h con constantes documentadas",
+    "radial_profiles.cc solo cambia un comentario; ningún punto de uso incluye ni usa el nuevo header",
+    "el propio header dice 'Also defined in vmec.h as kSignOfJacobian' / 'as kPDamp'"
+   ],
+   "acceptable_reasoning": "Se sostiene 'se añadió un header con constantes'. 'Consolidar' (trasladar a un único lugar) no se demuestra y hay indicios en contra (las constantes siguen definidas en vmec.h y ningún call site cambia). Refutada es aceptable si cita esos indicios. 'derived' sería falsa aceptación.",
+   "requires_inference": false,
+   "prmci_gold_pr_label": "partial",
+   "prmci_annotator_notes": {
+    "a1": "The new constants header matches the described categories and documentation, but most existing magic numbers are not yet replaced in the codebase.",
+    "a2": "The PR centralizes many algorithmic and physical constants as promised, yet the consolidation into call sites is largely deferred.",
+    "consensus": "Reviewers agree the constants file aligns with the narrative while the actual consolidation work remains incomplete, yielding a partially aligned change."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C11",
+   "pr_id": "3135266974",
+   "situation": "S1",
+   "provenance": "extension",
+   "expected_verdict": "derived",
+   "expected_routing": "PASS",
+   "acceptable_alternative_verdicts": [
+    "insufficient_evidence"
+   ],
+   "minimal_evidence": [
+    "pipelines/_learner.py (añadido): class LearnerPipeline con def sample, def partial_fit, def decay, def predict"
+   ],
+   "acceptable_reasoning": "Enlaza cuatro métodos definidos en la misma clase. 'insufficient_evidence' es aceptable si señala que la definición del protocolo Learner no está en la evidencia ('full'). Trampa: _agent.py viene renombrado desde _agent_pipeline.py.",
+   "requires_inference": true,
+   "prmci_gold_pr_label": "aligned",
+   "prmci_annotator_notes": {
+    "a1": "PR description accurately describes both AgentPipeline and LearnerPipeline implementations, including architecture details, use cases, and all code changes match the described functionality.",
+    "a2": "Code changes fully implement the described features: AgentPipeline renaming, new LearnerPipeline class, comprehensive tests, and all architectural details from the description are present in the implementation.",
+    "consensus": "Both annotators agree the PR description accurately describes the implementation. All described features (AgentPipeline, LearnerPipeline, comprehensive tests, documentation) are present in the code changes with matching functionality and architecture details."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C12",
+   "pr_id": "3146561196",
+   "situation": "S3",
+   "provenance": "extension",
+   "expected_verdict": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "acceptable_alternative_verdicts": [],
+   "minimal_evidence": [
+    "+ step 'Check version consistency' con `run: npm run check-version` en .github/workflows/main.yml",
+    "scripts/check-version-consistency.js termina con process.exit(1) ante inconsistencias",
+    "FALTA: la definición del script npm `check-version` (package.json no está en el diff neto)"
+   ],
+   "acceptable_reasoning": "Cadena plausible con un eslabón ausente: nada en la evidencia enlaza `npm run check-version` con el script nuevo. 'derived' sería falsa aceptación. NOTA: la etiqueta 'partial' de PR-MCI cita Dockerfile/.dockerignore/GHCR, ausentes del diff neto.",
+   "requires_inference": false,
+   "prmci_gold_pr_label": "partial",
+   "prmci_annotator_notes": {
+    "a1": "Version management scripts and CI checks are implemented as described, but the PR also adds Docker build/publish workflows and containerization that go beyond the stated scope.",
+    "a2": "The code fully covers automated version bumping and consistency checks yet introduces new Dockerfile, .dockerignore, and GHCR publish jobs not mentioned in the description.",
+    "consensus": "The PR correctly delivers the advertised version tooling but includes extra containerization and publishing infrastructure that the description does not set expectations for."
+   },
+   "gold_transferability": "not_transferable_corpus_vs_net_diff"
+  },
+  {
+   "case_id": "C13",
+   "pr_id": "3152317896",
+   "situation": "S2",
+   "provenance": "replica",
+   "expected_verdict": "refuted",
+   "expected_routing": "RETRY",
+   "acceptable_alternative_verdicts": [],
+   "minimal_evidence": [
+    "src/cli/index.ts: cac('porto'); únicos comandos registrados '[root]' y 'create-account [alias: ca]' ('Create a Porto Account')",
+    "commands.ts: createAccount usa Key.createSecp256k1()"
+   ],
+   "acceptable_reasoning": "El CLI registra create-account, no create-merchant: contraejemplo concreto. La parte secp256k1 es cierta pero no salva el nombre del comando. 'insufficient_evidence' sería abstención en un caso resoluble.",
+   "requires_inference": true,
+   "prmci_gold_pr_label": "partial",
+   "prmci_annotator_notes": {
+    "a1": "The PR description mentions \"porto create-merchant\" command, but the actual implementation uses \"create-account\" instead, and the description doesn't mention the code organization into internal modules or the private key file saving feature.",
+    "a2": "Core functionality matches the description (CLI setup, command implementation, build config), but the command name differs (create-account vs create-merchant), and additional features like secure key file saving and code refactoring into internal modules are not mentioned.",
+    "consensus": "Both annotators agree the PR is partially aligned - the main described features are implemented, but the command name differs and some implementation details are not documented."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C14",
+   "pr_id": "3196885081",
+   "situation": "S1",
+   "provenance": "extension",
+   "expected_verdict": "derived",
+   "expected_routing": "PASS",
+   "acceptable_alternative_verdicts": [
+    "insufficient_evidence"
+   ],
+   "minimal_evidence": [
+    "patterns/mcp/registry.yml añadido: @@ -0,0 +1,77 @@, sin salto final",
+    "patterns/mcp/orchestration.yml añadido: @@ -0,0 +1,132 @@, sin salto final"
+   ],
+   "acceptable_reasoning": "77 + 132 = 209 líneas de contenido; ambos archivos terminan sin salto de línea, por lo que `wc -l` da 76 + 131 = 207. 'insufficient_evidence' es aceptable si se señala la ambigüedad del convenio de conteo. Refutar con 209 (o 234 incluyendo index.yml) es una refutación incorrecta.",
+   "requires_inference": true,
+   "prmci_gold_pr_label": "aligned",
+   "prmci_annotator_notes": {
+    "a1": "The PR message accurately describes modularizing the monolithic execution-patterns.yml into focused modules, and the code changes create the described modular structure and update all references accordingly.",
+    "a2": "Description precisely matches the refactoring work: breaking down the 506-line file into organized modules under patterns/ directory, with all references updated and migration guide provided.",
+    "consensus": "Both annotators agree the PR message accurately describes the modularization refactoring and all described changes are implemented in the code."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C15",
+   "pr_id": "3197644488",
+   "situation": "S1",
+   "provenance": "extension",
+   "expected_verdict": "derived",
+   "expected_routing": "PASS",
+   "acceptable_alternative_verdicts": [],
+   "minimal_evidence": [
+    "archivo añadido docs/release-notes/v0.0.4.md con '# Release v0.0.4'"
+   ],
+   "acceptable_reasoning": "Archivo nuevo de notas de versión con la versión indicada.",
+   "requires_inference": false,
+   "prmci_gold_pr_label": "aligned",
+   "prmci_annotator_notes": {
+    "a1": "PR title accurately describes adding release notes documentation, and the content matches standard release notes format with features, improvements, and changelog.",
+    "a2": "Documentation-only PR correctly implements the stated objective of adding v0.0.4 release notes with comprehensive changelog content.",
+    "consensus": "Both annotators agree the documentation PR fulfills its stated purpose."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C16",
+   "pr_id": "3204772289",
+   "situation": "S2",
+   "provenance": "replica",
+   "expected_verdict": "refuted",
+   "expected_routing": "RETRY",
+   "acceptable_alternative_verdicts": [
+    "insufficient_evidence"
+   ],
+   "minimal_evidence": [
+    "resumen del diff: Files changed: 0, Lines added: 0, Lines deleted: 0"
+   ],
+   "acceptable_reasoning": "Un PR sin archivos ni líneas cambiadas no puede añadir funcionalidad: el diff vacío es el contraejemplo. Requiere la regla 'añadir código implica ≥1 archivo cambiado'. 'insufficient_evidence' es aceptable si se justifica por ausencia total de cambios; 'derived' sería falsa aceptación.",
+   "requires_inference": true,
+   "prmci_gold_pr_label": "misaligned",
+   "prmci_annotator_notes": {
+    "a1": "The PR description details extensive implementation including new files, API endpoints, and database schema, but the codebase shows zero files changed and zero lines modified, indicating a complete disconnect between the claimed changes and actual code modifications.",
+    "a2": "Despite a comprehensive description outlining MCP server controller implementation with backend APIs, frontend UI, and database migrations, no code changes were actually committed, making this a documentation-only PR that doesn't match its feature label.",
+    "consensus": "Both annotators agree this is misaligned since the PR description claims substantial feature implementation but contains zero code changes, representing a clear mismatch between the described work and the actual diff."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C17",
+   "pr_id": "3206405036",
+   "situation": "S3",
+   "provenance": "replica",
+   "expected_verdict": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "acceptable_alternative_verdicts": [
+    "refuted"
+   ],
+   "minimal_evidence": [
+    "test/main.spec.ts: test 'flamethrower initializes without error when opts is undefined' (añadido en head)",
+    "el cuerpo del test define `const opts = undefined` y evalúa la expresión copiada dentro de un <script> inyectado; no importa ni invoca la función exportada de lib/main.ts"
+   ],
+   "acceptable_reasoning": "Se sostiene la afirmación débil 'se añadió un test con ese nombre para el escenario'. 'Comprehensive test' del escenario real no se demuestra: el test simula la expresión y no ejercita lib/main.ts. Refutada es aceptable si se cita expresamente que el test no llama al código bajo prueba. 'derived' sería falsa aceptación.",
+   "requires_inference": false,
+   "prmci_gold_pr_label": "partial",
+   "prmci_annotator_notes": {
+    "a1": "Fix matches the described TypeError issue, but the added test only simulates the expression and overstates validation of the real initialization path.",
+    "a2": "Code change correctly adds a null check on opts, but the test description suggests stronger coverage than the simple injected script actually provides.",
+    "consensus": "Core bug fix is accurate and minimal, while claims about comprehensive testing and robustness are somewhat exaggerated."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C18",
+   "pr_id": "3214876564",
+   "situation": "S2",
+   "provenance": "replica",
+   "expected_verdict": "refuted",
+   "expected_routing": "RETRY",
+   "acceptable_alternative_verdicts": [
+    "insufficient_evidence"
+   ],
+   "minimal_evidence": [
+    "runtime.ts: `const memoryKey = `action_${responseAction}_${uuidv4()}`` (UUID v4 aleatorio)",
+    "no hay sha/createHash/crypto en ninguna línea añadida",
+    "trampa: `import { createUniqueUuid }` es contexto de base sin cambios"
+   ],
+   "acceptable_reasoning": "La única generación de claves añadida es aleatoria. 'insufficient_evidence' es aceptable si se argumenta que el id del plan podría generarse fuera del diff. Usar createUniqueUuid como prueba sería premisa de base inválida.",
+   "requires_inference": true,
+   "prmci_gold_pr_label": "partial",
+   "prmci_annotator_notes": {
+    "a1": "The code clearly implements the critical fixes for immutable updates, working memory cleanup, required success flag, and tests, but the description’s deterministic UUID key generation via SHA-256 is not reflected in the working-memory keys which still use random UUIDs.",
+    "a2": "Most claimed robustness and type-safety improvements are present, but the specific claim about deterministic UUID generation does not match the actual implementation using uuidv4 for memory entries.",
+    "consensus": "The PR message accurately captures the main bug fixes and many improvements, yet overstates the UUID behavior, so overall alignment is strong but not complete."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C19",
+   "pr_id": "3245466752",
+   "situation": "S1",
+   "provenance": "extension",
+   "expected_verdict": "derived",
+   "expected_routing": "PASS",
+   "acceptable_alternative_verdicts": [],
+   "minimal_evidence": [
+    "mcp_json.py: + config = {name: server_config}; json_output = json.dumps(config, indent=2)",
+    "name procede de server_name (`--name`, -n) vía install_mcp_json(name=name)"
+   ],
+   "acceptable_reasoning": "Encadena el envoltorio {name: ...} con la serialización de salida. La documentación cambiada es texto del autor, no prueba de comportamiento. Trampa: archivo renombrado desde mcp_config.py.",
+   "requires_inference": true,
+   "prmci_gold_pr_label": "aligned",
+   "prmci_annotator_notes": {
+    "a1": "PR description accurately describes the fix: output now includes server name as root key, making `--name` parameter meaningful, and parameter simplified from `--server-name` to `--name`, all reflected in code changes.",
+    "a2": "Code changes match PR description: output format wraps server config with name as root key, parameter renamed to `--name`, documentation updated, and tests reflect the changes.",
+    "consensus": "Both annotators agree the PR description accurately reflects the bug fix implementation, with output format change and parameter simplification correctly implemented."
+   },
+   "gold_transferability": "transferable"
+  },
+  {
+   "case_id": "C20",
+   "pr_id": "3246950577",
+   "situation": "S3",
+   "provenance": "extension",
+   "expected_verdict": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "acceptable_alternative_verdicts": [
+    "derived"
+   ],
+   "minimal_evidence": [
+    "export.py: candidatos vía evaluate_candidates(groups, not options.markers); se elimina el filtro `groups.isdisjoint(...)`",
+    "lock.py: evaluate_candidates(..., evaluate_markers=True)",
+    "tests/test_formats.py: test_export_from_pylock_not_empty afirma salida no vacía con -L pylock.toml"
+   ],
+   "acceptable_reasoning": "La evidencia muestra el cambio de filtrado y un test de regresión, pero no su ejecución. 'derived' es aceptable solo si encadena el cambio de export.py con el test y declara como supuesto que el test pasa.",
+   "requires_inference": false,
+   "prmci_gold_pr_label": "aligned",
+   "prmci_annotator_notes": {
+    "a1": "PR description accurately identifies the root cause and fix: group information extraction issue resolved by using evaluate_candidates with proper group handling, matching the code changes.",
+    "a2": "The fix correctly addresses the described problem by restructuring candidate evaluation to properly handle group information from pylock markers, with test coverage confirming the fix.",
+    "consensus": "Both annotators agree the PR description accurately describes the bug and fix, with code changes directly addressing the group information extraction issue."
+   },
+   "gold_transferability": "transferable"
+  }
+ ]
+}

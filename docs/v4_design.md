@@ -21,6 +21,37 @@ La unidad que el modelo construye para cada consulta es una derivación en `Just
 
 La implementación se evaluará también con paráfrasis reservadas y propuestas con el ancla o el signo alterados. Se registrarán afirmaciones correctamente verificadas por minuto, cobertura, aceptaciones erróneas, coste de inferencia y minutos de revisión humana. El tiempo incluirá extracción, construcción del grafo, comprobación y reintentos. Los benchmarks por dominio aportan evidencia de progreso cuando ejercitan este recorrido.
 
+### Dirección actualizada el 21 de noviembre de 2026: reconstrucción trazable (Evidence Intelligence)
+
+Una IA produce un resultado a partir de unas fuentes. Deltoryx Gate lo trata como afirmación a justificar y pide a Nemotron que lo **reconstruya** desde las fuentes con una cadena de operaciones explícitas. **Nemotron puede proponer las operaciones que necesite**; el producto es la reconstrucción trazable y su grado de fiabilidad. Esto sustituye el criterio anterior «solo operaciones del catálogo de la aplicación». Se mantiene una frontera: Deltoryx no ejecuta código generado por el modelo. Una operación propuesta es un dato: o bien una expresión en un lenguaje cerrado que interpreta y re-ejecuta Deltoryx, o bien una operación sin definición ejecutable cuyo resultado queda registrado como afirmación del modelo.
+
+| Grado | Eslabón | Quién garantiza el significado |
+| --- | --- | --- |
+| A | Premisa con valor comprobado en la cita + operación del núcleo | Texto fuente y código de Deltoryx |
+| B | Regla declarada por la aplicación | El operador |
+| C | Operación propuesta por Nemotron como expresión sobre primitivas, ejecutada por Deltoryx | Deltoryx la ejecuta; Nemotron eligió la composición |
+| D | Operación propuesta sin definición ejecutable (resultado afirmado por el modelo) | Solo Nemotron, registrada |
+| E | Premisa cuyo valor la cita no fija (interpretación del modelo) | Solo Nemotron |
+
+El grado de una conclusión es el de su eslabón más débil. La aplicación fija el grado mínimo para `PASS` (`ReliabilityPolicy`, por defecto B; en la API, `DELTORYX_PASS_MIN_GRADE`). Por debajo de ese mínimo el dictamen se conserva y la ruta pasa a `ESCALATE` con el eslabón débil identificado. Las operaciones propuestas pasan también por las comprobaciones obligatorias del núcleo (por ejemplo, la completitud de población en agregaciones).
+
+**Implementado** (`v4/reconstruction.py`, prompt `v4-derivation-planner-3`; `v4-derivation-planner-2` se conserva para reproducir el 14/14):
+- `proposed_operations` en la propuesta del planificador;
+- intérprete cerrado con lista blanca de primitivas y límites de profundidad y tamaño;
+- clasificación de premisas en literales o interpretadas;
+- bloque `reliability` en la biblioteca, el CLI y la API;
+- comparación con tipos (los valores incomparables dan `unresolved / incomparable_conclusion`, nunca `verified_refutation`);
+- presupuesto de salida del planificador configurable (8192 por defecto en la API).
+
+**Motivación medida.** La primera medición sobre 20 afirmaciones reales de PRs de Claude Code (`case_studies/pr_mci_claude_derivation`) dio 0/12 inferencias resueltas con una derivación válida, una refutación incorrecta por comparación sin tipos y un `PASS` sostenido por `identity` sobre texto del autor. En el replay de esas propuestas con el motor nuevo no hay ningún `PASS` indebido: C03 queda en grado E (`ESCALATE`) y C15 en `incomparable_conclusion`. Las 14 propuestas del benchmark temporal mantienen su dictamen con grado A.
+
+**Pendiente:**
+- segunda medición en vivo con el prompt v3;
+- promoción de operaciones (de D a C y de C a B) mediante aprobación, tests o uso acumulado;
+- operaciones de dominio para código: base frente a head, llamadas, ejecución de tests;
+- extractor de números que no reconoce una cifra seguida de punto final («es 9.»);
+- evaluación independiente y prueba bajo carga.
+
 ### Evidencia del primer hito (21 de noviembre de 2026): viabilidad de extremo a extremo
 
 **Qué se ha demostrado.** El recorrido completo funciona con un modelo real. El consumidor entrega fuentes y una afirmación, Nemotron propone una derivación, Deltoryx comprueba cada premisa y ejecuta las operaciones, y la respuesta separa el dictamen sobre la afirmación de la decisión operativa. Todos los casos entraron por la misma interfaz, con el mismo prompt (`v4-derivation-planner-2`, digest `ba80052a…`) y el mismo catálogo de operaciones. Ningún caso usó un grafo preparado ni una regla elegida por caso.

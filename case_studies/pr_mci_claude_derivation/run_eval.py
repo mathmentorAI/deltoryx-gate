@@ -133,6 +133,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--skip-old", action="store_true")
     ap.add_argument("--only", default="")
+    ap.add_argument("--out", type=Path, default=OUT, help="output file (default: first-measurement path)")
     args = ap.parse_args()
     for name, h in EXPECTED_HASHES.items():
         got = _sha(HERE / "frozen" / name)
@@ -181,7 +182,9 @@ def main() -> int:
                    "client_wall_ms": wall_ms, "verdict": ca.get("verdict"), "outcome_category": ca.get("outcome_category"),
                    "routing": od.get("status"), "response": out}
             rows.append(row)
-            print(f"{case['case_id']} {case['pr_id']}: {row['verdict']} / {row['routing']} ({row['outcome_category']}) {wall_ms} ms", flush=True)
+            grade = (out.get("reliability") or {}).get("grade")
+            props = [p.get("name") + ":" + str(p.get("grade")) for p in ((out.get("reliability") or {}).get("proposed_operations") or [])]
+            print(f"{case['case_id']} {case['pr_id']}: {row['verdict']} / {row['routing']} ({row['outcome_category']}) grade={grade} proposed={props} {wall_ms} ms", flush=True)
             row["rules_v2_postreview_code_config"] = run_rules_v2(case)
             if ev2 is not None:
                 try:
@@ -206,6 +209,7 @@ def main() -> int:
         "code_dirty": {"platform_api": bool(_git("status", "--porcelain", "--", "api", cwd=PLATFORM)),
                        "claim_layer_src": bool(_git("status", "--porcelain", "--", "src", cwd=CL_ROOT))},
         "frozen_manifest_hashes": EXPECTED_HASHES,
+        "prompt_version": (rows[0]["response"].get("provenance", {}).get("prompt_version") if rows else None),
         "old_evaluator_settings": None if args.skip_old else {
             "gate_v4_vocab2": "eval_v2vocab.evaluate_pr, CODE_CHANGE_VOCAB_V2 620ebd71..., Nemotron timeout=180 retries=3 thinking=off",
             "rules_v2": "check_claims.check_pr_corrected(evidence_profile='code_config')"},
@@ -216,14 +220,20 @@ def main() -> int:
     if key in text or "nvapi-" in text:
         print("ERROR: la salida contendría una credencial; no se escribe.", file=sys.stderr)
         return 5
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(text + "\n", encoding="utf-8")
-    cache = HERE / "results" / "old_eval_cache.jsonl"
+    out_path = Path(args.out)
+    if not out_path.is_absolute():
+        out_path = (Path.cwd() / out_path).resolve()
+    if out_path.exists() and out_path.resolve() == OUT.resolve():
+        print(f"ERROR: {OUT.name} conserva la primera medición; usa --out con otro archivo.", file=sys.stderr)
+        return 7
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(text + "\n", encoding="utf-8")
+    cache = HERE / "results" / "old_eval_cache.jsonl"  # shared replay cache of the old evaluator
     if cache.exists() and key in cache.read_text(encoding="utf-8"):
         cache.unlink()
         print("ERROR: la caché del evaluador anterior contenía la credencial; eliminada.", file=sys.stderr)
         return 6
-    print(f"\n{len(rows)} casos -> {OUT.relative_to(PLATFORM)}")
+    print(f"\n{len(rows)} casos -> {out_path}")
     return 0
 
 

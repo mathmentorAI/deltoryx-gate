@@ -1,0 +1,4496 @@
+{
+  "executed_at_utc": "2026-11-21T18:59:33.851328+00:00",
+  "model_config": {
+    "provider": "openai-compatible",
+    "base_url": "https://integrate.api.nvidia.com/v1",
+    "model": "nvidia/nemotron-3-ultra-550b-a55b",
+    "temperature": 0,
+    "max_tokens": 8192,
+    "retries": 2,
+    "extra_body": {
+      "chat_template_kwargs": {
+        "enable_thinking": false
+      }
+    },
+    "planner_max_retries": 1
+  },
+  "prompt_version": "v4-derivation-planner-3",
+  "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3",
+  "catalog": {
+    "catalog_id": "deltoryx_v4_core",
+    "version": "1.0.0",
+    "fingerprint": "58d83b0d0508cd7be4577790ac8e15ebc80b9bc4e694f1f0ff1bb817ec131a53",
+    "operations": [
+      "add",
+      "date_offset",
+      "div",
+      "eq",
+      "ge",
+      "gt",
+      "identity",
+      "le",
+      "lt",
+      "mul",
+      "ne",
+      "pct",
+      "rule_application",
+      "sub",
+      "temporal_age",
+      "temporal_duration",
+      "unit_conversion",
+      "weekday_shift"
+    ]
+  },
+  "paraphrase_selection_protocol": "Pre-declared 6-case held-out paraphrase suite selected prior to held-out execution along orthogonal variation axes: (H1) forward shift +3 crossing Sunday->Tuesday boundary, (H2) forward shift with missing anchor in paraphrased wording ('tres jornadas más tarde'), (H3) backward shift with competing anchor ('Ayer era miércoles' vs 'lanzamiento oficial ocurrió el lunes') crossing week boundary to Saturday, (H4) refuted variant of H3 where distractor anchor minus 2 yields claimed Monday, (H5) refuted backward shift on Monday ('hoy es lunes' -> expected Saturday vs claimed Friday), and (H6) non-temporal cross-document USD margin subtraction (2,400 - 1,650 = 750 unseen in sources).",
+  "summary_core": {
+    "total_cases": 8,
+    "passed_cases": 7,
+    "accuracy": 0.875,
+    "false_accepts": 0,
+    "provider_errors": 0,
+    "calls": 8,
+    "retries": 0,
+    "prompt_tokens": 27913,
+    "completion_tokens": 3885,
+    "total_tokens": 31798,
+    "planning_latency_mean_ms": 8444.53,
+    "verifier_latency_mean_ms": 6.518,
+    "total_latency_mean_ms": 8451.91,
+    "total_latency_p50_ms": 7371.25,
+    "total_latency_p95_ms": 13526.46,
+    "total_wall_ms": 67615.3,
+    "verified_claims_per_minute": 6.21
+  },
+  "summary_heldout": {
+    "total_cases": 6,
+    "passed_cases": 6,
+    "accuracy": 1.0,
+    "false_accepts": 0,
+    "provider_errors": 0,
+    "calls": 6,
+    "retries": 0,
+    "prompt_tokens": 20870,
+    "completion_tokens": 2944,
+    "total_tokens": 23814,
+    "planning_latency_mean_ms": 6743.63,
+    "verifier_latency_mean_ms": 5.11,
+    "total_latency_mean_ms": 6749.57,
+    "total_latency_p50_ms": 7088.0,
+    "total_latency_p95_ms": 8605.03,
+    "total_wall_ms": 40497.44,
+    "verified_claims_per_minute": 8.89
+  },
+  "summary_total": {
+    "total_cases": 14,
+    "passed_cases": 13,
+    "accuracy": 0.9286,
+    "false_accepts": 0,
+    "provider_errors": 0,
+    "calls": 14,
+    "retries": 0,
+    "prompt_tokens": 48783,
+    "completion_tokens": 6829,
+    "total_tokens": 55612,
+    "planning_latency_mean_ms": 7715.57,
+    "verifier_latency_mean_ms": 5.914,
+    "total_latency_mean_ms": 7722.34,
+    "total_latency_p50_ms": 7248.55,
+    "total_latency_p95_ms": 13526.46,
+    "total_wall_ms": 108112.74,
+    "verified_claims_per_minute": 7.21
+  },
+  "core_cases": [
+    {
+      "case_id": "T1_simple_derived_wednesday",
+      "track": "temporal_core",
+      "sources": {
+        "doc_1": "Hoy es viernes y quedé con ella dos días antes."
+      },
+      "claim": "La cita fue el miércoles.",
+      "expected": {
+        "epistemic_verdict": "derived",
+        "operational_routing": "PASS",
+        "computed_value": "miércoles",
+        "computed_unit": null
+      },
+      "observed": {
+        "epistemic_verdict": "derived",
+        "outcome_category": "verified_derivation",
+        "operational_routing": {
+          "status": "PASS",
+          "allowed": true,
+          "requires_human": false,
+          "reasons": [
+            "DERIVATION_VERIFIED_AND_MATCHES_CLAIM"
+          ],
+          "authorization_verdict": {
+            "status": "PASS",
+            "allowed": true,
+            "requires_human": false,
+            "snapshot_digest": "14ba01fd57e2cafed661160a5ecc5b2bad8e2855e71e32db0b6be3d60b1cae4c",
+            "issues": []
+          }
+        },
+        "computed_conclusion": {
+          "claim_id": "c1",
+          "value": "miércoles",
+          "unit": null,
+          "text": "weekday_shift(p1, p2) = miércoles",
+          "polarity": 1
+        },
+        "graph_admitted": true,
+        "certainty": {
+          "derivation_validity": {
+            "status": "exact_under_explicit_premises",
+            "guarantee_kind": "deterministic_formal",
+            "explanation": "Deducción determinista exacta bajo las premisas explícitas extraídas y las operaciones controladas."
+          },
+          "extraction_fidelity": {
+            "status": "verified_grounding",
+            "grounded_premises": 2,
+            "rejected_premises": 0,
+            "checks_applied": [
+              "claim_target_correspondence",
+              "source_document_and_revision",
+              "verbatim_span_bound",
+              "clause_boundary_complete",
+              "value_and_unit_correspondence",
+              "direction_sign_correspondence",
+              "entity_same_clause_correspondence",
+              "event_same_clause_correspondence",
+              "step_anchor_correspondence",
+              "conclusion_claim_comparison"
+            ],
+            "note": "Fidelidad comprobada contra citas literales y cláusulas elementales de las fuentes; no sustituye a una corroboración externa ni mide probabilidad calibrada."
+          },
+          "source_support": {
+            "evidence_support_index": 1.0,
+            "conflict_index": 0.0,
+            "uncertainty_index": 0.0,
+            "verification_coverage": 1.0,
+            "is_policy_index": true,
+            "source_attributions": {
+              "doc_1": "source_statement"
+            }
+          },
+          "calibrated_correctness_probability": null,
+          "calibration_status": "uncalibrated",
+          "guarantee_explanation": "Deducción aritmética/calendárica exacta bajo las premisas explícitas extraídas; calibrated_correctness_probability=None porque no existe calibración empírica aplicable (el índice de soporte es una métrica de política, no una probabilidad)."
+        },
+        "defects": [],
+        "limitations": [],
+        "missing_premises": [],
+        "anchor_diagnostics": [],
+        "explanation": "Afirmación derivada y verificada de forma determinista: weekday_shift(p1, p2) -> miércoles, coincidiendo con la afirmación original ('miércoles'). Fiabilidad A: Texto fuente comprobado y operaciones del núcleo de Deltoryx."
+      },
+      "passed": true,
+      "raw_proposal": {
+        "claim_target": {
+          "subject": "La cita",
+          "predicate": "fue el",
+          "value": "miércoles",
+          "unit": null,
+          "polarity": 1
+        },
+        "premises": [
+          {
+            "claim_id": "p1",
+            "document_id": "doc_1",
+            "revision": "13b6b84e51468e598f6160dbf91ed8ee467aa7a7a18377ac700079a8c04649b8",
+            "quote": "Hoy es viernes",
+            "entity": "Hoy",
+            "event": "es",
+            "predicate": "día de la semana",
+            "value": "viernes",
+            "unit": null,
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          },
+          {
+            "claim_id": "p2",
+            "document_id": "doc_1",
+            "revision": "13b6b84e51468e598f6160dbf91ed8ee467aa7a7a18377ac700079a8c04649b8",
+            "quote": "quedé con ella dos días antes",
+            "entity": "yo",
+            "event": "quedé con ella",
+            "predicate": "desplazamiento temporal",
+            "value": -2,
+            "unit": "calendar_days",
+            "direction": "before",
+            "anchor_reference": "Hoy",
+            "polarity": 1
+          }
+        ],
+        "steps": [
+          {
+            "step_id": "s1",
+            "operation": "weekday_shift",
+            "premises": [
+              "p1",
+              "p2"
+            ],
+            "conclusion_id": "c1",
+            "rule_id": null,
+            "rule_version": null,
+            "parameters": {},
+            "assumptions": [],
+            "proposed_value": null,
+            "proposed_unit": null
+          }
+        ],
+        "derived_conclusion_id": "c1",
+        "missing_premises": [],
+        "assumptions": [],
+        "suggested_rules": [],
+        "proposed_operations": []
+      },
+      "graph": {
+        "conclusion_id": "c1",
+        "claims": {
+          "c1": {
+            "claim_id": "c1",
+            "kind": "derivation",
+            "subject": "La cita",
+            "predicate": "fue el",
+            "value": "miércoles",
+            "unit": null,
+            "polarity": 1,
+            "text": "weekday_shift(p1, p2) = miércoles",
+            "assertion_kind": "fact",
+            "evidence": [],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {}
+          },
+          "p1": {
+            "claim_id": "p1",
+            "kind": "extraction",
+            "subject": "Hoy",
+            "predicate": "día de la semana",
+            "value": "viernes",
+            "unit": null,
+            "polarity": 1,
+            "text": "Hoy es viernes",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "13b6b84e51468e598f6160dbf91ed8ee467aa7a7a18377ac700079a8c04649b8",
+                "start": 0,
+                "end": 14,
+                "quote": "Hoy es viernes"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "es",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          },
+          "p2": {
+            "claim_id": "p2",
+            "kind": "extraction",
+            "subject": "yo",
+            "predicate": "desplazamiento temporal",
+            "value": -2,
+            "unit": "calendar_days",
+            "polarity": 1,
+            "text": "quedé con ella dos días antes",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "13b6b84e51468e598f6160dbf91ed8ee467aa7a7a18377ac700079a8c04649b8",
+                "start": 17,
+                "end": 46,
+                "quote": "quedé con ella dos días antes"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "quedé con ella",
+              "direction": "before",
+              "anchor_reference": "Hoy"
+            }
+          }
+        },
+        "steps": [
+          {
+            "step_id": "s1",
+            "premises": [
+              "p1",
+              "p2"
+            ],
+            "conclusion_id": "c1",
+            "operation": "weekday_shift",
+            "rule_id": null,
+            "rule_version": null,
+            "assumptions": [],
+            "obligations": [
+              {
+                "obligation_id": "s1::temporal",
+                "family": "temporal",
+                "description": "Verify weekday_shift under family 'temporal'",
+                "critical": true,
+                "parameters": {},
+                "origin": "proposed"
+              }
+            ],
+            "critical": true,
+            "parameters": {}
+          }
+        ]
+      },
+      "telemetry": {
+        "model_identity": {
+          "provider": "openai-compatible",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "parameters": {
+            "temperature": 0,
+            "max_tokens": 8192,
+            "extra_body": {
+              "chat_template_kwargs": {
+                "enable_thinking": false
+              }
+            }
+          },
+          "prompt_version": "v4-derivation-planner-3",
+          "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3"
+        },
+        "prompt_version": "v4-derivation-planner-3",
+        "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3",
+        "catalog_id": "deltoryx_v4_core",
+        "catalog_version": "1.0.0",
+        "catalog_fingerprint": "58d83b0d0508cd7be4577790ac8e15ebc80b9bc4e694f1f0ff1bb817ec131a53",
+        "calls": 1,
+        "retries": 0,
+        "prompt_tokens": 3462,
+        "completion_tokens": 468,
+        "total_tokens": 3930,
+        "planning_latency_ms": 8527.031,
+        "verifier_latency_ms": 22.89,
+        "total_latency_ms": 8550.408,
+        "attempt_traces": [
+          {
+            "attempt": 1,
+            "ok": true,
+            "outcome_category": "verified_derivation",
+            "epistemic_verdict": "derived",
+            "defects": [],
+            "latency_ms": 8527.031,
+            "verifier_latency_ms": 22.89,
+            "usage": {
+              "prompt_tokens": 3462,
+              "completion_tokens": 468,
+              "total_tokens": 3930
+            }
+          }
+        ],
+        "unit_profile": "es",
+        "unit_registry_fingerprint": "edcc833daa7c074c05e1e2ae5d2916670d40460e6695f136ab185e80ad9bc17f"
+      }
+    },
+    {
+      "case_id": "T2_simple_refuted_thursday",
+      "track": "temporal_core",
+      "sources": {
+        "doc_1": "Hoy es viernes y quedé con ella dos días antes."
+      },
+      "claim": "La cita fue el jueves.",
+      "expected": {
+        "epistemic_verdict": "refuted",
+        "operational_routing": "RETRY",
+        "computed_value": "miércoles",
+        "computed_unit": null
+      },
+      "observed": {
+        "epistemic_verdict": "refuted",
+        "outcome_category": "verified_refutation",
+        "operational_routing": {
+          "status": "RETRY",
+          "allowed": false,
+          "requires_human": false,
+          "reasons": [
+            "CLAIM_CONTRADICTS_COMPUTED_CONCLUSION"
+          ],
+          "authorization_verdict": null
+        },
+        "computed_conclusion": {
+          "claim_id": "c1",
+          "value": "miércoles",
+          "unit": null,
+          "text": "weekday_shift(p1, p2) = miércoles",
+          "polarity": 1
+        },
+        "graph_admitted": true,
+        "certainty": {
+          "derivation_validity": {
+            "status": "exact_under_explicit_premises",
+            "guarantee_kind": "deterministic_formal",
+            "explanation": "Deducción determinista exacta bajo las premisas explícitas extraídas y las operaciones controladas."
+          },
+          "extraction_fidelity": {
+            "status": "verified_grounding",
+            "grounded_premises": 2,
+            "rejected_premises": 0,
+            "checks_applied": [
+              "claim_target_correspondence",
+              "source_document_and_revision",
+              "verbatim_span_bound",
+              "clause_boundary_complete",
+              "value_and_unit_correspondence",
+              "direction_sign_correspondence",
+              "entity_same_clause_correspondence",
+              "event_same_clause_correspondence",
+              "step_anchor_correspondence",
+              "conclusion_claim_comparison"
+            ],
+            "note": "Fidelidad comprobada contra citas literales y cláusulas elementales de las fuentes; no sustituye a una corroboración externa ni mide probabilidad calibrada."
+          },
+          "source_support": {
+            "evidence_support_index": 1.0,
+            "conflict_index": 0.0,
+            "uncertainty_index": 0.0,
+            "verification_coverage": 1.0,
+            "is_policy_index": true,
+            "source_attributions": {
+              "doc_1": "source_statement"
+            }
+          },
+          "calibrated_correctness_probability": null,
+          "calibration_status": "uncalibrated",
+          "guarantee_explanation": "Deducción aritmética/calendárica exacta bajo las premisas explícitas extraídas; calibrated_correctness_probability=None porque no existe calibración empírica aplicable (el índice de soporte es una métrica de política, no una probabilidad)."
+        },
+        "defects": [],
+        "limitations": [],
+        "missing_premises": [],
+        "anchor_diagnostics": [],
+        "explanation": "Afirmación refutada: el cálculo controlado a partir de las premisas verificadas produce 'miércoles', que contradice lo afirmado ('jueves'). Fiabilidad A: Texto fuente comprobado y operaciones del núcleo de Deltoryx."
+      },
+      "passed": true,
+      "raw_proposal": {
+        "claim_target": {
+          "subject": "La cita",
+          "predicate": "fue el",
+          "value": "jueves",
+          "unit": null,
+          "polarity": 1
+        },
+        "premises": [
+          {
+            "claim_id": "p1",
+            "document_id": "doc_1",
+            "revision": "13b6b84e51468e598f6160dbf91ed8ee467aa7a7a18377ac700079a8c04649b8",
+            "quote": "Hoy es viernes",
+            "entity": "Hoy",
+            "event": "es",
+            "predicate": "día de la semana",
+            "value": "viernes",
+            "unit": null,
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          },
+          {
+            "claim_id": "p2",
+            "document_id": "doc_1",
+            "revision": "13b6b84e51468e598f6160dbf91ed8ee467aa7a7a18377ac700079a8c04649b8",
+            "quote": "quedé con ella dos días antes",
+            "entity": "yo",
+            "event": "quedé con ella",
+            "predicate": "desplazamiento temporal",
+            "value": -2,
+            "unit": "calendar_days",
+            "direction": "before",
+            "anchor_reference": "Hoy",
+            "polarity": 1
+          }
+        ],
+        "steps": [
+          {
+            "step_id": "s1",
+            "operation": "weekday_shift",
+            "premises": [
+              "p1",
+              "p2"
+            ],
+            "conclusion_id": "c1",
+            "rule_id": null,
+            "rule_version": null,
+            "parameters": {},
+            "assumptions": [],
+            "proposed_value": null,
+            "proposed_unit": null
+          }
+        ],
+        "derived_conclusion_id": "c1",
+        "missing_premises": [],
+        "assumptions": [],
+        "suggested_rules": [],
+        "proposed_operations": []
+      },
+      "graph": {
+        "conclusion_id": "c1",
+        "claims": {
+          "c1": {
+            "claim_id": "c1",
+            "kind": "derivation",
+            "subject": "La cita",
+            "predicate": "fue el",
+            "value": "miércoles",
+            "unit": null,
+            "polarity": 1,
+            "text": "weekday_shift(p1, p2) = miércoles",
+            "assertion_kind": "fact",
+            "evidence": [],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {}
+          },
+          "p1": {
+            "claim_id": "p1",
+            "kind": "extraction",
+            "subject": "Hoy",
+            "predicate": "día de la semana",
+            "value": "viernes",
+            "unit": null,
+            "polarity": 1,
+            "text": "Hoy es viernes",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "13b6b84e51468e598f6160dbf91ed8ee467aa7a7a18377ac700079a8c04649b8",
+                "start": 0,
+                "end": 14,
+                "quote": "Hoy es viernes"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "es",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          },
+          "p2": {
+            "claim_id": "p2",
+            "kind": "extraction",
+            "subject": "yo",
+            "predicate": "desplazamiento temporal",
+            "value": -2,
+            "unit": "calendar_days",
+            "polarity": 1,
+            "text": "quedé con ella dos días antes",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "13b6b84e51468e598f6160dbf91ed8ee467aa7a7a18377ac700079a8c04649b8",
+                "start": 17,
+                "end": 46,
+                "quote": "quedé con ella dos días antes"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "quedé con ella",
+              "direction": "before",
+              "anchor_reference": "Hoy"
+            }
+          }
+        },
+        "steps": [
+          {
+            "step_id": "s1",
+            "premises": [
+              "p1",
+              "p2"
+            ],
+            "conclusion_id": "c1",
+            "operation": "weekday_shift",
+            "rule_id": null,
+            "rule_version": null,
+            "assumptions": [],
+            "obligations": [
+              {
+                "obligation_id": "s1::temporal",
+                "family": "temporal",
+                "description": "Verify weekday_shift under family 'temporal'",
+                "critical": true,
+                "parameters": {},
+                "origin": "proposed"
+              }
+            ],
+            "critical": true,
+            "parameters": {}
+          }
+        ]
+      },
+      "telemetry": {
+        "model_identity": {
+          "provider": "openai-compatible",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "parameters": {
+            "temperature": 0,
+            "max_tokens": 8192,
+            "extra_body": {
+              "chat_template_kwargs": {
+                "enable_thinking": false
+              }
+            }
+          },
+          "prompt_version": "v4-derivation-planner-3",
+          "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3"
+        },
+        "prompt_version": "v4-derivation-planner-3",
+        "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3",
+        "catalog_id": "deltoryx_v4_core",
+        "catalog_version": "1.0.0",
+        "catalog_fingerprint": "58d83b0d0508cd7be4577790ac8e15ebc80b9bc4e694f1f0ff1bb817ec131a53",
+        "calls": 1,
+        "retries": 0,
+        "prompt_tokens": 3461,
+        "completion_tokens": 468,
+        "total_tokens": 3929,
+        "planning_latency_ms": 6954.235,
+        "verifier_latency_ms": 3.813,
+        "total_latency_ms": 6958.656,
+        "attempt_traces": [
+          {
+            "attempt": 1,
+            "ok": true,
+            "outcome_category": "verified_refutation",
+            "epistemic_verdict": "refuted",
+            "defects": [],
+            "latency_ms": 6954.235,
+            "verifier_latency_ms": 3.813,
+            "usage": {
+              "prompt_tokens": 3461,
+              "completion_tokens": 468,
+              "total_tokens": 3929
+            }
+          }
+        ],
+        "unit_profile": "es",
+        "unit_registry_fingerprint": "edcc833daa7c074c05e1e2ae5d2916670d40460e6695f136ab185e80ad9bc17f"
+      }
+    },
+    {
+      "case_id": "T3_missing_anchor_indeterminate",
+      "track": "temporal_core",
+      "sources": {
+        "doc_1": "Quedé con ella dos días antes."
+      },
+      "claim": "La cita fue el miércoles.",
+      "expected": {
+        "epistemic_verdict": "insufficient_evidence",
+        "operational_routing": "ESCALATE",
+        "computed_value": null,
+        "computed_unit": null
+      },
+      "observed": {
+        "epistemic_verdict": "insufficient_evidence",
+        "outcome_category": "corpus_insufficient_evidence",
+        "operational_routing": {
+          "status": "ESCALATE",
+          "allowed": false,
+          "requires_human": true,
+          "reasons": [
+            "MISSING_REQUIRED_PREMISES"
+          ],
+          "authorization_verdict": null
+        },
+        "computed_conclusion": null,
+        "graph_admitted": false,
+        "certainty": {
+          "derivation_validity": {
+            "status": "not_established",
+            "guarantee_kind": "none",
+            "explanation": "No se completó una derivación válida (corpus_insufficient_evidence)."
+          },
+          "extraction_fidelity": {
+            "status": "verified_grounding",
+            "grounded_premises": 1,
+            "rejected_premises": 0,
+            "checks_applied": [
+              "claim_target_correspondence",
+              "source_document_and_revision",
+              "verbatim_span_bound",
+              "clause_boundary_complete",
+              "value_and_unit_correspondence",
+              "direction_sign_correspondence",
+              "event_same_clause_correspondence"
+            ],
+            "note": "Fidelidad comprobada contra citas literales y cláusulas elementales de las fuentes; no sustituye a una corroboración externa ni mide probabilidad calibrada."
+          },
+          "source_support": {
+            "evidence_support_index": 0.0,
+            "conflict_index": 0.0,
+            "uncertainty_index": 1.0,
+            "verification_coverage": 0.0,
+            "is_policy_index": true,
+            "source_attributions": {
+              "doc_1": "source_statement"
+            }
+          },
+          "calibrated_correctness_probability": null,
+          "calibration_status": "uncalibrated",
+          "guarantee_explanation": "Sin derivación formal completa (corpus_insufficient_evidence); calibrated_correctness_probability=None."
+        },
+        "defects": [],
+        "limitations": [],
+        "missing_premises": [
+          {
+            "role": "anchor_weekday",
+            "description": "Falta el día de la semana de la cita (ancla) para poder aplicar el desplazamiento de -2 días y verificar si el resultado es miércoles."
+          }
+        ],
+        "anchor_diagnostics": [],
+        "explanation": "Indeterminada por evidencia insuficiente en las fuentes (sin usar reloj del sistema ni suponer premisas): Falta el día de la semana de la cita (ancla) para poder aplicar el desplazamiento de -2 días y verificar si el resultado es miércoles."
+      },
+      "passed": true,
+      "raw_proposal": {
+        "claim_target": {
+          "subject": "La cita",
+          "predicate": "ocurrió en día de la semana",
+          "value": "miércoles",
+          "unit": null,
+          "polarity": 1
+        },
+        "premises": [
+          {
+            "claim_id": "p1",
+            "document_id": "doc_1",
+            "revision": "34f6d5226eb8d9b85aa813d6a7e1bb76fe65db47f36eb9be671b605c78ac9bf4",
+            "quote": "Quedé con ella dos días antes.",
+            "entity": "cita",
+            "event": "quedé con ella",
+            "predicate": "desplazamiento temporal relativo",
+            "value": -2,
+            "unit": "calendar_days",
+            "direction": "before",
+            "anchor_reference": "cita",
+            "polarity": 1
+          }
+        ],
+        "steps": [],
+        "derived_conclusion_id": null,
+        "missing_premises": [
+          {
+            "role": "anchor_weekday",
+            "description": "Falta el día de la semana de la cita (ancla) para poder aplicar el desplazamiento de -2 días y verificar si el resultado es miércoles."
+          }
+        ],
+        "assumptions": [],
+        "suggested_rules": [],
+        "proposed_operations": []
+      },
+      "graph": null,
+      "telemetry": {
+        "model_identity": {
+          "provider": "openai-compatible",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "parameters": {
+            "temperature": 0,
+            "max_tokens": 8192,
+            "extra_body": {
+              "chat_template_kwargs": {
+                "enable_thinking": false
+              }
+            }
+          },
+          "prompt_version": "v4-derivation-planner-3",
+          "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3"
+        },
+        "prompt_version": "v4-derivation-planner-3",
+        "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3",
+        "catalog_id": "deltoryx_v4_core",
+        "catalog_version": "1.0.0",
+        "catalog_fingerprint": "58d83b0d0508cd7be4577790ac8e15ebc80b9bc4e694f1f0ff1bb817ec131a53",
+        "calls": 1,
+        "retries": 0,
+        "prompt_tokens": 3453,
+        "completion_tokens": 293,
+        "total_tokens": 3746,
+        "planning_latency_ms": 7052.706,
+        "verifier_latency_ms": 2.111,
+        "total_latency_ms": 7055.923,
+        "attempt_traces": [
+          {
+            "attempt": 1,
+            "ok": true,
+            "outcome_category": "corpus_insufficient_evidence",
+            "epistemic_verdict": "insufficient_evidence",
+            "defects": [],
+            "latency_ms": 7052.706,
+            "verifier_latency_ms": 2.111,
+            "usage": {
+              "prompt_tokens": 3453,
+              "completion_tokens": 293,
+              "total_tokens": 3746
+            }
+          }
+        ],
+        "unit_profile": "es",
+        "unit_registry_fingerprint": "edcc833daa7c074c05e1e2ae5d2916670d40460e6695f136ab185e80ad9bc17f"
+      }
+    },
+    {
+      "case_id": "T4_birthday_anchor_derived_sunday",
+      "track": "temporal_core",
+      "sources": {
+        "doc_1": "Hoy es viernes. Su cumpleaños fue el martes y quedé con ella dos días antes de su cumpleaños."
+      },
+      "claim": "La cita fue el domingo.",
+      "expected": {
+        "epistemic_verdict": "derived",
+        "operational_routing": "PASS",
+        "computed_value": "domingo",
+        "computed_unit": null
+      },
+      "observed": {
+        "epistemic_verdict": "derived",
+        "outcome_category": "verified_derivation",
+        "operational_routing": {
+          "status": "PASS",
+          "allowed": true,
+          "requires_human": false,
+          "reasons": [
+            "DERIVATION_VERIFIED_AND_MATCHES_CLAIM"
+          ],
+          "authorization_verdict": {
+            "status": "PASS",
+            "allowed": true,
+            "requires_human": false,
+            "snapshot_digest": "1c085537548ad78c3be4f711fc869645d265c71b12b585877cefab8066db837b",
+            "issues": []
+          }
+        },
+        "computed_conclusion": {
+          "claim_id": "c1",
+          "value": "domingo",
+          "unit": null,
+          "text": "weekday_shift(p2, p3) = domingo",
+          "polarity": 1
+        },
+        "graph_admitted": true,
+        "certainty": {
+          "derivation_validity": {
+            "status": "exact_under_explicit_premises",
+            "guarantee_kind": "deterministic_formal",
+            "explanation": "Deducción determinista exacta bajo las premisas explícitas extraídas y las operaciones controladas."
+          },
+          "extraction_fidelity": {
+            "status": "verified_grounding",
+            "grounded_premises": 3,
+            "rejected_premises": 0,
+            "checks_applied": [
+              "claim_target_correspondence",
+              "source_document_and_revision",
+              "verbatim_span_bound",
+              "clause_boundary_complete",
+              "value_and_unit_correspondence",
+              "direction_sign_correspondence",
+              "entity_same_clause_correspondence",
+              "event_same_clause_correspondence",
+              "step_anchor_correspondence",
+              "conclusion_claim_comparison"
+            ],
+            "note": "Fidelidad comprobada contra citas literales y cláusulas elementales de las fuentes; no sustituye a una corroboración externa ni mide probabilidad calibrada."
+          },
+          "source_support": {
+            "evidence_support_index": 1.0,
+            "conflict_index": 0.0,
+            "uncertainty_index": 0.0,
+            "verification_coverage": 1.0,
+            "is_policy_index": true,
+            "source_attributions": {
+              "doc_1": "source_statement"
+            }
+          },
+          "calibrated_correctness_probability": null,
+          "calibration_status": "uncalibrated",
+          "guarantee_explanation": "Deducción aritmética/calendárica exacta bajo las premisas explícitas extraídas; calibrated_correctness_probability=None porque no existe calibración empírica aplicable (el índice de soporte es una métrica de política, no una probabilidad)."
+        },
+        "defects": [],
+        "limitations": [],
+        "missing_premises": [],
+        "anchor_diagnostics": [],
+        "explanation": "Afirmación derivada y verificada de forma determinista: weekday_shift(p2, p3) -> domingo, coincidiendo con la afirmación original ('domingo'). Fiabilidad A: Texto fuente comprobado y operaciones del núcleo de Deltoryx."
+      },
+      "passed": true,
+      "raw_proposal": {
+        "claim_target": {
+          "subject": "La cita",
+          "predicate": "fue",
+          "value": "domingo",
+          "unit": null,
+          "polarity": 1
+        },
+        "premises": [
+          {
+            "claim_id": "p1",
+            "document_id": "doc_1",
+            "revision": "3c4175166c61cfc3c7ff5b2c78768b8ea8f1fe74c72297d13fe904f393707c6a",
+            "quote": "Hoy es viernes.",
+            "entity": "Hoy",
+            "event": "es",
+            "predicate": "día de la semana",
+            "value": "viernes",
+            "unit": null,
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          },
+          {
+            "claim_id": "p2",
+            "document_id": "doc_1",
+            "revision": "3c4175166c61cfc3c7ff5b2c78768b8ea8f1fe74c72297d13fe904f393707c6a",
+            "quote": "Su cumpleaños fue el martes",
+            "entity": "Su cumpleaños",
+            "event": "fue",
+            "predicate": "día de la semana",
+            "value": "martes",
+            "unit": null,
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          },
+          {
+            "claim_id": "p3",
+            "document_id": "doc_1",
+            "revision": "3c4175166c61cfc3c7ff5b2c78768b8ea8f1fe74c72297d13fe904f393707c6a",
+            "quote": "quedé con ella dos días antes de su cumpleaños",
+            "entity": "La cita",
+            "event": "quedé con ella",
+            "predicate": "desplazamiento respecto a cumpleaños",
+            "value": -2,
+            "unit": "calendar_days",
+            "direction": "before",
+            "anchor_reference": "cumpleaños",
+            "polarity": 1
+          }
+        ],
+        "steps": [
+          {
+            "step_id": "s1",
+            "operation": "weekday_shift",
+            "premises": [
+              "p2",
+              "p3"
+            ],
+            "conclusion_id": "c1",
+            "rule_id": null,
+            "rule_version": null,
+            "parameters": {},
+            "assumptions": [],
+            "proposed_value": null,
+            "proposed_unit": null
+          }
+        ],
+        "derived_conclusion_id": "c1",
+        "missing_premises": [],
+        "assumptions": [],
+        "suggested_rules": [],
+        "proposed_operations": []
+      },
+      "graph": {
+        "conclusion_id": "c1",
+        "claims": {
+          "c1": {
+            "claim_id": "c1",
+            "kind": "derivation",
+            "subject": "La cita",
+            "predicate": "fue",
+            "value": "domingo",
+            "unit": null,
+            "polarity": 1,
+            "text": "weekday_shift(p2, p3) = domingo",
+            "assertion_kind": "fact",
+            "evidence": [],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {}
+          },
+          "p1": {
+            "claim_id": "p1",
+            "kind": "extraction",
+            "subject": "Hoy",
+            "predicate": "día de la semana",
+            "value": "viernes",
+            "unit": null,
+            "polarity": 1,
+            "text": "Hoy es viernes.",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "3c4175166c61cfc3c7ff5b2c78768b8ea8f1fe74c72297d13fe904f393707c6a",
+                "start": 0,
+                "end": 15,
+                "quote": "Hoy es viernes."
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "es",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          },
+          "p2": {
+            "claim_id": "p2",
+            "kind": "extraction",
+            "subject": "Su cumpleaños",
+            "predicate": "día de la semana",
+            "value": "martes",
+            "unit": null,
+            "polarity": 1,
+            "text": "Su cumpleaños fue el martes",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "3c4175166c61cfc3c7ff5b2c78768b8ea8f1fe74c72297d13fe904f393707c6a",
+                "start": 16,
+                "end": 43,
+                "quote": "Su cumpleaños fue el martes"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "fue",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          },
+          "p3": {
+            "claim_id": "p3",
+            "kind": "extraction",
+            "subject": "La cita",
+            "predicate": "desplazamiento respecto a cumpleaños",
+            "value": -2,
+            "unit": "calendar_days",
+            "polarity": 1,
+            "text": "quedé con ella dos días antes de su cumpleaños",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "3c4175166c61cfc3c7ff5b2c78768b8ea8f1fe74c72297d13fe904f393707c6a",
+                "start": 46,
+                "end": 92,
+                "quote": "quedé con ella dos días antes de su cumpleaños"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "quedé con ella",
+              "direction": "before",
+              "anchor_reference": "cumpleaños"
+            }
+          }
+        },
+        "steps": [
+          {
+            "step_id": "s1",
+            "premises": [
+              "p2",
+              "p3"
+            ],
+            "conclusion_id": "c1",
+            "operation": "weekday_shift",
+            "rule_id": null,
+            "rule_version": null,
+            "assumptions": [],
+            "obligations": [
+              {
+                "obligation_id": "s1::temporal",
+                "family": "temporal",
+                "description": "Verify weekday_shift under family 'temporal'",
+                "critical": true,
+                "parameters": {},
+                "origin": "proposed"
+              }
+            ],
+            "critical": true,
+            "parameters": {}
+          }
+        ]
+      },
+      "telemetry": {
+        "model_identity": {
+          "provider": "openai-compatible",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "parameters": {
+            "temperature": 0,
+            "max_tokens": 8192,
+            "extra_body": {
+              "chat_template_kwargs": {
+                "enable_thinking": false
+              }
+            }
+          },
+          "prompt_version": "v4-derivation-planner-3",
+          "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3"
+        },
+        "prompt_version": "v4-derivation-planner-3",
+        "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3",
+        "catalog_id": "deltoryx_v4_core",
+        "catalog_version": "1.0.0",
+        "catalog_fingerprint": "58d83b0d0508cd7be4577790ac8e15ebc80b9bc4e694f1f0ff1bb817ec131a53",
+        "calls": 1,
+        "retries": 0,
+        "prompt_tokens": 3474,
+        "completion_tokens": 631,
+        "total_tokens": 4105,
+        "planning_latency_ms": 7681.243,
+        "verifier_latency_ms": 4.448,
+        "total_latency_ms": 7686.583,
+        "attempt_traces": [
+          {
+            "attempt": 1,
+            "ok": true,
+            "outcome_category": "verified_derivation",
+            "epistemic_verdict": "derived",
+            "defects": [],
+            "latency_ms": 7681.243,
+            "verifier_latency_ms": 4.448,
+            "usage": {
+              "prompt_tokens": 3474,
+              "completion_tokens": 631,
+              "total_tokens": 4105
+            }
+          }
+        ],
+        "unit_profile": "es",
+        "unit_registry_fingerprint": "edcc833daa7c074c05e1e2ae5d2916670d40460e6695f136ab185e80ad9bc17f"
+      }
+    },
+    {
+      "case_id": "T5_birthday_anchor_refuted_wednesday",
+      "track": "temporal_core",
+      "sources": {
+        "doc_1": "Hoy es viernes. Su cumpleaños fue el martes y quedé con ella dos días antes de su cumpleaños."
+      },
+      "claim": "La cita fue el miércoles.",
+      "expected": {
+        "epistemic_verdict": "refuted",
+        "operational_routing": "RETRY",
+        "computed_value": "domingo",
+        "computed_unit": null
+      },
+      "observed": {
+        "epistemic_verdict": "refuted",
+        "outcome_category": "verified_refutation",
+        "operational_routing": {
+          "status": "RETRY",
+          "allowed": false,
+          "requires_human": false,
+          "reasons": [
+            "CLAIM_CONTRADICTS_COMPUTED_CONCLUSION"
+          ],
+          "authorization_verdict": null
+        },
+        "computed_conclusion": {
+          "claim_id": "c1",
+          "value": "domingo",
+          "unit": null,
+          "text": "weekday_shift(p2, p3) = domingo",
+          "polarity": 1
+        },
+        "graph_admitted": true,
+        "certainty": {
+          "derivation_validity": {
+            "status": "exact_under_explicit_premises",
+            "guarantee_kind": "deterministic_formal",
+            "explanation": "Deducción determinista exacta bajo las premisas explícitas extraídas y las operaciones controladas."
+          },
+          "extraction_fidelity": {
+            "status": "verified_grounding",
+            "grounded_premises": 3,
+            "rejected_premises": 0,
+            "checks_applied": [
+              "claim_target_correspondence",
+              "source_document_and_revision",
+              "verbatim_span_bound",
+              "clause_boundary_complete",
+              "value_and_unit_correspondence",
+              "direction_sign_correspondence",
+              "entity_same_clause_correspondence",
+              "event_same_clause_correspondence",
+              "step_anchor_correspondence",
+              "conclusion_claim_comparison"
+            ],
+            "note": "Fidelidad comprobada contra citas literales y cláusulas elementales de las fuentes; no sustituye a una corroboración externa ni mide probabilidad calibrada."
+          },
+          "source_support": {
+            "evidence_support_index": 1.0,
+            "conflict_index": 0.0,
+            "uncertainty_index": 0.0,
+            "verification_coverage": 1.0,
+            "is_policy_index": true,
+            "source_attributions": {
+              "doc_1": "source_statement"
+            }
+          },
+          "calibrated_correctness_probability": null,
+          "calibration_status": "uncalibrated",
+          "guarantee_explanation": "Deducción aritmética/calendárica exacta bajo las premisas explícitas extraídas; calibrated_correctness_probability=None porque no existe calibración empírica aplicable (el índice de soporte es una métrica de política, no una probabilidad)."
+        },
+        "defects": [],
+        "limitations": [],
+        "missing_premises": [],
+        "anchor_diagnostics": [
+          {
+            "document_id": "doc_1",
+            "incorrect_anchor_weekday": "viernes",
+            "incorrect_anchor_clause": "Hoy es viernes",
+            "offset_days": -2,
+            "would_yield_weekday": "miércoles",
+            "correct_anchor_weekday": "martes",
+            "correct_anchor_clauses": [
+              "Su cumpleaños fue el martes"
+            ],
+            "explicit_anchor_phrase": "su cumpleaños",
+            "offset_clauses": [
+              "quedé con ella dos días antes de su cumpleaños"
+            ],
+            "explanation": "Aunque 'viernes' (en «Hoy es viernes») con desplazamiento -2 daría 'miércoles', es un ancla incorrecta porque el desplazamiento relativo en «quedé con ella dos días antes de su cumpleaños» está anclado a 'su cumpleaños' ('martes'), cuyo cálculo exacto es 'domingo'."
+          }
+        ],
+        "explanation": "Afirmación refutada: el cálculo controlado a partir de las premisas verificadas produce 'domingo', que contradice lo afirmado ('miércoles'). Aunque 'viernes' (en «Hoy es viernes») con desplazamiento -2 daría 'miércoles', es un ancla incorrecta porque el desplazamiento relativo en «quedé con ella dos días antes de su cumpleaños» está anclado a 'su cumpleaños' ('martes'), cuyo cálculo exacto es 'domingo'. Fiabilidad A: Texto fuente comprobado y operaciones del núcleo de Deltoryx."
+      },
+      "passed": true,
+      "raw_proposal": {
+        "claim_target": {
+          "subject": "La cita",
+          "predicate": "fue el",
+          "value": "miércoles",
+          "unit": null,
+          "polarity": 1
+        },
+        "premises": [
+          {
+            "claim_id": "p1",
+            "document_id": "doc_1",
+            "revision": "3c4175166c61cfc3c7ff5b2c78768b8ea8f1fe74c72297d13fe904f393707c6a",
+            "quote": "Hoy es viernes.",
+            "entity": "Hoy",
+            "event": "es",
+            "predicate": "día de la semana",
+            "value": "viernes",
+            "unit": null,
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          },
+          {
+            "claim_id": "p2",
+            "document_id": "doc_1",
+            "revision": "3c4175166c61cfc3c7ff5b2c78768b8ea8f1fe74c72297d13fe904f393707c6a",
+            "quote": "Su cumpleaños fue el martes",
+            "entity": "Su cumpleaños",
+            "event": "fue",
+            "predicate": "día de la semana",
+            "value": "martes",
+            "unit": null,
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          },
+          {
+            "claim_id": "p3",
+            "document_id": "doc_1",
+            "revision": "3c4175166c61cfc3c7ff5b2c78768b8ea8f1fe74c72297d13fe904f393707c6a",
+            "quote": "quedé con ella dos días antes de su cumpleaños",
+            "entity": "la cita",
+            "event": "quedé con ella",
+            "predicate": "desplazamiento respecto a cumpleaños",
+            "value": -2,
+            "unit": "calendar_days",
+            "direction": "before",
+            "anchor_reference": "cumpleaños",
+            "polarity": 1
+          }
+        ],
+        "steps": [
+          {
+            "step_id": "s1",
+            "operation": "weekday_shift",
+            "premises": [
+              "p2",
+              "p3"
+            ],
+            "conclusion_id": "c1",
+            "rule_id": null,
+            "rule_version": null,
+            "parameters": {},
+            "assumptions": [],
+            "proposed_value": null,
+            "proposed_unit": null
+          }
+        ],
+        "derived_conclusion_id": "c1",
+        "missing_premises": [],
+        "assumptions": [],
+        "suggested_rules": [],
+        "proposed_operations": []
+      },
+      "graph": {
+        "conclusion_id": "c1",
+        "claims": {
+          "c1": {
+            "claim_id": "c1",
+            "kind": "derivation",
+            "subject": "La cita",
+            "predicate": "fue el",
+            "value": "domingo",
+            "unit": null,
+            "polarity": 1,
+            "text": "weekday_shift(p2, p3) = domingo",
+            "assertion_kind": "fact",
+            "evidence": [],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {}
+          },
+          "p1": {
+            "claim_id": "p1",
+            "kind": "extraction",
+            "subject": "Hoy",
+            "predicate": "día de la semana",
+            "value": "viernes",
+            "unit": null,
+            "polarity": 1,
+            "text": "Hoy es viernes.",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "3c4175166c61cfc3c7ff5b2c78768b8ea8f1fe74c72297d13fe904f393707c6a",
+                "start": 0,
+                "end": 15,
+                "quote": "Hoy es viernes."
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "es",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          },
+          "p2": {
+            "claim_id": "p2",
+            "kind": "extraction",
+            "subject": "Su cumpleaños",
+            "predicate": "día de la semana",
+            "value": "martes",
+            "unit": null,
+            "polarity": 1,
+            "text": "Su cumpleaños fue el martes",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "3c4175166c61cfc3c7ff5b2c78768b8ea8f1fe74c72297d13fe904f393707c6a",
+                "start": 16,
+                "end": 43,
+                "quote": "Su cumpleaños fue el martes"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "fue",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          },
+          "p3": {
+            "claim_id": "p3",
+            "kind": "extraction",
+            "subject": "la cita",
+            "predicate": "desplazamiento respecto a cumpleaños",
+            "value": -2,
+            "unit": "calendar_days",
+            "polarity": 1,
+            "text": "quedé con ella dos días antes de su cumpleaños",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "3c4175166c61cfc3c7ff5b2c78768b8ea8f1fe74c72297d13fe904f393707c6a",
+                "start": 46,
+                "end": 92,
+                "quote": "quedé con ella dos días antes de su cumpleaños"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "quedé con ella",
+              "direction": "before",
+              "anchor_reference": "cumpleaños"
+            }
+          }
+        },
+        "steps": [
+          {
+            "step_id": "s1",
+            "premises": [
+              "p2",
+              "p3"
+            ],
+            "conclusion_id": "c1",
+            "operation": "weekday_shift",
+            "rule_id": null,
+            "rule_version": null,
+            "assumptions": [],
+            "obligations": [
+              {
+                "obligation_id": "s1::temporal",
+                "family": "temporal",
+                "description": "Verify weekday_shift under family 'temporal'",
+                "critical": true,
+                "parameters": {},
+                "origin": "proposed"
+              }
+            ],
+            "critical": true,
+            "parameters": {}
+          }
+        ]
+      },
+      "telemetry": {
+        "model_identity": {
+          "provider": "openai-compatible",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "parameters": {
+            "temperature": 0,
+            "max_tokens": 8192,
+            "extra_body": {
+              "chat_template_kwargs": {
+                "enable_thinking": false
+              }
+            }
+          },
+          "prompt_version": "v4-derivation-planner-3",
+          "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3"
+        },
+        "prompt_version": "v4-derivation-planner-3",
+        "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3",
+        "catalog_id": "deltoryx_v4_core",
+        "catalog_version": "1.0.0",
+        "catalog_fingerprint": "58d83b0d0508cd7be4577790ac8e15ebc80b9bc4e694f1f0ff1bb817ec131a53",
+        "calls": 1,
+        "retries": 0,
+        "prompt_tokens": 3476,
+        "completion_tokens": 633,
+        "total_tokens": 4109,
+        "planning_latency_ms": 13520.915,
+        "verifier_latency_ms": 4.582,
+        "total_latency_ms": 13526.457,
+        "attempt_traces": [
+          {
+            "attempt": 1,
+            "ok": true,
+            "outcome_category": "verified_refutation",
+            "epistemic_verdict": "refuted",
+            "defects": [],
+            "latency_ms": 13520.915,
+            "verifier_latency_ms": 4.582,
+            "usage": {
+              "prompt_tokens": 3476,
+              "completion_tokens": 633,
+              "total_tokens": 4109
+            }
+          }
+        ],
+        "unit_profile": "es",
+        "unit_registry_fingerprint": "edcc833daa7c074c05e1e2ae5d2916670d40460e6695f136ab185e80ad9bc17f"
+      }
+    },
+    {
+      "case_id": "NT1_cross_doc_sub_derived_350",
+      "track": "nontemporal_core",
+      "sources": {
+        "doc_budget": "Presupuesto aprobado para el Proyecto Norte: 1.250 EUR.",
+        "doc_spend": "Gasto ejecutado del Proyecto Norte: 900 EUR."
+      },
+      "claim": "El margen restante del Proyecto Norte es de 350 EUR.",
+      "expected": {
+        "epistemic_verdict": "derived",
+        "operational_routing": "PASS",
+        "computed_value": 350,
+        "computed_unit": "EUR"
+      },
+      "observed": {
+        "epistemic_verdict": "derived",
+        "outcome_category": "verified_derivation",
+        "operational_routing": {
+          "status": "PASS",
+          "allowed": true,
+          "requires_human": false,
+          "reasons": [
+            "DERIVATION_VERIFIED_AND_MATCHES_CLAIM"
+          ],
+          "authorization_verdict": {
+            "status": "PASS",
+            "allowed": true,
+            "requires_human": false,
+            "snapshot_digest": "af3307d79dd36de5d08673a4d4a8d697369abc77841b9c5191afe4a93981d1b4",
+            "issues": []
+          }
+        },
+        "computed_conclusion": {
+          "claim_id": "c1",
+          "value": 350,
+          "unit": "EUR",
+          "text": "sub(p1, p2) = 350 EUR",
+          "polarity": 1
+        },
+        "graph_admitted": true,
+        "certainty": {
+          "derivation_validity": {
+            "status": "exact_under_explicit_premises",
+            "guarantee_kind": "deterministic_formal",
+            "explanation": "Deducción determinista exacta bajo las premisas explícitas extraídas y las operaciones controladas."
+          },
+          "extraction_fidelity": {
+            "status": "verified_grounding",
+            "grounded_premises": 2,
+            "rejected_premises": 0,
+            "checks_applied": [
+              "claim_target_correspondence",
+              "source_document_and_revision",
+              "verbatim_span_bound",
+              "clause_boundary_complete",
+              "value_and_unit_correspondence",
+              "direction_sign_correspondence",
+              "entity_same_clause_correspondence",
+              "event_same_clause_correspondence",
+              "conclusion_claim_comparison"
+            ],
+            "note": "Fidelidad comprobada contra citas literales y cláusulas elementales de las fuentes; no sustituye a una corroboración externa ni mide probabilidad calibrada."
+          },
+          "source_support": {
+            "evidence_support_index": 1.0,
+            "conflict_index": 0.0,
+            "uncertainty_index": 0.0,
+            "verification_coverage": 1.0,
+            "is_policy_index": true,
+            "source_attributions": {
+              "doc_budget": "source_statement",
+              "doc_spend": "source_statement"
+            }
+          },
+          "calibrated_correctness_probability": null,
+          "calibration_status": "uncalibrated",
+          "guarantee_explanation": "Deducción aritmética/calendárica exacta bajo las premisas explícitas extraídas; calibrated_correctness_probability=None porque no existe calibración empírica aplicable (el índice de soporte es una métrica de política, no una probabilidad)."
+        },
+        "defects": [],
+        "limitations": [],
+        "missing_premises": [],
+        "anchor_diagnostics": [],
+        "explanation": "Afirmación derivada y verificada de forma determinista: sub(p1, p2) -> 350 EUR, coincidiendo con la afirmación original (350). Fiabilidad A: Texto fuente comprobado y operaciones del núcleo de Deltoryx."
+      },
+      "passed": true,
+      "raw_proposal": {
+        "claim_target": {
+          "subject": "Proyecto Norte",
+          "predicate": "margen restante",
+          "value": 350,
+          "unit": "EUR",
+          "polarity": 1
+        },
+        "premises": [
+          {
+            "claim_id": "p1",
+            "document_id": "doc_budget",
+            "revision": "afb6bb5e6d0b1577af0c637993af1b9f5f2a66c2131d3856311fb299cb46c16c",
+            "quote": "Presupuesto aprobado para el Proyecto Norte: 1.250 EUR.",
+            "entity": "Proyecto Norte",
+            "event": "presupuesto aprobado",
+            "predicate": "importe",
+            "value": 1250,
+            "unit": "EUR",
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          },
+          {
+            "claim_id": "p2",
+            "document_id": "doc_spend",
+            "revision": "ec6b29021d719297b7cd3d858908e2b65cfd6390aa14f9d438af5646be185c1f",
+            "quote": "Gasto ejecutado del Proyecto Norte: 900 EUR.",
+            "entity": "Proyecto Norte",
+            "event": "gasto ejecutado",
+            "predicate": "importe",
+            "value": 900,
+            "unit": "EUR",
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          }
+        ],
+        "steps": [
+          {
+            "step_id": "s1",
+            "operation": "sub",
+            "premises": [
+              "p1",
+              "p2"
+            ],
+            "conclusion_id": "c1",
+            "rule_id": null,
+            "rule_version": null,
+            "parameters": {},
+            "assumptions": [],
+            "proposed_value": null,
+            "proposed_unit": null
+          }
+        ],
+        "derived_conclusion_id": "c1",
+        "missing_premises": [],
+        "assumptions": [],
+        "suggested_rules": [],
+        "proposed_operations": []
+      },
+      "graph": {
+        "conclusion_id": "c1",
+        "claims": {
+          "c1": {
+            "claim_id": "c1",
+            "kind": "derivation",
+            "subject": "Proyecto Norte",
+            "predicate": "margen restante",
+            "value": 350,
+            "unit": "EUR",
+            "polarity": 1,
+            "text": "sub(p1, p2) = 350 EUR",
+            "assertion_kind": "fact",
+            "evidence": [],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {}
+          },
+          "p1": {
+            "claim_id": "p1",
+            "kind": "extraction",
+            "subject": "Proyecto Norte",
+            "predicate": "importe",
+            "value": 1250,
+            "unit": "EUR",
+            "polarity": 1,
+            "text": "Presupuesto aprobado para el Proyecto Norte: 1.250 EUR.",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_budget",
+                "revision": "afb6bb5e6d0b1577af0c637993af1b9f5f2a66c2131d3856311fb299cb46c16c",
+                "start": 0,
+                "end": 55,
+                "quote": "Presupuesto aprobado para el Proyecto Norte: 1.250 EUR."
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "presupuesto aprobado",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          },
+          "p2": {
+            "claim_id": "p2",
+            "kind": "extraction",
+            "subject": "Proyecto Norte",
+            "predicate": "importe",
+            "value": 900,
+            "unit": "EUR",
+            "polarity": 1,
+            "text": "Gasto ejecutado del Proyecto Norte: 900 EUR.",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_spend",
+                "revision": "ec6b29021d719297b7cd3d858908e2b65cfd6390aa14f9d438af5646be185c1f",
+                "start": 0,
+                "end": 44,
+                "quote": "Gasto ejecutado del Proyecto Norte: 900 EUR."
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "gasto ejecutado",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          }
+        },
+        "steps": [
+          {
+            "step_id": "s1",
+            "premises": [
+              "p1",
+              "p2"
+            ],
+            "conclusion_id": "c1",
+            "operation": "sub",
+            "rule_id": null,
+            "rule_version": null,
+            "assumptions": [],
+            "obligations": [
+              {
+                "obligation_id": "s1::arithmetic",
+                "family": "arithmetic",
+                "description": "Verify sub under family 'arithmetic'",
+                "critical": true,
+                "parameters": {},
+                "origin": "proposed"
+              },
+              {
+                "obligation_id": "s1::quantities",
+                "family": "quantities",
+                "description": "Verify sub under family 'quantities'",
+                "critical": true,
+                "parameters": {},
+                "origin": "proposed"
+              }
+            ],
+            "critical": true,
+            "parameters": {}
+          }
+        ]
+      },
+      "telemetry": {
+        "model_identity": {
+          "provider": "openai-compatible",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "parameters": {
+            "temperature": 0,
+            "max_tokens": 8192,
+            "extra_body": {
+              "chat_template_kwargs": {
+                "enable_thinking": false
+              }
+            }
+          },
+          "prompt_version": "v4-derivation-planner-3",
+          "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3"
+        },
+        "prompt_version": "v4-derivation-planner-3",
+        "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3",
+        "catalog_id": "deltoryx_v4_core",
+        "catalog_version": "1.0.0",
+        "catalog_fingerprint": "58d83b0d0508cd7be4577790ac8e15ebc80b9bc4e694f1f0ff1bb817ec131a53",
+        "calls": 1,
+        "retries": 0,
+        "prompt_tokens": 3558,
+        "completion_tokens": 489,
+        "total_tokens": 4047,
+        "planning_latency_ms": 10035.149,
+        "verifier_latency_ms": 5.965,
+        "total_latency_ms": 10042.077,
+        "attempt_traces": [
+          {
+            "attempt": 1,
+            "ok": true,
+            "outcome_category": "verified_derivation",
+            "epistemic_verdict": "derived",
+            "defects": [],
+            "latency_ms": 10035.149,
+            "verifier_latency_ms": 5.965,
+            "usage": {
+              "prompt_tokens": 3558,
+              "completion_tokens": 489,
+              "total_tokens": 4047
+            }
+          }
+        ],
+        "unit_profile": "es",
+        "unit_registry_fingerprint": "edcc833daa7c074c05e1e2ae5d2916670d40460e6695f136ab185e80ad9bc17f"
+      }
+    },
+    {
+      "case_id": "NT2_cross_doc_sub_refuted_450",
+      "track": "nontemporal_core",
+      "sources": {
+        "doc_budget": "Presupuesto aprobado para el Proyecto Norte: 1.250 EUR.",
+        "doc_spend": "Gasto ejecutado del Proyecto Norte: 900 EUR."
+      },
+      "claim": "El margen restante del Proyecto Norte es de 450 EUR.",
+      "expected": {
+        "epistemic_verdict": "refuted",
+        "operational_routing": "RETRY",
+        "computed_value": 350,
+        "computed_unit": "EUR"
+      },
+      "observed": {
+        "epistemic_verdict": "refuted",
+        "outcome_category": "verified_refutation",
+        "operational_routing": {
+          "status": "RETRY",
+          "allowed": false,
+          "requires_human": false,
+          "reasons": [
+            "CLAIM_CONTRADICTS_COMPUTED_CONCLUSION"
+          ],
+          "authorization_verdict": null
+        },
+        "computed_conclusion": {
+          "claim_id": "c1",
+          "value": 350,
+          "unit": "EUR",
+          "text": "sub(p1, p2) = 350 EUR",
+          "polarity": 1
+        },
+        "graph_admitted": true,
+        "certainty": {
+          "derivation_validity": {
+            "status": "exact_under_explicit_premises",
+            "guarantee_kind": "deterministic_formal",
+            "explanation": "Deducción determinista exacta bajo las premisas explícitas extraídas y las operaciones controladas."
+          },
+          "extraction_fidelity": {
+            "status": "verified_grounding",
+            "grounded_premises": 2,
+            "rejected_premises": 0,
+            "checks_applied": [
+              "claim_target_correspondence",
+              "source_document_and_revision",
+              "verbatim_span_bound",
+              "clause_boundary_complete",
+              "value_and_unit_correspondence",
+              "direction_sign_correspondence",
+              "entity_same_clause_correspondence",
+              "event_same_clause_correspondence",
+              "conclusion_claim_comparison"
+            ],
+            "note": "Fidelidad comprobada contra citas literales y cláusulas elementales de las fuentes; no sustituye a una corroboración externa ni mide probabilidad calibrada."
+          },
+          "source_support": {
+            "evidence_support_index": 1.0,
+            "conflict_index": 0.0,
+            "uncertainty_index": 0.0,
+            "verification_coverage": 1.0,
+            "is_policy_index": true,
+            "source_attributions": {
+              "doc_budget": "source_statement",
+              "doc_spend": "source_statement"
+            }
+          },
+          "calibrated_correctness_probability": null,
+          "calibration_status": "uncalibrated",
+          "guarantee_explanation": "Deducción aritmética/calendárica exacta bajo las premisas explícitas extraídas; calibrated_correctness_probability=None porque no existe calibración empírica aplicable (el índice de soporte es una métrica de política, no una probabilidad)."
+        },
+        "defects": [],
+        "limitations": [],
+        "missing_premises": [],
+        "anchor_diagnostics": [],
+        "explanation": "Afirmación refutada: el cálculo controlado a partir de las premisas verificadas produce '350 EUR', que contradice lo afirmado (450). Fiabilidad A: Texto fuente comprobado y operaciones del núcleo de Deltoryx."
+      },
+      "passed": true,
+      "raw_proposal": {
+        "claim_target": {
+          "subject": "Proyecto Norte",
+          "predicate": "margen restante",
+          "value": 450,
+          "unit": "EUR",
+          "polarity": 1
+        },
+        "premises": [
+          {
+            "claim_id": "p1",
+            "document_id": "doc_budget",
+            "revision": "afb6bb5e6d0b1577af0c637993af1b9f5f2a66c2131d3856311fb299cb46c16c",
+            "quote": "Presupuesto aprobado para el Proyecto Norte: 1.250 EUR.",
+            "entity": "Proyecto Norte",
+            "event": "Presupuesto aprobado",
+            "predicate": "importe",
+            "value": 1250,
+            "unit": "EUR",
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          },
+          {
+            "claim_id": "p2",
+            "document_id": "doc_spend",
+            "revision": "ec6b29021d719297b7cd3d858908e2b65cfd6390aa14f9d438af5646be185c1f",
+            "quote": "Gasto ejecutado del Proyecto Norte: 900 EUR.",
+            "entity": "Proyecto Norte",
+            "event": "Gasto ejecutado",
+            "predicate": "importe",
+            "value": 900,
+            "unit": "EUR",
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          }
+        ],
+        "steps": [
+          {
+            "step_id": "s1",
+            "operation": "sub",
+            "premises": [
+              "p1",
+              "p2"
+            ],
+            "conclusion_id": "c1",
+            "rule_id": null,
+            "rule_version": null,
+            "parameters": {},
+            "assumptions": [],
+            "proposed_value": null,
+            "proposed_unit": null
+          }
+        ],
+        "derived_conclusion_id": "c1",
+        "missing_premises": [],
+        "assumptions": [],
+        "suggested_rules": [],
+        "proposed_operations": []
+      },
+      "graph": {
+        "conclusion_id": "c1",
+        "claims": {
+          "c1": {
+            "claim_id": "c1",
+            "kind": "derivation",
+            "subject": "Proyecto Norte",
+            "predicate": "margen restante",
+            "value": 350,
+            "unit": "EUR",
+            "polarity": 1,
+            "text": "sub(p1, p2) = 350 EUR",
+            "assertion_kind": "fact",
+            "evidence": [],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {}
+          },
+          "p1": {
+            "claim_id": "p1",
+            "kind": "extraction",
+            "subject": "Proyecto Norte",
+            "predicate": "importe",
+            "value": 1250,
+            "unit": "EUR",
+            "polarity": 1,
+            "text": "Presupuesto aprobado para el Proyecto Norte: 1.250 EUR.",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_budget",
+                "revision": "afb6bb5e6d0b1577af0c637993af1b9f5f2a66c2131d3856311fb299cb46c16c",
+                "start": 0,
+                "end": 55,
+                "quote": "Presupuesto aprobado para el Proyecto Norte: 1.250 EUR."
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "Presupuesto aprobado",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          },
+          "p2": {
+            "claim_id": "p2",
+            "kind": "extraction",
+            "subject": "Proyecto Norte",
+            "predicate": "importe",
+            "value": 900,
+            "unit": "EUR",
+            "polarity": 1,
+            "text": "Gasto ejecutado del Proyecto Norte: 900 EUR.",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_spend",
+                "revision": "ec6b29021d719297b7cd3d858908e2b65cfd6390aa14f9d438af5646be185c1f",
+                "start": 0,
+                "end": 44,
+                "quote": "Gasto ejecutado del Proyecto Norte: 900 EUR."
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "Gasto ejecutado",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          }
+        },
+        "steps": [
+          {
+            "step_id": "s1",
+            "premises": [
+              "p1",
+              "p2"
+            ],
+            "conclusion_id": "c1",
+            "operation": "sub",
+            "rule_id": null,
+            "rule_version": null,
+            "assumptions": [],
+            "obligations": [
+              {
+                "obligation_id": "s1::arithmetic",
+                "family": "arithmetic",
+                "description": "Verify sub under family 'arithmetic'",
+                "critical": true,
+                "parameters": {},
+                "origin": "proposed"
+              },
+              {
+                "obligation_id": "s1::quantities",
+                "family": "quantities",
+                "description": "Verify sub under family 'quantities'",
+                "critical": true,
+                "parameters": {},
+                "origin": "proposed"
+              }
+            ],
+            "critical": true,
+            "parameters": {}
+          }
+        ]
+      },
+      "telemetry": {
+        "model_identity": {
+          "provider": "openai-compatible",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "parameters": {
+            "temperature": 0,
+            "max_tokens": 8192,
+            "extra_body": {
+              "chat_template_kwargs": {
+                "enable_thinking": false
+              }
+            }
+          },
+          "prompt_version": "v4-derivation-planner-3",
+          "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3"
+        },
+        "prompt_version": "v4-derivation-planner-3",
+        "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3",
+        "catalog_id": "deltoryx_v4_core",
+        "catalog_version": "1.0.0",
+        "catalog_fingerprint": "58d83b0d0508cd7be4577790ac8e15ebc80b9bc4e694f1f0ff1bb817ec131a53",
+        "calls": 1,
+        "retries": 0,
+        "prompt_tokens": 3558,
+        "completion_tokens": 489,
+        "total_tokens": 4047,
+        "planning_latency_ms": 6957.829,
+        "verifier_latency_ms": 5.729,
+        "total_latency_ms": 6964.509,
+        "attempt_traces": [
+          {
+            "attempt": 1,
+            "ok": true,
+            "outcome_category": "verified_refutation",
+            "epistemic_verdict": "refuted",
+            "defects": [],
+            "latency_ms": 6957.829,
+            "verifier_latency_ms": 5.729,
+            "usage": {
+              "prompt_tokens": 3558,
+              "completion_tokens": 489,
+              "total_tokens": 4047
+            }
+          }
+        ],
+        "unit_profile": "es",
+        "unit_registry_fingerprint": "edcc833daa7c074c05e1e2ae5d2916670d40460e6695f136ab185e80ad9bc17f"
+      }
+    },
+    {
+      "case_id": "NT3_cross_doc_sub_missing_spend",
+      "track": "nontemporal_core",
+      "sources": {
+        "doc_budget": "Presupuesto aprobado para el Proyecto Norte: 1.250 EUR."
+      },
+      "claim": "El margen restante del Proyecto Norte es de 350 EUR.",
+      "expected": {
+        "epistemic_verdict": "insufficient_evidence",
+        "operational_routing": "ESCALATE",
+        "computed_value": null,
+        "computed_unit": null
+      },
+      "observed": {
+        "epistemic_verdict": "unresolved",
+        "outcome_category": "unsupported_operation_or_rule",
+        "operational_routing": {
+          "status": "ESCALATE",
+          "allowed": false,
+          "requires_human": true,
+          "reasons": [
+            "UNVERIFIED_SUGGESTED_RULE:margen_restante_calculo"
+          ],
+          "authorization_verdict": null
+        },
+        "computed_conclusion": null,
+        "graph_admitted": false,
+        "certainty": {
+          "derivation_validity": {
+            "status": "not_established",
+            "guarantee_kind": "none",
+            "explanation": "No se completó una derivación válida (unsupported_operation_or_rule)."
+          },
+          "extraction_fidelity": {
+            "status": "verified_grounding",
+            "grounded_premises": 1,
+            "rejected_premises": 0,
+            "checks_applied": [
+              "claim_target_correspondence",
+              "source_document_and_revision",
+              "verbatim_span_bound",
+              "clause_boundary_complete",
+              "value_and_unit_correspondence",
+              "direction_sign_correspondence",
+              "entity_same_clause_correspondence",
+              "event_same_clause_correspondence"
+            ],
+            "note": "Fidelidad comprobada contra citas literales y cláusulas elementales de las fuentes; no sustituye a una corroboración externa ni mide probabilidad calibrada."
+          },
+          "source_support": {
+            "evidence_support_index": 0.0,
+            "conflict_index": 0.0,
+            "uncertainty_index": 1.0,
+            "verification_coverage": 0.0,
+            "is_policy_index": true,
+            "source_attributions": {
+              "doc_budget": "source_statement"
+            }
+          },
+          "calibrated_correctness_probability": null,
+          "calibration_status": "uncalibrated",
+          "guarantee_explanation": "Sin derivación formal completa (unsupported_operation_or_rule); calibrated_correctness_probability=None."
+        },
+        "defects": [],
+        "limitations": [
+          "UNVERIFIED_SUGGESTED_RULE:margen_restante_calculo (margen_restante = presupuesto_aprobado - gasto_ejecutado)"
+        ],
+        "missing_premises": [
+          {
+            "role": "gasto_ejecutado",
+            "description": "Importe gastado o comprometido del Proyecto Norte para calcular margen restante = presupuesto - gasto"
+          },
+          {
+            "role": "definicion_margen",
+            "description": "Confirmación de que 'margen restante' se define como presupuesto aprobado menos gasto ejecutado"
+          }
+        ],
+        "anchor_diagnostics": [],
+        "explanation": "El plan propuesto requiere operaciones o reglas no declaradas en el catálogo controlado: UNVERIFIED_SUGGESTED_RULE:margen_restante_calculo (margen_restante = presupuesto_aprobado - gasto_ejecutado)"
+      },
+      "passed": false,
+      "raw_proposal": {
+        "claim_target": {
+          "subject": "Proyecto Norte",
+          "predicate": "margen restante",
+          "value": 350,
+          "unit": "EUR",
+          "polarity": 1
+        },
+        "premises": [
+          {
+            "claim_id": "p1",
+            "document_id": "doc_budget",
+            "revision": "afb6bb5e6d0b1577af0c637993af1b9f5f2a66c2131d3856311fb299cb46c16c",
+            "quote": "Presupuesto aprobado para el Proyecto Norte: 1.250 EUR.",
+            "entity": "Proyecto Norte",
+            "event": "presupuesto aprobado",
+            "predicate": "importe",
+            "value": 1250,
+            "unit": "EUR",
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          }
+        ],
+        "steps": [],
+        "derived_conclusion_id": null,
+        "missing_premises": [
+          {
+            "role": "gasto_ejecutado",
+            "description": "Importe gastado o comprometido del Proyecto Norte para calcular margen restante = presupuesto - gasto"
+          },
+          {
+            "role": "definicion_margen",
+            "description": "Confirmación de que 'margen restante' se define como presupuesto aprobado menos gasto ejecutado"
+          }
+        ],
+        "assumptions": [
+          "El margen restante se calcula como presupuesto aprobado menos gasto ejecutado"
+        ],
+        "suggested_rules": [
+          {
+            "rule_id": "margen_restante_calculo",
+            "description": "margen_restante = presupuesto_aprobado - gasto_ejecutado",
+            "premises": [
+              "presupuesto_aprobado",
+              "gasto_ejecutado"
+            ],
+            "conclusion": "margen_restante"
+          }
+        ],
+        "proposed_operations": []
+      },
+      "graph": null,
+      "telemetry": {
+        "model_identity": {
+          "provider": "openai-compatible",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "parameters": {
+            "temperature": 0,
+            "max_tokens": 8192,
+            "extra_body": {
+              "chat_template_kwargs": {
+                "enable_thinking": false
+              }
+            }
+          },
+          "prompt_version": "v4-derivation-planner-3",
+          "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3"
+        },
+        "prompt_version": "v4-derivation-planner-3",
+        "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3",
+        "catalog_id": "deltoryx_v4_core",
+        "catalog_version": "1.0.0",
+        "catalog_fingerprint": "58d83b0d0508cd7be4577790ac8e15ebc80b9bc4e694f1f0ff1bb817ec131a53",
+        "calls": 1,
+        "retries": 0,
+        "prompt_tokens": 3471,
+        "completion_tokens": 414,
+        "total_tokens": 3885,
+        "planning_latency_ms": 6827.127,
+        "verifier_latency_ms": 2.606,
+        "total_latency_ms": 6830.687,
+        "attempt_traces": [
+          {
+            "attempt": 1,
+            "ok": false,
+            "outcome_category": "unsupported_operation_or_rule",
+            "epistemic_verdict": "unresolved",
+            "defects": [],
+            "latency_ms": 6827.127,
+            "verifier_latency_ms": 2.606,
+            "usage": {
+              "prompt_tokens": 3471,
+              "completion_tokens": 414,
+              "total_tokens": 3885
+            }
+          }
+        ],
+        "unit_profile": "es",
+        "unit_registry_fingerprint": "edcc833daa7c074c05e1e2ae5d2916670d40460e6695f136ab185e80ad9bc17f"
+      }
+    }
+  ],
+  "heldout_paraphrases": [
+    {
+      "case_id": "H1_forward_shift_week_wrap_derived",
+      "track": "heldout_paraphrase",
+      "sources": {
+        "doc_1": "El informe se entregó el sábado y la reunión se celebró tres días después."
+      },
+      "claim": "La reunión tuvo lugar el martes.",
+      "expected": {
+        "epistemic_verdict": "derived",
+        "operational_routing": "PASS",
+        "computed_value": "martes",
+        "computed_unit": null
+      },
+      "observed": {
+        "epistemic_verdict": "derived",
+        "outcome_category": "verified_derivation",
+        "operational_routing": {
+          "status": "PASS",
+          "allowed": true,
+          "requires_human": false,
+          "reasons": [
+            "DERIVATION_VERIFIED_AND_MATCHES_CLAIM"
+          ],
+          "authorization_verdict": {
+            "status": "PASS",
+            "allowed": true,
+            "requires_human": false,
+            "snapshot_digest": "1df894919cab3f79dbfba83a6d8d94fd67ac0c099dbd23de30bcd5410a8d6e7c",
+            "issues": []
+          }
+        },
+        "computed_conclusion": {
+          "claim_id": "c1",
+          "value": "martes",
+          "unit": null,
+          "text": "weekday_shift(p1, p2) = martes",
+          "polarity": 1
+        },
+        "graph_admitted": true,
+        "certainty": {
+          "derivation_validity": {
+            "status": "exact_under_explicit_premises",
+            "guarantee_kind": "deterministic_formal",
+            "explanation": "Deducción determinista exacta bajo las premisas explícitas extraídas y las operaciones controladas."
+          },
+          "extraction_fidelity": {
+            "status": "verified_grounding",
+            "grounded_premises": 2,
+            "rejected_premises": 0,
+            "checks_applied": [
+              "claim_target_correspondence",
+              "source_document_and_revision",
+              "verbatim_span_bound",
+              "clause_boundary_complete",
+              "value_and_unit_correspondence",
+              "direction_sign_correspondence",
+              "entity_same_clause_correspondence",
+              "event_same_clause_correspondence",
+              "step_anchor_correspondence",
+              "conclusion_claim_comparison"
+            ],
+            "note": "Fidelidad comprobada contra citas literales y cláusulas elementales de las fuentes; no sustituye a una corroboración externa ni mide probabilidad calibrada."
+          },
+          "source_support": {
+            "evidence_support_index": 1.0,
+            "conflict_index": 0.0,
+            "uncertainty_index": 0.0,
+            "verification_coverage": 1.0,
+            "is_policy_index": true,
+            "source_attributions": {
+              "doc_1": "source_statement"
+            }
+          },
+          "calibrated_correctness_probability": null,
+          "calibration_status": "uncalibrated",
+          "guarantee_explanation": "Deducción aritmética/calendárica exacta bajo las premisas explícitas extraídas; calibrated_correctness_probability=None porque no existe calibración empírica aplicable (el índice de soporte es una métrica de política, no una probabilidad)."
+        },
+        "defects": [],
+        "limitations": [],
+        "missing_premises": [],
+        "anchor_diagnostics": [],
+        "explanation": "Afirmación derivada y verificada de forma determinista: weekday_shift(p1, p2) -> martes, coincidiendo con la afirmación original ('martes'). Fiabilidad A: Texto fuente comprobado y operaciones del núcleo de Deltoryx."
+      },
+      "passed": true,
+      "raw_proposal": {
+        "claim_target": {
+          "subject": "La reunión",
+          "predicate": "tuvo lugar el",
+          "value": "martes",
+          "unit": null,
+          "polarity": 1
+        },
+        "premises": [
+          {
+            "claim_id": "p1",
+            "document_id": "doc_1",
+            "revision": "055c1678350e3529e1aaeaca74ae1de0d999a6351e46d348c444b0cc583cb3ad",
+            "quote": "El informe se entregó el sábado",
+            "entity": "El informe",
+            "event": "se entregó",
+            "predicate": "día de la semana",
+            "value": "sábado",
+            "unit": null,
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          },
+          {
+            "claim_id": "p2",
+            "document_id": "doc_1",
+            "revision": "055c1678350e3529e1aaeaca74ae1de0d999a6351e46d348c444b0cc583cb3ad",
+            "quote": "la reunión se celebró tres días después",
+            "entity": "la reunión",
+            "event": "se celebró",
+            "predicate": "desplazamiento en días respecto a la entrega del informe",
+            "value": 3,
+            "unit": "calendar_days",
+            "direction": "after",
+            "anchor_reference": "entrega del informe",
+            "polarity": 1
+          }
+        ],
+        "steps": [
+          {
+            "step_id": "s1",
+            "operation": "weekday_shift",
+            "premises": [
+              "p1",
+              "p2"
+            ],
+            "conclusion_id": "c1",
+            "rule_id": null,
+            "rule_version": null,
+            "parameters": {},
+            "assumptions": [],
+            "proposed_value": null,
+            "proposed_unit": null
+          }
+        ],
+        "derived_conclusion_id": "c1",
+        "missing_premises": [],
+        "assumptions": [],
+        "suggested_rules": [],
+        "proposed_operations": []
+      },
+      "graph": {
+        "conclusion_id": "c1",
+        "claims": {
+          "c1": {
+            "claim_id": "c1",
+            "kind": "derivation",
+            "subject": "La reunión",
+            "predicate": "tuvo lugar el",
+            "value": "martes",
+            "unit": null,
+            "polarity": 1,
+            "text": "weekday_shift(p1, p2) = martes",
+            "assertion_kind": "fact",
+            "evidence": [],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {}
+          },
+          "p1": {
+            "claim_id": "p1",
+            "kind": "extraction",
+            "subject": "El informe",
+            "predicate": "día de la semana",
+            "value": "sábado",
+            "unit": null,
+            "polarity": 1,
+            "text": "El informe se entregó el sábado",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "055c1678350e3529e1aaeaca74ae1de0d999a6351e46d348c444b0cc583cb3ad",
+                "start": 0,
+                "end": 31,
+                "quote": "El informe se entregó el sábado"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "se entregó",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          },
+          "p2": {
+            "claim_id": "p2",
+            "kind": "extraction",
+            "subject": "la reunión",
+            "predicate": "desplazamiento en días respecto a la entrega del informe",
+            "value": 3,
+            "unit": "calendar_days",
+            "polarity": 1,
+            "text": "la reunión se celebró tres días después",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "055c1678350e3529e1aaeaca74ae1de0d999a6351e46d348c444b0cc583cb3ad",
+                "start": 34,
+                "end": 73,
+                "quote": "la reunión se celebró tres días después"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "se celebró",
+              "direction": "after",
+              "anchor_reference": "entrega del informe"
+            }
+          }
+        },
+        "steps": [
+          {
+            "step_id": "s1",
+            "premises": [
+              "p1",
+              "p2"
+            ],
+            "conclusion_id": "c1",
+            "operation": "weekday_shift",
+            "rule_id": null,
+            "rule_version": null,
+            "assumptions": [],
+            "obligations": [
+              {
+                "obligation_id": "s1::temporal",
+                "family": "temporal",
+                "description": "Verify weekday_shift under family 'temporal'",
+                "critical": true,
+                "parameters": {},
+                "origin": "proposed"
+              }
+            ],
+            "critical": true,
+            "parameters": {}
+          }
+        ]
+      },
+      "telemetry": {
+        "model_identity": {
+          "provider": "openai-compatible",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "parameters": {
+            "temperature": 0,
+            "max_tokens": 8192,
+            "extra_body": {
+              "chat_template_kwargs": {
+                "enable_thinking": false
+              }
+            }
+          },
+          "prompt_version": "v4-derivation-planner-3",
+          "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3"
+        },
+        "prompt_version": "v4-derivation-planner-3",
+        "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3",
+        "catalog_id": "deltoryx_v4_core",
+        "catalog_version": "1.0.0",
+        "catalog_fingerprint": "58d83b0d0508cd7be4577790ac8e15ebc80b9bc4e694f1f0ff1bb817ec131a53",
+        "calls": 1,
+        "retries": 0,
+        "prompt_tokens": 3461,
+        "completion_tokens": 473,
+        "total_tokens": 3934,
+        "planning_latency_ms": 6729.999,
+        "verifier_latency_ms": 4.256,
+        "total_latency_ms": 6734.828,
+        "attempt_traces": [
+          {
+            "attempt": 1,
+            "ok": true,
+            "outcome_category": "verified_derivation",
+            "epistemic_verdict": "derived",
+            "defects": [],
+            "latency_ms": 6729.999,
+            "verifier_latency_ms": 4.256,
+            "usage": {
+              "prompt_tokens": 3461,
+              "completion_tokens": 473,
+              "total_tokens": 3934
+            }
+          }
+        ],
+        "unit_profile": "es",
+        "unit_registry_fingerprint": "edcc833daa7c074c05e1e2ae5d2916670d40460e6695f136ab185e80ad9bc17f"
+      }
+    },
+    {
+      "case_id": "H2_forward_missing_anchor_indeterminate",
+      "track": "heldout_paraphrase",
+      "sources": {
+        "doc_1": "Nos vimos tres jornadas más tarde."
+      },
+      "claim": "El encuentro ocurrió el lunes.",
+      "expected": {
+        "epistemic_verdict": "insufficient_evidence",
+        "operational_routing": "ESCALATE",
+        "computed_value": null,
+        "computed_unit": null
+      },
+      "observed": {
+        "epistemic_verdict": "insufficient_evidence",
+        "outcome_category": "corpus_insufficient_evidence",
+        "operational_routing": {
+          "status": "ESCALATE",
+          "allowed": false,
+          "requires_human": true,
+          "reasons": [
+            "MISSING_REQUIRED_PREMISES"
+          ],
+          "authorization_verdict": null
+        },
+        "computed_conclusion": null,
+        "graph_admitted": false,
+        "certainty": {
+          "derivation_validity": {
+            "status": "not_established",
+            "guarantee_kind": "none",
+            "explanation": "No se completó una derivación válida (corpus_insufficient_evidence)."
+          },
+          "extraction_fidelity": {
+            "status": "verified_grounding",
+            "grounded_premises": 1,
+            "rejected_premises": 0,
+            "checks_applied": [
+              "claim_target_correspondence",
+              "source_document_and_revision",
+              "verbatim_span_bound",
+              "clause_boundary_complete",
+              "value_and_unit_correspondence",
+              "direction_sign_correspondence",
+              "event_same_clause_correspondence"
+            ],
+            "note": "Fidelidad comprobada contra citas literales y cláusulas elementales de las fuentes; no sustituye a una corroboración externa ni mide probabilidad calibrada."
+          },
+          "source_support": {
+            "evidence_support_index": 0.0,
+            "conflict_index": 0.0,
+            "uncertainty_index": 1.0,
+            "verification_coverage": 0.0,
+            "is_policy_index": true,
+            "source_attributions": {
+              "doc_1": "source_statement"
+            }
+          },
+          "calibrated_correctness_probability": null,
+          "calibration_status": "uncalibrated",
+          "guarantee_explanation": "Sin derivación formal completa (corpus_insufficient_evidence); calibrated_correctness_probability=None."
+        },
+        "defects": [],
+        "limitations": [],
+        "missing_premises": [
+          {
+            "role": "anchor_weekday",
+            "description": "Falta el día de la semana del evento de referencia (ancla) para poder calcular el día resultante tras el desplazamiento de +3 días."
+          }
+        ],
+        "anchor_diagnostics": [],
+        "explanation": "Indeterminada por evidencia insuficiente en las fuentes (sin usar reloj del sistema ni suponer premisas): Falta el día de la semana del evento de referencia (ancla) para poder calcular el día resultante tras el desplazamiento de +3 días."
+      },
+      "passed": true,
+      "raw_proposal": {
+        "claim_target": {
+          "subject": "El encuentro",
+          "predicate": "ocurrió el",
+          "value": "lunes",
+          "unit": null,
+          "polarity": 1
+        },
+        "premises": [
+          {
+            "claim_id": "p1",
+            "document_id": "doc_1",
+            "revision": "b0e7850ad6678024c9cd0abedd9270b0d6f962fa32cbce5925f1c63189987e20",
+            "quote": "Nos vimos tres jornadas más tarde.",
+            "entity": "Nos",
+            "event": "vimos",
+            "predicate": "desplazamiento temporal",
+            "value": 3,
+            "unit": "calendar_days",
+            "direction": "after",
+            "anchor_reference": "evento de referencia no especificado en el texto",
+            "polarity": 1
+          }
+        ],
+        "steps": [],
+        "derived_conclusion_id": null,
+        "missing_premises": [
+          {
+            "role": "anchor_weekday",
+            "description": "Falta el día de la semana del evento de referencia (ancla) para poder calcular el día resultante tras el desplazamiento de +3 días."
+          }
+        ],
+        "assumptions": [],
+        "suggested_rules": [],
+        "proposed_operations": []
+      },
+      "graph": null,
+      "telemetry": {
+        "model_identity": {
+          "provider": "openai-compatible",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "parameters": {
+            "temperature": 0,
+            "max_tokens": 8192,
+            "extra_body": {
+              "chat_template_kwargs": {
+                "enable_thinking": false
+              }
+            }
+          },
+          "prompt_version": "v4-derivation-planner-3",
+          "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3"
+        },
+        "prompt_version": "v4-derivation-planner-3",
+        "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3",
+        "catalog_id": "deltoryx_v4_core",
+        "catalog_version": "1.0.0",
+        "catalog_fingerprint": "58d83b0d0508cd7be4577790ac8e15ebc80b9bc4e694f1f0ff1bb817ec131a53",
+        "calls": 1,
+        "retries": 0,
+        "prompt_tokens": 3452,
+        "completion_tokens": 291,
+        "total_tokens": 3743,
+        "planning_latency_ms": 4392.397,
+        "verifier_latency_ms": 7.833,
+        "total_latency_ms": 4401.179,
+        "attempt_traces": [
+          {
+            "attempt": 1,
+            "ok": true,
+            "outcome_category": "corpus_insufficient_evidence",
+            "epistemic_verdict": "insufficient_evidence",
+            "defects": [],
+            "latency_ms": 4392.397,
+            "verifier_latency_ms": 7.833,
+            "usage": {
+              "prompt_tokens": 3452,
+              "completion_tokens": 291,
+              "total_tokens": 3743
+            }
+          }
+        ],
+        "unit_profile": "es",
+        "unit_registry_fingerprint": "edcc833daa7c074c05e1e2ae5d2916670d40460e6695f136ab185e80ad9bc17f"
+      }
+    },
+    {
+      "case_id": "H3_competing_anchor_paraphrase_derived",
+      "track": "heldout_paraphrase",
+      "sources": {
+        "doc_1": "Ayer era miércoles, aunque el lanzamiento oficial ocurrió el lunes; firmamos el acuerdo dos días antes del lanzamiento oficial."
+      },
+      "claim": "El acuerdo se firmó el sábado.",
+      "expected": {
+        "epistemic_verdict": "derived",
+        "operational_routing": "PASS",
+        "computed_value": "sábado",
+        "computed_unit": null
+      },
+      "observed": {
+        "epistemic_verdict": "derived",
+        "outcome_category": "verified_derivation",
+        "operational_routing": {
+          "status": "PASS",
+          "allowed": true,
+          "requires_human": false,
+          "reasons": [
+            "DERIVATION_VERIFIED_AND_MATCHES_CLAIM"
+          ],
+          "authorization_verdict": {
+            "status": "PASS",
+            "allowed": true,
+            "requires_human": false,
+            "snapshot_digest": "c0475f71acf24405fde9160068d664de138006707e2dc90110083d8c0bc68354",
+            "issues": []
+          }
+        },
+        "computed_conclusion": {
+          "claim_id": "c1",
+          "value": "sábado",
+          "unit": null,
+          "text": "weekday_shift(p2, p3) = sábado",
+          "polarity": 1
+        },
+        "graph_admitted": true,
+        "certainty": {
+          "derivation_validity": {
+            "status": "exact_under_explicit_premises",
+            "guarantee_kind": "deterministic_formal",
+            "explanation": "Deducción determinista exacta bajo las premisas explícitas extraídas y las operaciones controladas."
+          },
+          "extraction_fidelity": {
+            "status": "verified_grounding",
+            "grounded_premises": 3,
+            "rejected_premises": 0,
+            "checks_applied": [
+              "claim_target_correspondence",
+              "source_document_and_revision",
+              "verbatim_span_bound",
+              "clause_boundary_complete",
+              "value_and_unit_correspondence",
+              "direction_sign_correspondence",
+              "entity_same_clause_correspondence",
+              "event_same_clause_correspondence",
+              "step_anchor_correspondence",
+              "conclusion_claim_comparison"
+            ],
+            "note": "Fidelidad comprobada contra citas literales y cláusulas elementales de las fuentes; no sustituye a una corroboración externa ni mide probabilidad calibrada."
+          },
+          "source_support": {
+            "evidence_support_index": 1.0,
+            "conflict_index": 0.0,
+            "uncertainty_index": 0.0,
+            "verification_coverage": 1.0,
+            "is_policy_index": true,
+            "source_attributions": {
+              "doc_1": "source_statement"
+            }
+          },
+          "calibrated_correctness_probability": null,
+          "calibration_status": "uncalibrated",
+          "guarantee_explanation": "Deducción aritmética/calendárica exacta bajo las premisas explícitas extraídas; calibrated_correctness_probability=None porque no existe calibración empírica aplicable (el índice de soporte es una métrica de política, no una probabilidad)."
+        },
+        "defects": [],
+        "limitations": [],
+        "missing_premises": [],
+        "anchor_diagnostics": [],
+        "explanation": "Afirmación derivada y verificada de forma determinista: weekday_shift(p2, p3) -> sábado, coincidiendo con la afirmación original ('sábado'). Fiabilidad A: Texto fuente comprobado y operaciones del núcleo de Deltoryx."
+      },
+      "passed": true,
+      "raw_proposal": {
+        "claim_target": {
+          "subject": "El acuerdo",
+          "predicate": "se firmó",
+          "value": "sábado",
+          "unit": null,
+          "polarity": 1
+        },
+        "premises": [
+          {
+            "claim_id": "p1",
+            "document_id": "doc_1",
+            "revision": "27b4b0c11139b27cfdbeb5f4958153dc3a4c958defcdc70a0c79060352ff5d00",
+            "quote": "Ayer era miércoles",
+            "entity": "Ayer",
+            "event": "era",
+            "predicate": "día de la semana",
+            "value": "miércoles",
+            "unit": null,
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          },
+          {
+            "claim_id": "p2",
+            "document_id": "doc_1",
+            "revision": "27b4b0c11139b27cfdbeb5f4958153dc3a4c958defcdc70a0c79060352ff5d00",
+            "quote": "el lanzamiento oficial ocurrió el lunes",
+            "entity": "lanzamiento oficial",
+            "event": "ocurrió",
+            "predicate": "día de la semana",
+            "value": "lunes",
+            "unit": null,
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          },
+          {
+            "claim_id": "p3",
+            "document_id": "doc_1",
+            "revision": "27b4b0c11139b27cfdbeb5f4958153dc3a4c958defcdc70a0c79060352ff5d00",
+            "quote": "firmamos el acuerdo dos días antes del lanzamiento oficial",
+            "entity": "acuerdo",
+            "event": "firmamos",
+            "predicate": "desplazamiento temporal",
+            "value": -2,
+            "unit": "calendar_days",
+            "direction": "before",
+            "anchor_reference": "lanzamiento oficial",
+            "polarity": 1
+          }
+        ],
+        "steps": [
+          {
+            "step_id": "s1",
+            "operation": "weekday_shift",
+            "premises": [
+              "p2",
+              "p3"
+            ],
+            "conclusion_id": "c1",
+            "rule_id": null,
+            "rule_version": null,
+            "parameters": {},
+            "assumptions": [],
+            "proposed_value": null,
+            "proposed_unit": null
+          }
+        ],
+        "derived_conclusion_id": "c1",
+        "missing_premises": [],
+        "assumptions": [],
+        "suggested_rules": [],
+        "proposed_operations": []
+      },
+      "graph": {
+        "conclusion_id": "c1",
+        "claims": {
+          "c1": {
+            "claim_id": "c1",
+            "kind": "derivation",
+            "subject": "El acuerdo",
+            "predicate": "se firmó",
+            "value": "sábado",
+            "unit": null,
+            "polarity": 1,
+            "text": "weekday_shift(p2, p3) = sábado",
+            "assertion_kind": "fact",
+            "evidence": [],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {}
+          },
+          "p1": {
+            "claim_id": "p1",
+            "kind": "extraction",
+            "subject": "Ayer",
+            "predicate": "día de la semana",
+            "value": "miércoles",
+            "unit": null,
+            "polarity": 1,
+            "text": "Ayer era miércoles",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "27b4b0c11139b27cfdbeb5f4958153dc3a4c958defcdc70a0c79060352ff5d00",
+                "start": 0,
+                "end": 18,
+                "quote": "Ayer era miércoles"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "era",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          },
+          "p2": {
+            "claim_id": "p2",
+            "kind": "extraction",
+            "subject": "lanzamiento oficial",
+            "predicate": "día de la semana",
+            "value": "lunes",
+            "unit": null,
+            "polarity": 1,
+            "text": "el lanzamiento oficial ocurrió el lunes",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "27b4b0c11139b27cfdbeb5f4958153dc3a4c958defcdc70a0c79060352ff5d00",
+                "start": 27,
+                "end": 66,
+                "quote": "el lanzamiento oficial ocurrió el lunes"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "ocurrió",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          },
+          "p3": {
+            "claim_id": "p3",
+            "kind": "extraction",
+            "subject": "acuerdo",
+            "predicate": "desplazamiento temporal",
+            "value": -2,
+            "unit": "calendar_days",
+            "polarity": 1,
+            "text": "firmamos el acuerdo dos días antes del lanzamiento oficial",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "27b4b0c11139b27cfdbeb5f4958153dc3a4c958defcdc70a0c79060352ff5d00",
+                "start": 68,
+                "end": 126,
+                "quote": "firmamos el acuerdo dos días antes del lanzamiento oficial"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "firmamos",
+              "direction": "before",
+              "anchor_reference": "lanzamiento oficial"
+            }
+          }
+        },
+        "steps": [
+          {
+            "step_id": "s1",
+            "premises": [
+              "p2",
+              "p3"
+            ],
+            "conclusion_id": "c1",
+            "operation": "weekday_shift",
+            "rule_id": null,
+            "rule_version": null,
+            "assumptions": [],
+            "obligations": [
+              {
+                "obligation_id": "s1::temporal",
+                "family": "temporal",
+                "description": "Verify weekday_shift under family 'temporal'",
+                "critical": true,
+                "parameters": {},
+                "origin": "proposed"
+              }
+            ],
+            "critical": true,
+            "parameters": {}
+          }
+        ]
+      },
+      "telemetry": {
+        "model_identity": {
+          "provider": "openai-compatible",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "parameters": {
+            "temperature": 0,
+            "max_tokens": 8192,
+            "extra_body": {
+              "chat_template_kwargs": {
+                "enable_thinking": false
+              }
+            }
+          },
+          "prompt_version": "v4-derivation-planner-3",
+          "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3"
+        },
+        "prompt_version": "v4-derivation-planner-3",
+        "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3",
+        "catalog_id": "deltoryx_v4_core",
+        "catalog_version": "1.0.0",
+        "catalog_fingerprint": "58d83b0d0508cd7be4577790ac8e15ebc80b9bc4e694f1f0ff1bb817ec131a53",
+        "calls": 1,
+        "retries": 0,
+        "prompt_tokens": 3470,
+        "completion_tokens": 616,
+        "total_tokens": 4086,
+        "planning_latency_ms": 7994.322,
+        "verifier_latency_ms": 4.333,
+        "total_latency_ms": 7999.595,
+        "attempt_traces": [
+          {
+            "attempt": 1,
+            "ok": true,
+            "outcome_category": "verified_derivation",
+            "epistemic_verdict": "derived",
+            "defects": [],
+            "latency_ms": 7994.322,
+            "verifier_latency_ms": 4.333,
+            "usage": {
+              "prompt_tokens": 3470,
+              "completion_tokens": 616,
+              "total_tokens": 4086
+            }
+          }
+        ],
+        "unit_profile": "es",
+        "unit_registry_fingerprint": "edcc833daa7c074c05e1e2ae5d2916670d40460e6695f136ab185e80ad9bc17f"
+      }
+    },
+    {
+      "case_id": "H4_competing_anchor_paraphrase_refuted",
+      "track": "heldout_paraphrase",
+      "sources": {
+        "doc_1": "Ayer era miércoles, aunque el lanzamiento oficial ocurrió el lunes; firmamos el acuerdo dos días antes del lanzamiento oficial."
+      },
+      "claim": "El acuerdo se firmó el lunes.",
+      "expected": {
+        "epistemic_verdict": "refuted",
+        "operational_routing": "RETRY",
+        "computed_value": "sábado",
+        "computed_unit": null
+      },
+      "observed": {
+        "epistemic_verdict": "refuted",
+        "outcome_category": "verified_refutation",
+        "operational_routing": {
+          "status": "RETRY",
+          "allowed": false,
+          "requires_human": false,
+          "reasons": [
+            "CLAIM_CONTRADICTS_COMPUTED_CONCLUSION"
+          ],
+          "authorization_verdict": null
+        },
+        "computed_conclusion": {
+          "claim_id": "c1",
+          "value": "sábado",
+          "unit": null,
+          "text": "weekday_shift(p2, p3) = sábado",
+          "polarity": 1
+        },
+        "graph_admitted": true,
+        "certainty": {
+          "derivation_validity": {
+            "status": "exact_under_explicit_premises",
+            "guarantee_kind": "deterministic_formal",
+            "explanation": "Deducción determinista exacta bajo las premisas explícitas extraídas y las operaciones controladas."
+          },
+          "extraction_fidelity": {
+            "status": "verified_grounding",
+            "grounded_premises": 3,
+            "rejected_premises": 0,
+            "checks_applied": [
+              "claim_target_correspondence",
+              "source_document_and_revision",
+              "verbatim_span_bound",
+              "clause_boundary_complete",
+              "value_and_unit_correspondence",
+              "direction_sign_correspondence",
+              "entity_same_clause_correspondence",
+              "event_same_clause_correspondence",
+              "step_anchor_correspondence",
+              "conclusion_claim_comparison"
+            ],
+            "note": "Fidelidad comprobada contra citas literales y cláusulas elementales de las fuentes; no sustituye a una corroboración externa ni mide probabilidad calibrada."
+          },
+          "source_support": {
+            "evidence_support_index": 1.0,
+            "conflict_index": 0.0,
+            "uncertainty_index": 0.0,
+            "verification_coverage": 1.0,
+            "is_policy_index": true,
+            "source_attributions": {
+              "doc_1": "source_statement"
+            }
+          },
+          "calibrated_correctness_probability": null,
+          "calibration_status": "uncalibrated",
+          "guarantee_explanation": "Deducción aritmética/calendárica exacta bajo las premisas explícitas extraídas; calibrated_correctness_probability=None porque no existe calibración empírica aplicable (el índice de soporte es una métrica de política, no una probabilidad)."
+        },
+        "defects": [],
+        "limitations": [],
+        "missing_premises": [],
+        "anchor_diagnostics": [
+          {
+            "document_id": "doc_1",
+            "incorrect_anchor_weekday": "miércoles",
+            "incorrect_anchor_clause": "Ayer era miércoles",
+            "offset_days": -2,
+            "would_yield_weekday": "lunes",
+            "correct_anchor_weekday": "lunes",
+            "correct_anchor_clauses": [
+              "el lanzamiento oficial ocurrió el lunes"
+            ],
+            "explicit_anchor_phrase": "lanzamiento oficial",
+            "offset_clauses": [
+              "firmamos el acuerdo dos días antes del lanzamiento oficial"
+            ],
+            "explanation": "Aunque 'miércoles' (en «Ayer era miércoles») con desplazamiento -2 daría 'lunes', es un ancla incorrecta porque el desplazamiento relativo en «firmamos el acuerdo dos días antes del lanzamiento oficial» está anclado a 'lanzamiento oficial' ('lunes'), cuyo cálculo exacto es 'sábado'."
+          }
+        ],
+        "explanation": "Afirmación refutada: el cálculo controlado a partir de las premisas verificadas produce 'sábado', que contradice lo afirmado ('lunes'). Aunque 'miércoles' (en «Ayer era miércoles») con desplazamiento -2 daría 'lunes', es un ancla incorrecta porque el desplazamiento relativo en «firmamos el acuerdo dos días antes del lanzamiento oficial» está anclado a 'lanzamiento oficial' ('lunes'), cuyo cálculo exacto es 'sábado'. Fiabilidad A: Texto fuente comprobado y operaciones del núcleo de Deltoryx."
+      },
+      "passed": true,
+      "raw_proposal": {
+        "claim_target": {
+          "subject": "El acuerdo",
+          "predicate": "se firmó",
+          "value": "lunes",
+          "unit": null,
+          "polarity": 1
+        },
+        "premises": [
+          {
+            "claim_id": "p1",
+            "document_id": "doc_1",
+            "revision": "27b4b0c11139b27cfdbeb5f4958153dc3a4c958defcdc70a0c79060352ff5d00",
+            "quote": "Ayer era miércoles",
+            "entity": "Ayer",
+            "event": "era",
+            "predicate": "día de la semana",
+            "value": "miércoles",
+            "unit": null,
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          },
+          {
+            "claim_id": "p2",
+            "document_id": "doc_1",
+            "revision": "27b4b0c11139b27cfdbeb5f4958153dc3a4c958defcdc70a0c79060352ff5d00",
+            "quote": "el lanzamiento oficial ocurrió el lunes",
+            "entity": "lanzamiento oficial",
+            "event": "ocurrió",
+            "predicate": "día de la semana",
+            "value": "lunes",
+            "unit": null,
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          },
+          {
+            "claim_id": "p3",
+            "document_id": "doc_1",
+            "revision": "27b4b0c11139b27cfdbeb5f4958153dc3a4c958defcdc70a0c79060352ff5d00",
+            "quote": "firmamos el acuerdo dos días antes del lanzamiento oficial",
+            "entity": "acuerdo",
+            "event": "firmamos",
+            "predicate": "desplazamiento temporal",
+            "value": -2,
+            "unit": "calendar_days",
+            "direction": "before",
+            "anchor_reference": "lanzamiento oficial",
+            "polarity": 1
+          }
+        ],
+        "steps": [
+          {
+            "step_id": "s1",
+            "operation": "weekday_shift",
+            "premises": [
+              "p2",
+              "p3"
+            ],
+            "conclusion_id": "c1",
+            "rule_id": null,
+            "rule_version": null,
+            "parameters": {},
+            "assumptions": [],
+            "proposed_value": null,
+            "proposed_unit": null
+          }
+        ],
+        "derived_conclusion_id": "c1",
+        "missing_premises": [],
+        "assumptions": [],
+        "suggested_rules": [],
+        "proposed_operations": []
+      },
+      "graph": {
+        "conclusion_id": "c1",
+        "claims": {
+          "c1": {
+            "claim_id": "c1",
+            "kind": "derivation",
+            "subject": "El acuerdo",
+            "predicate": "se firmó",
+            "value": "sábado",
+            "unit": null,
+            "polarity": 1,
+            "text": "weekday_shift(p2, p3) = sábado",
+            "assertion_kind": "fact",
+            "evidence": [],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {}
+          },
+          "p1": {
+            "claim_id": "p1",
+            "kind": "extraction",
+            "subject": "Ayer",
+            "predicate": "día de la semana",
+            "value": "miércoles",
+            "unit": null,
+            "polarity": 1,
+            "text": "Ayer era miércoles",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "27b4b0c11139b27cfdbeb5f4958153dc3a4c958defcdc70a0c79060352ff5d00",
+                "start": 0,
+                "end": 18,
+                "quote": "Ayer era miércoles"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "era",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          },
+          "p2": {
+            "claim_id": "p2",
+            "kind": "extraction",
+            "subject": "lanzamiento oficial",
+            "predicate": "día de la semana",
+            "value": "lunes",
+            "unit": null,
+            "polarity": 1,
+            "text": "el lanzamiento oficial ocurrió el lunes",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "27b4b0c11139b27cfdbeb5f4958153dc3a4c958defcdc70a0c79060352ff5d00",
+                "start": 27,
+                "end": 66,
+                "quote": "el lanzamiento oficial ocurrió el lunes"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "ocurrió",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          },
+          "p3": {
+            "claim_id": "p3",
+            "kind": "extraction",
+            "subject": "acuerdo",
+            "predicate": "desplazamiento temporal",
+            "value": -2,
+            "unit": "calendar_days",
+            "polarity": 1,
+            "text": "firmamos el acuerdo dos días antes del lanzamiento oficial",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "27b4b0c11139b27cfdbeb5f4958153dc3a4c958defcdc70a0c79060352ff5d00",
+                "start": 68,
+                "end": 126,
+                "quote": "firmamos el acuerdo dos días antes del lanzamiento oficial"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "firmamos",
+              "direction": "before",
+              "anchor_reference": "lanzamiento oficial"
+            }
+          }
+        },
+        "steps": [
+          {
+            "step_id": "s1",
+            "premises": [
+              "p2",
+              "p3"
+            ],
+            "conclusion_id": "c1",
+            "operation": "weekday_shift",
+            "rule_id": null,
+            "rule_version": null,
+            "assumptions": [],
+            "obligations": [
+              {
+                "obligation_id": "s1::temporal",
+                "family": "temporal",
+                "description": "Verify weekday_shift under family 'temporal'",
+                "critical": true,
+                "parameters": {},
+                "origin": "proposed"
+              }
+            ],
+            "critical": true,
+            "parameters": {}
+          }
+        ]
+      },
+      "telemetry": {
+        "model_identity": {
+          "provider": "openai-compatible",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "parameters": {
+            "temperature": 0,
+            "max_tokens": 8192,
+            "extra_body": {
+              "chat_template_kwargs": {
+                "enable_thinking": false
+              }
+            }
+          },
+          "prompt_version": "v4-derivation-planner-3",
+          "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3"
+        },
+        "prompt_version": "v4-derivation-planner-3",
+        "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3",
+        "catalog_id": "deltoryx_v4_core",
+        "catalog_version": "1.0.0",
+        "catalog_fingerprint": "58d83b0d0508cd7be4577790ac8e15ebc80b9bc4e694f1f0ff1bb817ec131a53",
+        "calls": 1,
+        "retries": 0,
+        "prompt_tokens": 3470,
+        "completion_tokens": 615,
+        "total_tokens": 4085,
+        "planning_latency_ms": 7435.432,
+        "verifier_latency_ms": 4.813,
+        "total_latency_ms": 7441.171,
+        "attempt_traces": [
+          {
+            "attempt": 1,
+            "ok": true,
+            "outcome_category": "verified_refutation",
+            "epistemic_verdict": "refuted",
+            "defects": [],
+            "latency_ms": 7435.432,
+            "verifier_latency_ms": 4.813,
+            "usage": {
+              "prompt_tokens": 3470,
+              "completion_tokens": 615,
+              "total_tokens": 4085
+            }
+          }
+        ],
+        "unit_profile": "es",
+        "unit_registry_fingerprint": "edcc833daa7c074c05e1e2ae5d2916670d40460e6695f136ab185e80ad9bc17f"
+      }
+    },
+    {
+      "case_id": "H5_monday_backward_refuted",
+      "track": "heldout_paraphrase",
+      "sources": {
+        "doc_1": "Hoy es lunes y la entrega venció dos días antes."
+      },
+      "claim": "La entrega venció el viernes.",
+      "expected": {
+        "epistemic_verdict": "refuted",
+        "operational_routing": "RETRY",
+        "computed_value": "sábado",
+        "computed_unit": null
+      },
+      "observed": {
+        "epistemic_verdict": "refuted",
+        "outcome_category": "verified_refutation",
+        "operational_routing": {
+          "status": "RETRY",
+          "allowed": false,
+          "requires_human": false,
+          "reasons": [
+            "CLAIM_CONTRADICTS_COMPUTED_CONCLUSION"
+          ],
+          "authorization_verdict": null
+        },
+        "computed_conclusion": {
+          "claim_id": "c1",
+          "value": "sábado",
+          "unit": null,
+          "text": "weekday_shift(p1, p2) = sábado",
+          "polarity": 1
+        },
+        "graph_admitted": true,
+        "certainty": {
+          "derivation_validity": {
+            "status": "exact_under_explicit_premises",
+            "guarantee_kind": "deterministic_formal",
+            "explanation": "Deducción determinista exacta bajo las premisas explícitas extraídas y las operaciones controladas."
+          },
+          "extraction_fidelity": {
+            "status": "verified_grounding",
+            "grounded_premises": 2,
+            "rejected_premises": 0,
+            "checks_applied": [
+              "claim_target_correspondence",
+              "source_document_and_revision",
+              "verbatim_span_bound",
+              "clause_boundary_complete",
+              "value_and_unit_correspondence",
+              "direction_sign_correspondence",
+              "entity_same_clause_correspondence",
+              "event_same_clause_correspondence",
+              "step_anchor_correspondence",
+              "conclusion_claim_comparison"
+            ],
+            "note": "Fidelidad comprobada contra citas literales y cláusulas elementales de las fuentes; no sustituye a una corroboración externa ni mide probabilidad calibrada."
+          },
+          "source_support": {
+            "evidence_support_index": 1.0,
+            "conflict_index": 0.0,
+            "uncertainty_index": 0.0,
+            "verification_coverage": 1.0,
+            "is_policy_index": true,
+            "source_attributions": {
+              "doc_1": "source_statement"
+            }
+          },
+          "calibrated_correctness_probability": null,
+          "calibration_status": "uncalibrated",
+          "guarantee_explanation": "Deducción aritmética/calendárica exacta bajo las premisas explícitas extraídas; calibrated_correctness_probability=None porque no existe calibración empírica aplicable (el índice de soporte es una métrica de política, no una probabilidad)."
+        },
+        "defects": [],
+        "limitations": [],
+        "missing_premises": [],
+        "anchor_diagnostics": [],
+        "explanation": "Afirmación refutada: el cálculo controlado a partir de las premisas verificadas produce 'sábado', que contradice lo afirmado ('viernes'). Fiabilidad A: Texto fuente comprobado y operaciones del núcleo de Deltoryx."
+      },
+      "passed": true,
+      "raw_proposal": {
+        "claim_target": {
+          "subject": "entrega",
+          "predicate": "venció",
+          "value": "viernes",
+          "unit": null,
+          "polarity": 1
+        },
+        "premises": [
+          {
+            "claim_id": "p1",
+            "document_id": "doc_1",
+            "revision": "770fa4cc612c7cbe7807e25a30e649eced3455212108020815f359405b76c866",
+            "quote": "Hoy es lunes",
+            "entity": "Hoy",
+            "event": "es",
+            "predicate": "día de la semana",
+            "value": "lunes",
+            "unit": null,
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          },
+          {
+            "claim_id": "p2",
+            "document_id": "doc_1",
+            "revision": "770fa4cc612c7cbe7807e25a30e649eced3455212108020815f359405b76c866",
+            "quote": "la entrega venció dos días antes",
+            "entity": "entrega",
+            "event": "venció",
+            "predicate": "desplazamiento",
+            "value": -2,
+            "unit": "calendar_days",
+            "direction": "before",
+            "anchor_reference": "Hoy",
+            "polarity": 1
+          }
+        ],
+        "steps": [
+          {
+            "step_id": "s1",
+            "operation": "weekday_shift",
+            "premises": [
+              "p1",
+              "p2"
+            ],
+            "conclusion_id": "c1",
+            "rule_id": null,
+            "rule_version": null,
+            "parameters": {},
+            "assumptions": [],
+            "proposed_value": null,
+            "proposed_unit": null
+          }
+        ],
+        "derived_conclusion_id": "c1",
+        "missing_premises": [],
+        "assumptions": [],
+        "suggested_rules": [],
+        "proposed_operations": []
+      },
+      "graph": {
+        "conclusion_id": "c1",
+        "claims": {
+          "c1": {
+            "claim_id": "c1",
+            "kind": "derivation",
+            "subject": "entrega",
+            "predicate": "venció",
+            "value": "sábado",
+            "unit": null,
+            "polarity": 1,
+            "text": "weekday_shift(p1, p2) = sábado",
+            "assertion_kind": "fact",
+            "evidence": [],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {}
+          },
+          "p1": {
+            "claim_id": "p1",
+            "kind": "extraction",
+            "subject": "Hoy",
+            "predicate": "día de la semana",
+            "value": "lunes",
+            "unit": null,
+            "polarity": 1,
+            "text": "Hoy es lunes",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "770fa4cc612c7cbe7807e25a30e649eced3455212108020815f359405b76c866",
+                "start": 0,
+                "end": 12,
+                "quote": "Hoy es lunes"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "es",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          },
+          "p2": {
+            "claim_id": "p2",
+            "kind": "extraction",
+            "subject": "entrega",
+            "predicate": "desplazamiento",
+            "value": -2,
+            "unit": "calendar_days",
+            "polarity": 1,
+            "text": "la entrega venció dos días antes",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "doc_1",
+                "revision": "770fa4cc612c7cbe7807e25a30e649eced3455212108020815f359405b76c866",
+                "start": 15,
+                "end": 47,
+                "quote": "la entrega venció dos días antes"
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "venció",
+              "direction": "before",
+              "anchor_reference": "Hoy"
+            }
+          }
+        },
+        "steps": [
+          {
+            "step_id": "s1",
+            "premises": [
+              "p1",
+              "p2"
+            ],
+            "conclusion_id": "c1",
+            "operation": "weekday_shift",
+            "rule_id": null,
+            "rule_version": null,
+            "assumptions": [],
+            "obligations": [
+              {
+                "obligation_id": "s1::temporal",
+                "family": "temporal",
+                "description": "Verify weekday_shift under family 'temporal'",
+                "critical": true,
+                "parameters": {},
+                "origin": "proposed"
+              }
+            ],
+            "critical": true,
+            "parameters": {}
+          }
+        ]
+      },
+      "telemetry": {
+        "model_identity": {
+          "provider": "openai-compatible",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "parameters": {
+            "temperature": 0,
+            "max_tokens": 8192,
+            "extra_body": {
+              "chat_template_kwargs": {
+                "enable_thinking": false
+              }
+            }
+          },
+          "prompt_version": "v4-derivation-planner-3",
+          "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3"
+        },
+        "prompt_version": "v4-derivation-planner-3",
+        "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3",
+        "catalog_id": "deltoryx_v4_core",
+        "catalog_version": "1.0.0",
+        "catalog_fingerprint": "58d83b0d0508cd7be4577790ac8e15ebc80b9bc4e694f1f0ff1bb817ec131a53",
+        "calls": 1,
+        "retries": 0,
+        "prompt_tokens": 3461,
+        "completion_tokens": 461,
+        "total_tokens": 3922,
+        "planning_latency_ms": 8600.457,
+        "verifier_latency_ms": 3.881,
+        "total_latency_ms": 8605.031,
+        "attempt_traces": [
+          {
+            "attempt": 1,
+            "ok": true,
+            "outcome_category": "verified_refutation",
+            "epistemic_verdict": "refuted",
+            "defects": [],
+            "latency_ms": 8600.457,
+            "verifier_latency_ms": 3.881,
+            "usage": {
+              "prompt_tokens": 3461,
+              "completion_tokens": 461,
+              "total_tokens": 3922
+            }
+          }
+        ],
+        "unit_profile": "es",
+        "unit_registry_fingerprint": "edcc833daa7c074c05e1e2ae5d2916670d40460e6695f136ab185e80ad9bc17f"
+      }
+    },
+    {
+      "case_id": "H6_cross_doc_usd_paraphrase_derived",
+      "track": "heldout_paraphrase",
+      "sources": {
+        "contrato": "Techo presupuestario de la Fase Beta: 2,400 USD.",
+        "factura": "Importe facturado en la Fase Beta: 1,650 USD."
+      },
+      "claim": "Quedan 750 USD disponibles en la Fase Beta.",
+      "expected": {
+        "epistemic_verdict": "derived",
+        "operational_routing": "PASS",
+        "computed_value": 750,
+        "computed_unit": "USD"
+      },
+      "observed": {
+        "epistemic_verdict": "derived",
+        "outcome_category": "verified_derivation",
+        "operational_routing": {
+          "status": "PASS",
+          "allowed": true,
+          "requires_human": false,
+          "reasons": [
+            "DERIVATION_VERIFIED_AND_MATCHES_CLAIM"
+          ],
+          "authorization_verdict": {
+            "status": "PASS",
+            "allowed": true,
+            "requires_human": false,
+            "snapshot_digest": "5f366cd0388bcb3b865c320ca1d748c137bbd4e4b8317ee541dd339e8e2afcc6",
+            "issues": []
+          }
+        },
+        "computed_conclusion": {
+          "claim_id": "c1",
+          "value": 750,
+          "unit": "USD",
+          "text": "sub(p1, p2) = 750 USD",
+          "polarity": 1
+        },
+        "graph_admitted": true,
+        "certainty": {
+          "derivation_validity": {
+            "status": "exact_under_explicit_premises",
+            "guarantee_kind": "deterministic_formal",
+            "explanation": "Deducción determinista exacta bajo las premisas explícitas extraídas y las operaciones controladas."
+          },
+          "extraction_fidelity": {
+            "status": "verified_grounding",
+            "grounded_premises": 2,
+            "rejected_premises": 0,
+            "checks_applied": [
+              "claim_target_correspondence",
+              "source_document_and_revision",
+              "verbatim_span_bound",
+              "clause_boundary_complete",
+              "value_and_unit_correspondence",
+              "direction_sign_correspondence",
+              "entity_same_clause_correspondence",
+              "event_same_clause_correspondence",
+              "conclusion_claim_comparison"
+            ],
+            "note": "Fidelidad comprobada contra citas literales y cláusulas elementales de las fuentes; no sustituye a una corroboración externa ni mide probabilidad calibrada."
+          },
+          "source_support": {
+            "evidence_support_index": 1.0,
+            "conflict_index": 0.0,
+            "uncertainty_index": 0.0,
+            "verification_coverage": 1.0,
+            "is_policy_index": true,
+            "source_attributions": {
+              "contrato": "source_statement",
+              "factura": "source_statement"
+            }
+          },
+          "calibrated_correctness_probability": null,
+          "calibration_status": "uncalibrated",
+          "guarantee_explanation": "Deducción aritmética/calendárica exacta bajo las premisas explícitas extraídas; calibrated_correctness_probability=None porque no existe calibración empírica aplicable (el índice de soporte es una métrica de política, no una probabilidad)."
+        },
+        "defects": [],
+        "limitations": [],
+        "missing_premises": [],
+        "anchor_diagnostics": [],
+        "explanation": "Afirmación derivada y verificada de forma determinista: sub(p1, p2) -> 750 USD, coincidiendo con la afirmación original (750). Fiabilidad A: Texto fuente comprobado y operaciones del núcleo de Deltoryx."
+      },
+      "passed": true,
+      "raw_proposal": {
+        "claim_target": {
+          "subject": "Fase Beta",
+          "predicate": "presupuesto_disponible",
+          "value": 750,
+          "unit": "USD",
+          "polarity": 1
+        },
+        "premises": [
+          {
+            "claim_id": "p1",
+            "document_id": "contrato",
+            "revision": "2c08011e3be33da78ad04c3634c47175063b029f2a7d0e58a635bcedce34d67d",
+            "quote": "Techo presupuestario de la Fase Beta: 2,400 USD.",
+            "entity": "Fase Beta",
+            "event": "techo presupuestario",
+            "predicate": "importe",
+            "value": 2400,
+            "unit": "USD",
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          },
+          {
+            "claim_id": "p2",
+            "document_id": "factura",
+            "revision": "2cf050dfeb156c3ab2827f926170d547351c949b2e4f52c1cefbb3db6adf6671",
+            "quote": "Importe facturado en la Fase Beta: 1,650 USD.",
+            "entity": "Fase Beta",
+            "event": "importe facturado",
+            "predicate": "importe",
+            "value": 1650,
+            "unit": "USD",
+            "direction": "neutral",
+            "anchor_reference": null,
+            "polarity": 1
+          }
+        ],
+        "steps": [
+          {
+            "step_id": "s1",
+            "operation": "sub",
+            "premises": [
+              "p1",
+              "p2"
+            ],
+            "conclusion_id": "c1",
+            "rule_id": null,
+            "rule_version": null,
+            "parameters": {},
+            "assumptions": [],
+            "proposed_value": null,
+            "proposed_unit": null
+          }
+        ],
+        "derived_conclusion_id": "c1",
+        "missing_premises": [],
+        "assumptions": [],
+        "suggested_rules": [],
+        "proposed_operations": []
+      },
+      "graph": {
+        "conclusion_id": "c1",
+        "claims": {
+          "c1": {
+            "claim_id": "c1",
+            "kind": "derivation",
+            "subject": "Fase Beta",
+            "predicate": "presupuesto_disponible",
+            "value": 750,
+            "unit": "USD",
+            "polarity": 1,
+            "text": "sub(p1, p2) = 750 USD",
+            "assertion_kind": "fact",
+            "evidence": [],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {}
+          },
+          "p1": {
+            "claim_id": "p1",
+            "kind": "extraction",
+            "subject": "Fase Beta",
+            "predicate": "importe",
+            "value": 2400,
+            "unit": "USD",
+            "polarity": 1,
+            "text": "Techo presupuestario de la Fase Beta: 2,400 USD.",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "contrato",
+                "revision": "2c08011e3be33da78ad04c3634c47175063b029f2a7d0e58a635bcedce34d67d",
+                "start": 0,
+                "end": 48,
+                "quote": "Techo presupuestario de la Fase Beta: 2,400 USD."
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "techo presupuestario",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          },
+          "p2": {
+            "claim_id": "p2",
+            "kind": "extraction",
+            "subject": "Fase Beta",
+            "predicate": "importe",
+            "value": 1650,
+            "unit": "USD",
+            "polarity": 1,
+            "text": "Importe facturado en la Fase Beta: 1,650 USD.",
+            "assertion_kind": "fact",
+            "evidence": [
+              {
+                "document_id": "factura",
+                "revision": "2cf050dfeb156c3ab2827f926170d547351c949b2e4f52c1cefbb3db6adf6671",
+                "start": 0,
+                "end": 45,
+                "quote": "Importe facturado en la Fase Beta: 1,650 USD."
+              }
+            ],
+            "field_evidence": [],
+            "evidence_unit_ids": [],
+            "scope": {},
+            "valid_from": null,
+            "valid_until": null,
+            "conditions": [],
+            "condition_status": "unconditional",
+            "assumptions": [],
+            "attestor": null,
+            "dependence_group": null,
+            "structural_reliability": null,
+            "event_id": null,
+            "approximate": false,
+            "approx_tolerance": null,
+            "metadata": {
+              "event": "importe facturado",
+              "direction": "neutral",
+              "anchor_reference": null
+            }
+          }
+        },
+        "steps": [
+          {
+            "step_id": "s1",
+            "premises": [
+              "p1",
+              "p2"
+            ],
+            "conclusion_id": "c1",
+            "operation": "sub",
+            "rule_id": null,
+            "rule_version": null,
+            "assumptions": [],
+            "obligations": [
+              {
+                "obligation_id": "s1::arithmetic",
+                "family": "arithmetic",
+                "description": "Verify sub under family 'arithmetic'",
+                "critical": true,
+                "parameters": {},
+                "origin": "proposed"
+              },
+              {
+                "obligation_id": "s1::quantities",
+                "family": "quantities",
+                "description": "Verify sub under family 'quantities'",
+                "critical": true,
+                "parameters": {},
+                "origin": "proposed"
+              }
+            ],
+            "critical": true,
+            "parameters": {}
+          }
+        ]
+      },
+      "telemetry": {
+        "model_identity": {
+          "provider": "openai-compatible",
+          "model": "nvidia/nemotron-3-ultra-550b-a55b",
+          "endpoint": "https://integrate.api.nvidia.com/v1",
+          "parameters": {
+            "temperature": 0,
+            "max_tokens": 8192,
+            "extra_body": {
+              "chat_template_kwargs": {
+                "enable_thinking": false
+              }
+            }
+          },
+          "prompt_version": "v4-derivation-planner-3",
+          "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3"
+        },
+        "prompt_version": "v4-derivation-planner-3",
+        "prompt_digest": "b53f491b958818f69f0b09d97f3065b7cdc1e9d24a1685d69a2094bb2896a1b3",
+        "catalog_id": "deltoryx_v4_core",
+        "catalog_version": "1.0.0",
+        "catalog_fingerprint": "58d83b0d0508cd7be4577790ac8e15ebc80b9bc4e694f1f0ff1bb817ec131a53",
+        "calls": 1,
+        "retries": 0,
+        "prompt_tokens": 3556,
+        "completion_tokens": 488,
+        "total_tokens": 4044,
+        "planning_latency_ms": 5309.189,
+        "verifier_latency_ms": 5.542,
+        "total_latency_ms": 5315.631,
+        "attempt_traces": [
+          {
+            "attempt": 1,
+            "ok": true,
+            "outcome_category": "verified_derivation",
+            "epistemic_verdict": "derived",
+            "defects": [],
+            "latency_ms": 5309.189,
+            "verifier_latency_ms": 5.542,
+            "usage": {
+              "prompt_tokens": 3556,
+              "completion_tokens": 488,
+              "total_tokens": 4044
+            }
+          }
+        ],
+        "unit_profile": "es",
+        "unit_registry_fingerprint": "edcc833daa7c074c05e1e2ae5d2916670d40460e6695f136ab185e80ad9bc17f"
+      }
+    }
+  ]
+}

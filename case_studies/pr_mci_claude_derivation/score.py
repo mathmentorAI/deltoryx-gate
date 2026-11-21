@@ -1,6 +1,7 @@
 """Step 4: score live_results.json against the frozen expected manifest + manual justification review."""
 from __future__ import annotations
 
+import argparse
 import collections
 import json
 import statistics
@@ -9,8 +10,13 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 E = {c["case_id"]: c for c in json.loads((HERE / "frozen/expected_manifest.json").read_text())["cases"]}
 I = {c["case_id"]: c for c in json.loads((HERE / "frozen/inputs_manifest.json").read_text())["cases"]}
-L = json.loads((HERE / "results/live_results.json").read_text())
-R = json.loads((HERE / "results/justification_review.json").read_text())["cases"]
+_ap = argparse.ArgumentParser()
+_ap.add_argument("--live", default="results/live_results.json")
+_ap.add_argument("--review", default="results/justification_review.json")
+_ap.add_argument("--out", default="results/scored.json")
+_args = _ap.parse_args()
+L = json.loads((HERE / _args.live).read_text())
+R = json.loads((HERE / _args.review).read_text())["cases"]
 rows = {r["case_id"]: r for r in L["cases"]}
 V = ["derived", "refuted", "insufficient_evidence", "unresolved"]
 
@@ -83,5 +89,12 @@ out["old_evaluators"]["gate_v4_vocab2_claim_status"] = dict(g)
 out["old_evaluators"]["gate_v4_vocab2_pr_gate"] = dict(collections.Counter(rows[c].get("gate_v4_vocab2", {}).get("gate") for c in E))
 out["old_evaluators"]["gate_v4_vocab2_CONSISTENT_on_non_supported_reference"] = f"{sum(rows[c].get('gate_v4_vocab2',{}).get('gate')=='CONSISTENT' for c in non_supported)}/{len(non_supported)}"
 out["old_evaluators"]["rules_v2_P_placeholder_fired"] = f"{sum('P_placeholder' in rows[c]['rules_v2_postreview_code_config']['signals'] for c in E)}/20"
-(HERE / "results/scored.json").write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+out["source"] = {"live": _args.live, "review": _args.review, "prompt_version": L.get("prompt_version"),
+                 "claim_layer_commit": L.get("claim_layer_commit"), "platform_commit": L.get("platform_commit")}
+grades = collections.Counter((rows[c]["response"].get("reliability") or {}).get("grade") for c in E)
+out["metrics"]["reliability_grades_final"] = {str(k): v for k, v in grades.items()}
+out["metrics"]["cases_with_planner_proposed_operations"] = sum(
+    bool((rows[c]["response"]["provenance"].get("raw_proposal") or {}).get("proposed_operations")) for c in E)
+out["metrics"]["pass_routing_count"] = sum(rows[c]["routing"] == "PASS" for c in E)
+(HERE / _args.out).write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
 print(json.dumps({k: out[k] for k in ("metrics", "telemetry", "old_evaluators")}, indent=1, ensure_ascii=False))

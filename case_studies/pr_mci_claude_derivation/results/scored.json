@@ -574,7 +574,12 @@
   "admitted_premises_value_set_by_nemotron_interpretation (non-numeric)": 12,
   "executed_operations": {
    "identity": 3
-  }
+  },
+  "reliability_grades_final": {
+   "None": 20
+  },
+  "cases_with_planner_proposed_operations": 0,
+  "pass_routing_count": 1
  },
  "telemetry": {
   "calls_total": 36,
@@ -622,5 +627,12 @@
   },
   "gate_v4_vocab2_CONSISTENT_on_non_supported_reference": "10/11",
   "rules_v2_P_placeholder_fired": "8/20"
+ },
+ "source": {
+  "live": "results/live_results.json",
+  "review": "results/justification_review.json",
+  "prompt_version": null,
+  "claim_layer_commit": "b7295f7e5b3cf34d9f132e8e4dd152a3320ac0a9",
+  "platform_commit": "4fd6ed9b6e592a3de1121585b9f6bebb0c959609"
  }
 }

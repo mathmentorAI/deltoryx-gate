@@ -154,3 +154,47 @@ Artefactos: `results/live_results.json` (respuestas completas, propuestas y graf
 - C03: PASS correcto por casualidad, sostenido por texto del autor.
 - C13: si se hubiera aceptado la regla `command_alias_equivalence` propuesta por Nemotron sin validar, create-account habría pasado por create-merchant.
 - Además, como bloqueo de PR, `gate_v4_vocab2` habría marcado CONSISTENT 10 de las 11 afirmaciones no respaldadas.
+
+---
+
+# Segunda medición (21-nov-2026, 19:08 UTC): motor de reconstrucción con operaciones propuestas
+
+**Configuración.**
+- Código: plataforma `b8108d5` y claim-layer `fba49d2`, sin cambios locales.
+- Prompt `v4-derivation-planner-3`: Nemotron puede proponer operaciones (`proposed_operations`).
+- Política de `PASS` mínimo B y `max_tokens` 8192.
+- Mismos manifiestos congelados (`710b8b28…` / `fd0382c9…`) y el mismo expected.
+- Resultados: `results/live_results_v3.json`. Revisión manual: `results/justification_review_v3.json`. Métricas: `results/scored_v3.json` (`python3 score.py --live results/live_results_v3.json --review results/justification_review_v3.json --out results/scored_v3.json`).
+
+## Comparación con la primera medición
+
+| Métrica (denominador) | v1 (prompt v2, 2048 tokens) | v2 (prompt v3, reconstrucción) |
+|---|---|---|
+| Correctamente verificado (20) | 2 | 2 |
+| Etiqueta correcta con justificación defectuosa (20) | 1, **con PASS** (C03) | 1, **ESCALATE por grado E** (C03) |
+| Falsas aceptaciones (11) | 0 | 0 |
+| Refutaciones incorrectas (16) | 1 (C15, bool frente a texto) | 1 (C15, texto frente a texto, **grado A**) |
+| Inferencias resueltas con derivación válida (12) | 0 | 0 |
+| Rutas PASS (20) | 1 | **0** |
+| Errores operativos por salida truncada (20) | 6 | **0** |
+| Abstenciones del verificador (20) | 10 | 16 |
+| Intentos con salida malformada | 15/36 | **3/35** |
+| Casos con operaciones propuestas por Nemotron (20) | — | 1 (C05, 2 afirmadas, 0 expresiones) |
+| Operaciones ejecutadas | identity ×3 | identity ×4 |
+| Tokens por afirmación, mediana [rango] | 14 965 [3 214–46 560] | 14 278 [3 706–47 173] |
+| Planificación, mediana [rango] | 27,8 s [4,6–55,9] | 26,2 s [2,8–169,9] |
+| Verificador, mediana [rango] | 7,5 ms [0–53] | 20,3 ms [0,6–81] |
+
+La matriz de confusión de veredictos es idéntica en ambas mediciones (derived: 1 derived, 1 refuted, 7 unresolved; refuted: 2 insufficient, 2 unresolved; insufficient: 7 unresolved). Lo que cambia es la ruta: ya no hay ningún `PASS`, y los 6 casos que antes perdían la respuesta por truncamiento ahora llegan a un defecto de premisa diagnosticable. Los picos de latencia de C04 (170 s) y C10 (119 s) se deben a respuestas mucho más largas con el nuevo presupuesto de tokens.
+
+## Hallazgos nuevos de la segunda medición
+
+1. **Un grado A no garantiza que se compare el mismo atributo (C15).** «added» (estado del archivo) frente a «v0.0.4» (versión) son del mismo tipo, texto, y la premisa es literal, así que sale una refutación verificada con grado A. Falta exigir que la conclusión calculada y el objetivo de la afirmación se refieran al mismo atributo antes de refutar.
+2. **Evidencia circular del autor (C14).** Nemotron citó `PR_TEMPLATE.md`, un archivo añadido por el autor en el mismo PR que repite la descripción. La premisa era «literal», lo que habría dado grado A. Solo la comprobación de agregación del núcleo («total») evitó un `PASS`. La protección contra usar la afirmación como premisa solo detecta copias exactas, no reformulaciones del autor dentro de las fuentes.
+3. **Nemotron casi no propone operaciones.** Lo hizo en 1 de 20 casos (C05), sin expresiones ejecutables, aunque disponía de `max`, `min` y `add` (C01 y C14 los necesitaban). Además, las bloqueó la prioridad heredada de `suggested_rules`.
+4. **Regresión en el benchmark temporal con el prompt v3: 13/14** (`benchmarks/v4_derivation_planner_live_results_v3.json`). NT3 sale `unsupported_operation_or_rule` en lugar de `insufficient_evidence` porque Nemotron añadió una `suggested_rule` que no usa, y esta tiene prioridad sobre la premisa ausente. Ruta ESCALATE en ambos casos y 0 falsas aceptaciones.
+5. **Siguen sin resolverse** las citas multilínea de diffs (C01, C05, C13), la correspondencia por cláusula entre la ruta del archivo y la línea (C06, C07, C08) y los objetivos reescritos como condición (C12).
+
+## Respuesta actualizada a la pregunta de decisión
+
+Deltoryx sigue pudiendo defender las mismas dos abstenciones (C16, C18) y **0 aceptaciones indebidas**. Ahora además ninguna conclusión que dependa de una interpretación de Nemotron llega a `PASS`. Lo que **no** se puede defender todavía es que un grado A signifique «la conclusión responde a la afirmación»: C15 y C14 muestran dos vías (atributo distinto y evidencia circular del autor) por las que una cadena con todos sus eslabones literales sigue siendo inválida.

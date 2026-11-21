@@ -14,7 +14,7 @@ from claimlayer.ledger import Ledger
 from claimlayer.mcp_server import run_stdio_server
 from claimlayer.models import Assertion, FactRecord, Policy, Source
 from claimlayer.semantic.adapters import OpenAICompatibleModel
-from claimlayer.v4 import SourceDocument, verify_claim, verify_plan
+from claimlayer.v4 import ReliabilityPolicy, SourceDocument, verify_claim, verify_plan
 from claimlayer.verify import verify
 
 
@@ -203,7 +203,8 @@ def _cmd_verify_claim(args: argparse.Namespace) -> int:
 
     if getattr(args, "plan_json", None):
         plan_payload: Any = json.loads(Path(args.plan_json).read_text(encoding="utf-8"))
-        result = verify_plan(docs, args.claim, plan_payload, as_of=args.as_of, unit_profile=args.unit_profile)
+        result = verify_plan(docs, args.claim, plan_payload, as_of=args.as_of, unit_profile=args.unit_profile,
+                             reliability_policy=ReliabilityPolicy(pass_min_grade=args.pass_min_grade))
     else:
         api_key = os.environ.get(args.api_key_env, "").strip()
         if not api_key:
@@ -231,7 +232,7 @@ def _cmd_verify_claim(args: argparse.Namespace) -> int:
             model=args.model,
             api_key=api_key,
             timeout=float(args.timeout),
-            max_tokens=2048,
+            max_tokens=int(args.max_tokens),
             retries=2,
             extra_body={"chat_template_kwargs": {"enable_thinking": bool(args.enable_thinking)}},
         )
@@ -242,6 +243,7 @@ def _cmd_verify_claim(args: argparse.Namespace) -> int:
             as_of=args.as_of,
             max_retries=int(args.max_retries),
             unit_profile=args.unit_profile,
+            reliability_policy=ReliabilityPolicy(pass_min_grade=args.pass_min_grade),
         )
 
     rendered = json.dumps(result.to_dict(), indent=2, ensure_ascii=False)
@@ -282,6 +284,9 @@ def main(argv: list[str] | None = None) -> int:
     p_vc.add_argument("--as-of", default=None, help="Optional explicit reference date")
     p_vc.add_argument("--unit-profile", choices=("auto", "standard", "es"), default="auto",
                       help="Unit-label profile: 'auto' picks 'es' for Spanish text, else 'standard'")
+    p_vc.add_argument("--pass-min-grade", choices=("A", "B", "C", "D", "E"), default="B",
+                      help="Minimum reliability grade that may route to PASS (default B)")
+    p_vc.add_argument("--max-tokens", type=int, default=8192, help="Planner output token budget")
     p_vc.add_argument("--out", type=Path, default=None, help="Optional path to write JSON verification artifact")
 
     p_mcp = sub.add_parser("mcp", help="Start ClaimLayer MCP server over stdio")

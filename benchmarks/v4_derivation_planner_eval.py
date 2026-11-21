@@ -33,12 +33,16 @@ from claimlayer.v4 import (  # noqa: E402
     DEFAULT_OPERATION_CATALOG,
     DERIVATION_PLANNER_PROMPT,
     DERIVATION_PLANNER_PROMPT_VERSION,
+    DERIVATION_PLANNER_PROMPT_V2,
+    DERIVATION_PLANNER_PROMPT_VERSION_V2,
+    ClaimDerivationPlanner,
     verify_claim,
 )
 
 DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
 DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
 DEFAULT_OUT_PATH = _THIS_DIR / "v4_derivation_planner_live_results.json"
+PROMPT, PROMPT_VERSION = DERIVATION_PLANNER_PROMPT, DERIVATION_PLANNER_PROMPT_VERSION
 
 PARAPHRASE_SELECTION_PROTOCOL = (
     "Pre-declared 6-case held-out paraphrase suite selected prior to held-out execution along orthogonal "
@@ -245,6 +249,8 @@ def _run_cases(
     model: OpenAICompatibleModel,
     max_retries: int,
     interval_sec: float,
+    prompt: str = DERIVATION_PLANNER_PROMPT,
+    prompt_version: str = DERIVATION_PLANNER_PROMPT_VERSION,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for idx, case in enumerate(cases):
@@ -257,7 +263,7 @@ def _run_cases(
         res = verify_claim(
             docs,
             case["claim"],
-            model=model,
+            planner=ClaimDerivationPlanner(model=model, prompt=prompt, prompt_version=prompt_version),
             catalog=DEFAULT_OPERATION_CATALOG,
             max_retries=max_retries,
         )
@@ -351,7 +357,13 @@ def main() -> None:
     ap.add_argument("--max-retries", type=int, default=1)
     ap.add_argument("--interval-sec", type=float, default=0.4)
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT_PATH)
+    ap.add_argument("--prompt", choices=("v2", "v3"), default="v3",
+                    help="v2 reproduces the recorded 14/14 evidence; v3 allows planner-proposed operations")
+    ap.add_argument("--max-tokens", type=int, default=2048)
     args = ap.parse_args()
+    global PROMPT, PROMPT_VERSION
+    PROMPT, PROMPT_VERSION = ((DERIVATION_PLANNER_PROMPT_V2, DERIVATION_PLANNER_PROMPT_VERSION_V2) if args.prompt == "v2"
+                              else (DERIVATION_PLANNER_PROMPT, DERIVATION_PLANNER_PROMPT_VERSION))
 
     api_key = _load_env_fallback()
     if not api_key:
@@ -362,7 +374,7 @@ def main() -> None:
         model=args.model,
         api_key=api_key,
         timeout=float(args.timeout),
-        max_tokens=2048,
+        max_tokens=int(args.max_tokens),
         retries=2,
         extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     )
@@ -379,11 +391,11 @@ def main() -> None:
 
     if args.phase in ("core", "all"):
         print("=== Running Core Acceptance Cases (8) ===")
-        core_rows = _run_cases(CORE_CASES, model=model, max_retries=args.max_retries, interval_sec=args.interval_sec)
+        core_rows = _run_cases(CORE_CASES, model=model, max_retries=args.max_retries, interval_sec=args.interval_sec, prompt=PROMPT, prompt_version=PROMPT_VERSION)
 
     if args.phase in ("heldout", "all"):
         print("\n=== Running Frozen-Prompt Held-Out Paraphrases (6) ===")
-        heldout_rows = _run_cases(HELDOUT_PARAPHRASES, model=model, max_retries=args.max_retries, interval_sec=args.interval_sec)
+        heldout_rows = _run_cases(HELDOUT_PARAPHRASES, model=model, max_retries=args.max_retries, interval_sec=args.interval_sec, prompt=PROMPT, prompt_version=PROMPT_VERSION)
 
     all_rows = list(core_rows) + list(heldout_rows)
     artifact = {
@@ -398,8 +410,8 @@ def main() -> None:
             "extra_body": dict(model.extra_body),
             "planner_max_retries": args.max_retries,
         },
-        "prompt_version": DERIVATION_PLANNER_PROMPT_VERSION,
-        "prompt_digest": digest(DERIVATION_PLANNER_PROMPT),
+        "prompt_version": PROMPT_VERSION,
+        "prompt_digest": digest(PROMPT),
         "catalog": {
             "catalog_id": DEFAULT_OPERATION_CATALOG.catalog_id,
             "version": DEFAULT_OPERATION_CATALOG.version,

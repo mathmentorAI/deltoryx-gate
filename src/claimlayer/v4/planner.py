@@ -45,10 +45,20 @@ from .premise_grounding import (
 )
 from .verifiers import DEFAULT_VERIFIER_REGISTRY, VerifierContext, VerifierRegistry, VerifierResult
 from .vocabulary import STANDARD_UNITS, UNIT_PROFILES, UnitRegistry, UnmappedProposal, label_key, normalize_date
+from .reconstruction import (
+    DEFAULT_RELIABILITY_POLICY,
+    EXPRESSION_PRIMITIVES,
+    ProposedOperation,
+    ReliabilityPolicy,
+    compute_reliability,
+    parse_proposed_operations,
+    proposed_operation_specs,
+    step_grade,
+)
 
-DERIVATION_PLANNER_PROMPT_VERSION = "v4-derivation-planner-2"
+DERIVATION_PLANNER_PROMPT_VERSION_V2 = "v4-derivation-planner-2"
 
-DERIVATION_PLANNER_PROMPT = """Eres el planificador estructurado de derivaciones de Deltoryx Gate.
+DERIVATION_PLANNER_PROMPT_V2 = """Eres el planificador estructurado de derivaciones de Deltoryx Gate.
 Recibes `sources` (documentos con `document_id`, `revision` y `text`), una `claim` (afirmación a contrastar), un catálogo explícito `operations_catalog`, opcionalmente `declared_rules` y `units`, y opcionalmente `repair_feedback` de un intento previo fallido.
 
 Tu tarea es proponer premisas verificables extraídas SOLO de `sources` y un plan acíclico de pasos sobre `operations_catalog` para recalcular el hecho relevante y compararlo con `claim`. Un motor determinista comprobará todas las citas, ejecutará las operaciones y decidirá si `claim` se sostiene, queda refutada o carece de evidencia.
@@ -113,6 +123,82 @@ Devuelve ÚNICAMENTE un objeto JSON válido con este esquema exacto:
   "assumptions": ["string"],
   "suggested_rules": [
     {"rule_id": "string", "description": "string", "premises": ["string"], "conclusion": "string"}
+  ]
+}"""
+
+# v3: the planner may propose operations (closed expression language or model-asserted),
+# and is told that interpreted premise values lower reliability.
+DERIVATION_PLANNER_PROMPT_VERSION = "v4-derivation-planner-3"
+
+DERIVATION_PLANNER_PROMPT = """Eres el planificador estructurado de derivaciones de Deltoryx Gate.
+Recibes `sources` (documentos con `document_id`, `revision` y `text`), una `claim` (afirmación a contrastar), un catálogo explícito `operations_catalog`, opcionalmente `declared_rules` y `units`, y opcionalmente `repair_feedback` de un intento previo fallido.
+
+Tu tarea es proponer premisas verificables extraídas SOLO de `sources` y un plan acíclico de pasos sobre `operations_catalog` para recalcular el hecho relevante y compararlo con `claim`. Un motor determinista comprobará todas las citas, ejecutará las operaciones y decidirá si `claim` se sostiene, queda refutada o carece de evidencia.
+
+Reglas estrictas:
+1. `claim` es EXCLUSIVAMENTE el objeto a contrastar. NUNCA uses `claim` como premisa, cita o evidencia, ni tomes datos del reloj del sistema. Extrae en `claim_target` lo que afirma literalmente `claim` sin cambiar su valor, unidad ni polaridad.
+2. Cada premisa en `premises` debe citar un `document_id` y `revision` existentes en `sources` y copiar en `quote` un fragmento LITERAL exacto (subcadena continua) del `text` de ese documento.
+3. Mantén la correspondencia por cláusula elemental: la `quote` debe respaldar exactamente `entity`, `event`, `value`, `unit`, `direction` y `anchor_reference`. No mezcles valores de una cláusula con entidades o eventos de otra cláusula. Cuando la cláusula nombre un sujeto o evento, usa esas mismas palabras literales en `entity`/`event` (no etiquetas abstractas). Para días de la semana usa `unit: null`.
+4. En desplazamientos relativos: expresiones hacia atrás ("antes", "atrás", "previo", "hace", "disminuye", "before", "earlier", "ago", "minus") requieren signo NEGATIVO en `value` (ej. -2) y `direction="before"`; expresiones hacia adelante ("después", "posterior", "luego", "aumenta", "after", "later", "plus") requieren signo POSITIVO y `direction="after"`. Si el texto indica respecto a qué evento/fecha es el desplazamiento, ponlo en `anchor_reference`.
+5. Usa SOLO operaciones declaradas en `operations_catalog` (y `rule_id` declarados en `declared_rules` cuando uses `rule_application`). Respeta estrictamente el orden de operandos del catálogo:
+   - `weekday_shift`: `premises` = `[id_ancla_dia_semana, id_desplazamiento]`
+   - `date_offset`: `premises` = `[id_ancla_fecha_iso, id_desplazamiento]`
+   - `sub`: `premises` = `[id_minuendo, id_sustraendo]`
+   - `div`: `premises` = `[id_numerador, id_denominador]`
+6. Si falta un dato indispensable en `sources` (por ejemplo, falta el ancla temporal o falta un operando necesario), NO lo inventes ni uses el reloj del sistema: deja `steps` vacío, `derived_conclusion_id` en `null` y detalla la carencia en `missing_premises`.
+7. Si necesitas una operación ausente de `operations_catalog` y `declared_rules`, PROPÓNLA en `proposed_operations` y úsala en `steps` con su `name`. Siempre que puedas, defínela con `expression`, un árbol JSON sobre las primitivas de `expression_primitives`: nodos `{"input": "<nombre de entrada>"}`, `{"const": <escalar>}` u `{"op": "<primitiva>", "args": [...]}`. Las entradas se asignan en orden a los `premises` del paso. Deltoryx interpretará y re-ejecutará la expresión (fiabilidad C). Si no puede expresarse así, deja `expression` en `null` y pon el resultado en `proposed_value` del paso: quedará registrado como afirmación tuya, de fiabilidad baja (D). Nunca escribas código de programación.
+8b. Prefiere premisas cuyo `value` aparezca literalmente en la `quote` (números, nombres, rutas, identificadores). Un valor que no esté en la cita (por ejemplo `true` como interpretación de una línea) se registra como interpretación tuya y rebaja la fiabilidad al grado más bajo (E).
+8. NUNCA emitas puntuaciones de confianza, probabilidades, dictámenes (`supported`/`refuted`) ni código ejecutable.
+
+Devuelve ÚNICAMENTE un objeto JSON válido con este esquema exacto:
+{
+  "claim_target": {
+    "subject": "string",
+    "predicate": "string",
+    "value": "JSON",
+    "unit": "string|null",
+    "polarity": 1
+  },
+  "premises": [
+    {
+      "claim_id": "p1",
+      "document_id": "string",
+      "revision": "string",
+      "quote": "subcadena literal exacta de sources",
+      "entity": "string",
+      "event": "string",
+      "predicate": "string",
+      "value": "JSON",
+      "unit": "string|null",
+      "direction": "before|after|neutral|null",
+      "anchor_reference": "string|null",
+      "polarity": 1
+    }
+  ],
+  "steps": [
+    {
+      "step_id": "s1",
+      "operation": "nombre_operacion_catalogo",
+      "premises": ["p1", "p2"],
+      "conclusion_id": "c1",
+      "rule_id": "string|null",
+      "rule_version": "string|null",
+      "parameters": {},
+      "assumptions": [],
+      "proposed_value": "JSON|null",
+      "proposed_unit": "string|null"
+    }
+  ],
+  "derived_conclusion_id": "c1|null",
+  "missing_premises": [
+    {"role": "string", "description": "string"}
+  ],
+  "assumptions": ["string"],
+  "suggested_rules": [
+    {"rule_id": "string", "description": "string", "premises": ["string"], "conclusion": "string"}
+  ],
+  "proposed_operations": [
+    {"name": "identificador", "description": "string", "inputs": ["a", "b"], "expression": "árbol JSON o null", "output_type": "string", "output_unit": "string|inherit|null"}
   ]
 }"""
 
@@ -202,6 +288,8 @@ class ClaimDerivationPlanner:
             ],
             "units": [u.name for u in sorted(registry._units.values(), key=lambda x: x.name)],
         }
+        if "proposed_operations" in self.prompt:
+            payload["expression_primitives"] = {k: v["doc"] for k, v in EXPRESSION_PRIMITIVES.items()}
         if repair_feedback:
             payload["repair_feedback"] = list(repair_feedback)
 
@@ -378,6 +466,7 @@ class ClaimVerificationResult:
     graph: JustificationGraph | None
     assessment: ResponseAssessment | None
     telemetry: PlannerTelemetry
+    reliability: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -402,6 +491,7 @@ class ClaimVerificationResult:
             "graph": self.graph.to_dict() if self.graph is not None else None,
             "assessment": self.assessment.to_summary_dict() if self.assessment is not None else None,
             "telemetry": self.telemetry.to_dict(),
+            "reliability": self.reliability,
         }
 
 
@@ -421,12 +511,21 @@ class _CatalogFallbackVerifier:
         self.guarantee_kind = base_verifier.guarantee_kind
 
     def verify(self, obligation: VerificationObligation, context: VerifierContext) -> VerifierResult:
-        res = self._base.verify(obligation, context)
-        if res.status != "not_applicable" or obligation.origin == "engine_mandatory":
-            return res
         spec = self._catalog.get(context.step.operation)
-        if spec is None or spec.family != self.family:
-            return res
+        # Planner-proposed operations are re-executed by Deltoryx's closed interpreter (grade C)
+        # or replay the model-asserted value (grade D); they are never routed to rule verifiers.
+        is_proposed = (
+            spec is not None
+            and spec.version.startswith("proposed-")
+            and spec.family == self.family
+            and obligation.origin != "engine_mandatory"
+        )
+        if not is_proposed:
+            res = self._base.verify(obligation, context)
+            if res.status != "not_applicable" or obligation.origin == "engine_mandatory":
+                return res
+            if spec is None or spec.family != self.family:
+                return res
         out = self._catalog.execute(
             context.step.operation,
             context.premises,
@@ -628,6 +727,28 @@ def _values_match(
         return label_key(val_a) == label_key(val_b)
 
     return canonical(val_a) == canonical(val_b) and unit_a == unit_b
+
+
+def _value_kind(val: Any) -> str:
+    if isinstance(val, bool):
+        return "boolean"
+    if isinstance(val, str) and normalize_weekday(val) is not None:
+        return "weekday"
+    if _to_decimal_safe(val) is not None:
+        return "number"
+    if isinstance(val, str):
+        try:
+            normalize_date(val)
+            return "date"
+        except ValueError:
+            return "text"
+    return "structured" if val is not None else "null"
+
+
+def _comparable(val_a: Any, val_b: Any) -> bool:
+    """A computed conclusion can only confirm or contradict a claim value of the same kind.
+    Mismatched kinds (e.g. boolean vs text) are a planning defect, never a refutation."""
+    return _value_kind(val_a) == _value_kind(val_b) and _value_kind(val_a) != "null"
 
 
 def _coerce_polarity(raw: Any) -> int:
@@ -899,6 +1020,7 @@ def verify_plan(
     as_of: str | None = None,
     telemetry: Mapping[str, Any] | None = None,
     unit_profile: str = "auto",
+    reliability_policy: ReliabilityPolicy | None = None,
 ) -> ClaimVerificationResult:
     """Deterministically validate a structured proposal, ground premises, execute operations, and contrast `claim`."""
     t_ver0 = time.monotonic()
@@ -908,6 +1030,8 @@ def verify_plan(
     )
     registry = profile.effective_unit_registry()
     eff_verifiers = _effective_verifier_registry(verifier_registry, catalog)
+    rel_policy = reliability_policy or DEFAULT_RELIABILITY_POLICY
+    proposed_ops: dict[str, ProposedOperation] = {}
 
     def _finish(
         *,
@@ -930,6 +1054,7 @@ def verify_plan(
         graph_admitted: bool,
         graph: JustificationGraph | None,
         assessment: ResponseAssessment | None,
+        reliability: dict[str, Any] | None = None,
     ) -> ClaimVerificationResult:
         ver_ms = round((time.monotonic() - t_ver0) * 1000.0, 3)
         certainty = _build_certainty_report(
@@ -974,6 +1099,7 @@ def verify_plan(
             graph=graph,
             assessment=assessment,
             telemetry=tel,
+            reliability=reliability,
         )
 
     if not isinstance(proposal, Mapping):
@@ -1046,6 +1172,31 @@ def verify_plan(
             graph=None,
             assessment=None,
         )
+
+    # 2a. Planner-proposed operations: validated as data, executed only through the closed interpreter
+    prop_list, prop_defects = parse_proposed_operations(
+        raw_clean.get("proposed_operations"), core_catalog=catalog, registry=registry
+    )
+    if prop_defects:
+        return _finish(
+            claim_target=target_dict,
+            computed_conclusion=None,
+            epistemic_verdict="unresolved",
+            outcome_category="malformed_proposal",
+            routing=OperationalRouting(status="RETRY", allowed=False, requires_human=False,
+                                       reasons=tuple(d["code"] for d in prop_defects)),
+            defects_out=prop_defects,
+            assumptions_out=raw_assumptions,
+            explanation="Operaciones propuestas inválidas: " + "; ".join(d["message"] for d in prop_defects),
+            raw_clean=raw_clean,
+            graph_admitted=False,
+            graph=None,
+            assessment=None,
+        )
+    if prop_list:
+        proposed_ops = {op.name: op for op in prop_list}
+        catalog = catalog.extend(proposed_operation_specs(prop_list))
+        eff_verifiers = _effective_verifier_registry(verifier_registry, catalog)
 
     # 2. Check for model-suggested rules or unknown operations / undeclared rules before execution
     limitations: list[str] = []
@@ -1328,6 +1479,9 @@ def verify_plan(
         params = dict(st.get("parameters") or {})
         if st.get("rule_id") and "rule_id" not in params:
             params["rule_id"] = st["rule_id"]
+        if op_name in proposed_ops and proposed_ops[op_name].grade == "D":
+            params["__asserted_value"] = st.get("proposed_value")
+            params["__asserted_unit"] = st.get("proposed_unit")
         if st.get("rule_version") and "rule_version" not in params:
             params["rule_version"] = st["rule_version"]
 
@@ -1525,6 +1679,8 @@ def verify_plan(
             "model_proposed_value": prop_val,
             "model_proposed_unit": prop_unit,
             "model_disagreed": disagreed,
+            "grade": step_grade(spec.name, proposed_ops),
+            "proposed_by_planner": spec.name in proposed_ops,
         })
 
     # 7. Evaluate the recomputed JustificationGraph via v4 evaluate_response
@@ -1584,6 +1740,37 @@ def verify_plan(
     target_val = target_dict.get("value")
     target_unit = target_dict.get("unit")
     target_pol = _coerce_polarity(target_dict.get("polarity", 1))
+    reliability = compute_reliability(
+        conclusion_id=conc_id,
+        premises={r["claim_id"]: r for r in grounded_records},
+        steps=verified_steps_out,
+        proposed=proposed_ops,
+        policy=rel_policy,
+    )
+    if not _comparable(conc_node.value, target_val):
+        kinds = {"computed": _value_kind(conc_node.value), "claim_target": _value_kind(target_val)}
+        return _finish(
+            claim_target=target_dict,
+            computed_conclusion=computed_conc_dict,
+            epistemic_verdict="unresolved",
+            outcome_category="incomparable_conclusion",
+            routing=OperationalRouting(status="RETRY", allowed=False, requires_human=False,
+                                       reasons=("INCOMPARABLE_CONCLUSION_AND_CLAIM",)),
+            premises_out=grounded_records,
+            steps_out=verified_steps_out,
+            assumptions_out=all_assumptions,
+            defects_out=[{"code": "INCOMPARABLE_CONCLUSION_AND_CLAIM",
+                          "message": f"La conclusión calculada ({kinds['computed']}: {conc_node.value!r}) no es comparable con el valor afirmado ({kinds['claim_target']}: {target_val!r}).",
+                          "detail": kinds}],
+            checks_applied=checks_applied,
+            explanation=(f"Sin resolver: la derivación produce un valor de tipo {kinds['computed']} y la afirmación espera "
+                         f"{kinds['claim_target']}; tipos incomparables no confirman ni refutan."),
+            raw_clean=raw_clean,
+            graph_admitted=False,
+            graph=graph,
+            assessment=assessment,
+            reliability=reliability,
+        )
     val_matches = _values_match(
         conc_node.value,
         conc_node.unit,
@@ -1609,6 +1796,15 @@ def verify_plan(
                 "issues": [i.code for i in auth.issues],
             },
         )
+        if not reliability["pass_allowed_by_grade"]:
+            routing = OperationalRouting(
+                status="ESCALATE",
+                allowed=False,
+                requires_human=True,
+                reasons=(f"RELIABILITY_BELOW_PASS_THRESHOLD:{reliability['grade']}<{rel_policy.pass_min_grade}",
+                         *routing.reasons),
+                authorization_verdict=routing.authorization_verdict,
+            )
         step_desc = "; ".join(
             f"{s['operation']}({', '.join(s['premises'])}) -> {s['recomputed_value']}"
             + (f" {s['recomputed_unit']}" if s['recomputed_unit'] else "")
@@ -1626,12 +1822,13 @@ def verify_plan(
             checks_applied=checks_applied + ["conclusion_claim_comparison"],
             explanation=(
                 f"Afirmación derivada y verificada de forma determinista: {step_desc}, "
-                f"coincidiendo con la afirmación original ({target_val!r})."
+                f"coincidiendo con la afirmación original ({target_val!r}). Fiabilidad {reliability['grade']}: {reliability['guarantee']}"
             ),
             raw_clean=raw_clean,
             graph_admitted=True,
             graph=graph,
             assessment=assessment,
+            reliability=reliability,
         )
 
     # Refuted: recomputed conclusion is valid under explicit premises and contradicts claim_target
@@ -1664,6 +1861,14 @@ def verify_plan(
         requires_human=False,
         reasons=("CLAIM_CONTRADICTS_COMPUTED_CONCLUSION",),
     )
+    if not reliability["pass_allowed_by_grade"]:
+        routing = OperationalRouting(
+            status="ESCALATE",
+            allowed=False,
+            requires_human=True,
+            reasons=(f"RELIABILITY_BELOW_PASS_THRESHOLD:{reliability['grade']}<{rel_policy.pass_min_grade}",
+                     "CLAIM_CONTRADICTS_COMPUTED_CONCLUSION"),
+        )
     return _finish(
         claim_target=target_dict,
         computed_conclusion=computed_conc_dict,
@@ -1677,12 +1882,13 @@ def verify_plan(
         checks_applied=checks_applied + ["conclusion_claim_comparison"],
         explanation=(
             f"Afirmación refutada: el cálculo controlado a partir de las premisas verificadas produce "
-            f"'{comp_str}', que contradice lo afirmado ({target_val!r}).{diag_suffix}"
+            f"'{comp_str}', que contradice lo afirmado ({target_val!r}).{diag_suffix} Fiabilidad {reliability['grade']}: {reliability['guarantee']}"
         ),
         raw_clean=raw_clean,
         graph_admitted=True,
         graph=graph,
         assessment=assessment,
+        reliability=reliability,
     )
 
 
@@ -1703,7 +1909,9 @@ class ClaimVerifier:
         verifier_registry: VerifierRegistry | None = None,
         max_retries: int = 1,
         unit_profile: str = "auto",
+        reliability_policy: ReliabilityPolicy | None = None,
     ) -> None:
+        self.reliability_policy = reliability_policy or DEFAULT_RELIABILITY_POLICY
         if unit_profile not in UNIT_PROFILE_CHOICES:
             raise ValueError(f"unit_profile must be one of {UNIT_PROFILE_CHOICES}, got {unit_profile!r}")
         if planner is not None:
@@ -1855,6 +2063,7 @@ class ClaimVerifier:
                 verifier_registry=self.verifier_registry,
                 as_of=as_of,
                 unit_profile=self.unit_profile,
+                reliability_policy=self.reliability_policy,
             )
             verifier_ms_acc += ver_res.telemetry.verifier_latency_ms
             attempt_traces.append({
@@ -1871,7 +2080,7 @@ class ClaimVerifier:
 
             # Retry ONLY on repairable planner/grounding defects
             if (
-                ver_res.outcome_category in {"malformed_proposal", "premise_grounding_defect"}
+                ver_res.outcome_category in {"malformed_proposal", "premise_grounding_defect", "incomparable_conclusion"}
                 and attempt_idx < self.max_retries
             ):
                 repair_feedback = [
@@ -1929,6 +2138,7 @@ class ClaimVerifier:
             graph=last_result.graph,
             assessment=last_result.assessment,
             telemetry=final_tel,
+            reliability=last_result.reliability,
         )
 
 
@@ -1943,6 +2153,7 @@ def build_derivation_planner_model(
     model: str = DEFAULT_PLANNER_MODEL,
     timeout: float = 120.0,
     enable_thinking: bool = False,
+    max_tokens: int = 2048,
 ) -> OpenAICompatibleModel:
     """Provider configuration used by the live derivation benchmark
     (`benchmarks/v4_derivation_planner_eval.py`): temperature 0, max_tokens 2048,
@@ -1955,7 +2166,7 @@ def build_derivation_planner_model(
         model=model,
         api_key=api_key.strip(),
         timeout=float(timeout),
-        max_tokens=2048,
+        max_tokens=int(max_tokens),
         retries=2,
         extra_body={"chat_template_kwargs": {"enable_thinking": bool(enable_thinking)}},
     )
@@ -1978,6 +2189,7 @@ def verify_claim(
     as_of: str | None = None,
     max_retries: int = 1,
     unit_profile: str = "auto",
+    reliability_policy: ReliabilityPolicy | None = None,
 ) -> ClaimVerificationResult:
     """Public single-call entrypoint verifying a natural-language claim against sources via planner + v4 core."""
     verifier = ClaimVerifier(
@@ -1988,5 +2200,6 @@ def verify_claim(
         verifier_registry=verifier_registry,
         max_retries=max_retries,
         unit_profile=unit_profile,
+        reliability_policy=reliability_policy,
     )
     return verifier.verify(sources, claim, as_of=as_of)

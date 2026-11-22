@@ -248,3 +248,80 @@ Los tiempos y tokens de cada intento (primer intento y reintento) están en `sco
 3. **Enlaza la entidad con el contenido** cuando la ruta del archivo está en la cabecera y el valor en otra línea, y la comprobación de cláusula lo rechaza (C06–C08, C19).
 
 El análisis manual de la etapa 2 (`stage2_manual/`) muestra que, con citas correctas, el contrato actual ya expresa y verifica derivaciones de este tipo.
+
+---
+
+# Cuarta medición, M4 (etapa 2: citas por rango de líneas, vinculación con el diff, convenio de recuento)
+
+**Configuración.**
+- Revisión ejecutada: plataforma `a51acf3` y claim-layer `dc3c6a8`, sin cambios locales.
+- Prompt `v4-derivation-planner-4`, cuyo ejemplo es sintético (`config/limits.yaml`).
+- Ejecución: 22-nov, 07:38 UTC (regresión PR), 07:40 UTC (temporal) y 07:43 UTC (transferencia).
+- Revisiones manuales:
+  - `results/justification_review_stage2.json`;
+  - `../pr_mci_transfer_sample/results/justification_review_stage2.json`.
+- Métricas:
+  - `results/scored_stage2.json`;
+  - `../pr_mci_transfer_sample/results/scored_stage2.json`.
+
+Las dos muestras se informan por separado.
+
+| Métrica | Regresión (20 PRs ya medidos) | Transferencia (10 PRs nuevos, congelados antes) |
+|---|---|---|
+| Inferencias resueltas con derivación válida | **0/12** | **0/7** |
+| Falsas aceptaciones (PASS sobre referencia refutada o insuficiente) | 0/11 | 0/5 |
+| Falsas refutaciones | **1/16 (C07, grado A)** | 0/8 |
+| Abstenciones (insufficient o unresolved) | 19/20 (1 justificada) | 10/10 (0 justificadas) |
+| Correctamente verificados | 1/20 (C18) | 0/10 |
+| Rutas PASS | 0 | 0 |
+| Llamadas / reintentos / intentos malformados | 37 / 17 / 6 de 37 | 20 / 10 / 5 de 20 |
+| Tokens totales | 616 807 | 199 447 |
+| Tokens por intento, mediana [rango] | 13 506 [4 948 – 50 110] | 7 362 [5 459 – 24 779] |
+| Latencia del planificador por intento, mediana [rango] | 9,7 s [2,6 – 67,9] | 7,0 s [3,5 – 19,0] |
+| Extremo a extremo total | 592,4 s | 182,0 s |
+| Coste por inferencia válida (tokens; tiempo) | **indefinido (0 inferencias válidas)** | **indefinido (0 inferencias válidas)** |
+
+Los tiempos y tokens de cada intento están en `scored_stage2.json → per_attempt.by_case`.
+
+**Benchmark temporal (regresión).** Resultado: **11/14**, con 0 falsas aceptaciones; en M3 fue 14/14.
+- Fallan T2, T4 y T5: `EVENT_VALUE_MISMATCH`.
+  - En T2, Nemotron cita «dos días antes» con el evento «quedé», que queda fuera de la cita.
+  - En T4 y T5 pone el predicado («día de la semana») en el campo `event`.
+- El verificador rechaza bien estas premisas. La regresión viene del planificador con el prompt v4: el motor temporal no cambió.
+
+## Cambios por caso M3 → M4 (regresión)
+
+| Caso | M3 | M4 | Qué cambió |
+|---|---|---|---|
+| C07 | unresolved (cita no literal) | **refuted / RETRY, grado A (incorrecta)** | El rango de líneas ancla la premisa. Nemotron cuenta las líneas con `SELECT plan(` (1) y las vincula al atributo «casos de test» (8). La correspondencia entre filtro y atributo es una interpretación que no se comprueba, y aun así recibe grado A. |
+| C14 | unresolved (citas no literales) | insufficient / ESCALATE (veredicto aceptable, justificación defectuosa) | `count_lines` ×2 + `add` = 209. Los rangos incluyen las cabeceras y excluyen las últimas líneas y el marcador; la protección de convenio no se activó. La abstención la produce la comprobación de completitud de la población. |
+| C16 | insufficient / ESCALATE (correcto) | unresolved (defecto de premisa) | Variación del planificador. |
+| C18 | insufficient (correcto) | igual | — |
+| C03 | derived / ESCALATE (E) | unresolved | Ya no hay derivación con grado E. |
+| Resto | unresolved | unresolved | Cambia la causa: ver el diagnóstico. |
+
+## Por qué Nemotron sigue sin producir planes válidos
+
+Defectos registrados en todos los intentos:
+
+| Defecto | M3 (citas literales) | M4 regresión | M4 transferencia |
+|---|---|---|---|
+| `QUOTE_NOT_FOUND_IN_SOURCE` | 53 | 1 | 0 |
+| `ENTITY_NOT_IN_EVIDENCE` | 34 | 3 | 0 |
+| `EVENT_VALUE_MISMATCH` | 55 | 68 | 20 |
+| `ENTITY_VALUE_CLAUSE_MISMATCH` | 33 | 37 | 6 |
+| `UNKNOWN_UNIT` (boolean, status, string) | 18 | 57 | 27 |
+| `VALUE_NOT_IN_EVIDENCE` | 26 | 8 | 9 |
+
+En la propuesta final, 62 de 63 premisas (regresión) y 27 de 27 (transferencia) usan rango de líneas.
+
+1. **El anclaje literal ya no es el cuello de botella.** Los rangos de líneas eliminan casi todos los fallos de cita y de entidad.
+2. **El cuello de botella es la representación de la premisa.** Para una línea de código, Nemotron sigue rellenando `event` y `value` como si fuera un hecho en prosa: `true`, «added», nombres de función. El verificador comprueba que evento y valor estén en la misma cláusula y que el valor tenga una unidad conocida. Pero en un diff el hecho es la presencia de la línea citada en un lado, y el contrato no tiene un tipo de premisa de presencia: ni booleanos, ni estados, ni cadenas. Es una carencia del contrato y del verificador, no solo del modelo.
+3. **Nuevo riesgo: falsa refutación con grado A (C07).** `count_lines` es reproducible, pero qué se cuenta (el filtro `contains` o `line_prefix`) lo decide el planificador, y el grado no lo refleja. El mismo contrato con otro filtro da 8 y deriva (derivación manual).
+4. **El convenio de recuento solo se detecta si el marcador está dentro del rango citado (C14).** Además, `count_lines` sin `line_prefix` cuenta las cabeceras del diff.
+
+Cambios propuestos para la siguiente etapa. No se aplicaron en esta medición, que queda conservada.
+- La correspondencia entre el criterio de recuento y el atributo afirmado cuenta como interpretación del planificador: grado D o inferior y sin refutación por debajo del umbral.
+- Un tipo de premisa de presencia para líneas de diff (sin `event` ni `value`).
+- Detectar el convenio a partir del mapa del diff y no del texto citado.
+- Excluir las cabeceras del diff en `count_lines`.

@@ -325,3 +325,83 @@ Cambios propuestos para la siguiente etapa. No se aplicaron en esta medición, q
 - Un tipo de premisa de presencia para líneas de diff (sin `event` ni `value`).
 - Detectar el convenio a partir del mapa del diff y no del texto citado.
 - Excluir las cabeceras del diff en `count_lines`.
+
+---
+
+# Etapa 3 y M5: primero el verificador, después el planificador
+
+**M4 queda cerrada.** Sus resultados y revisiones no se modifican.
+
+**Errata de M4.** La revisión de M4 clasificó C14 como «veredicto aceptable, justificación defectuosa». Es un error de redacción de la revisión, no de los datos: el veredicto registrado fue `unresolved`, que no está entre los aceptables. Las métricas calculadas de M4 (`verdict_acceptable` 1/20) ya lo reflejaban bien. No se reescribe `justification_review_stage2.json`.
+
+## Cambios del verificador
+
+Commit `9836ed1`, rama `feat/v4-derivation-verifier`.
+
+1. **Criterio de recuento.** Si el criterio lo elige el planificador, el resultado es `insufficient_evidence` (`count_criterion_interpreted`), tanto para derivar como para refutar. La explicación muestra qué se contó y qué conexión falta.
+   - Pueden vincular un recuento con el atributo afirmado:
+     - una definición de recuento declarada (`CountDefinition`, aportada por quien llama y no por el planificador, grado B);
+     - un recuento estructural de líneas, solo cuando el atributo afirmado son «líneas».
+   - Controles:
+     - un criterio pertinente declarado deriva;
+     - el mismo criterio con un valor incorrecto refuta;
+     - un criterio irrelevante cuyo recuento coincide por casualidad se abstiene.
+2. **Estructura del diff sobre el parche completo.** Se construye a partir de los contadores de cada cabecera de bloque, sin reglas por prefijo.
+   - Se distinguen cabeceras, contexto, adiciones, eliminaciones y el marcador `No newline`.
+   - Se detectan los bloques truncados.
+   - El recuento conserva archivo, lado y alcance (`range` o `file`).
+   - Un rango parcial, un parche truncado o un convenio de salto de línea ambiguo producen abstención con el recuento observado.
+   - Referencias independientes:
+     - `git diff --numstat` y los propios archivos, incluidos contenidos que empiezan por `++` o `--` y últimas líneas sin salto;
+     - los recuentos por archivo de la API de GitHub en los 117 diffs de archivo de las dos muestras de M4: **117/117 coinciden**, sin truncados.
+3. **Premisa tipada `diff_presence`.** Comprueba ruta, lado, rango de líneas, texto opcional y, si se indican, las revisiones base y head.
+   - No lleva evento ni unidad.
+   - Su alcance es una modificación textual: las afirmaciones de ejecución, comportamiento o resultado dan `insufficient_evidence` (`presence_scope_exceeded`).
+   - Controles: el mismo texto presente solo en base, en otro archivo y en una línea de contexto.
+
+## Medición del verificador con entradas idénticas, sin llamadas al modelo
+
+Fuente: `stage3_replay/` (`replay_verifier_dc3c6a8.json`, `replay_verifier_9836ed1.json`, `replay_summary.json`).
+
+**Comprobación previa.** El verificador de M4 reproduce 29 de las 30 decisiones registradas. C05 no tiene plan registrado.
+
+| Planes de M4 | Verificador M4 | Verificador etapa 3 |
+|---|---|---|
+| Regresión 20 · falsas refutaciones | 1/16 (C07) | **0/16** |
+| Regresión 20 · falsas aceptaciones | 0/11 | 0/11 |
+| Regresión 20 · inferencias candidatas (derived/refuted con veredicto aceptable) | 0/13 | 0/13 |
+| Regresión 20 · abstenciones sobre casos resolubles | 12/13 | 13/13 |
+| Transferencia 1 (10) · falsas refutaciones / falsas aceptaciones | 0/8 · 0/5 | 0/8 · 0/5 |
+| Transferencia 1 (10) · inferencias candidatas / abstenciones sobre resolubles | 0/7 · 7/7 | 0/7 · 7/7 |
+| Temporal 14 (planes de M4) | 11/14 | 11/14 |
+
+**Decisiones que cambian con entradas idénticas:**
+- **C07:** pasa de refuted / RETRY con grado A a insufficient_evidence / ESCALATE. Se comprobó 1 línea que contiene `SELECT plan(`; falta que ese criterio cuente «test cases».
+- **C14:** mantiene el mismo veredicto (unresolved, completitud de la población), pero la explicación añade que los rangos citados cubren 129 de 132 y 74 de 77 líneas.
+
+**Planes preparados:**
+
+| Plan preparado | Verificador M4 | Verificador etapa 3 |
+|---|---|---|
+| T2 (plan temporal válido registrado en M3) | refuted (miércoles) | refuted (miércoles) |
+| T4 | derived (domingo), PASS | derived (domingo), PASS |
+| T5 | refuted (domingo) | refuted (domingo) |
+| C07 manual (filtro `SELECT ok(`) | derived, A, 8 | insufficient_evidence (criterio interpretado), 8 |
+| C13 manual (filtro + `gt`) | refuted, C | insufficient_evidence (criterio interpretado) |
+| C07, contrato de la etapa 3 (presencia + `scope: file`) | — | insufficient_evidence, 8 |
+| C14, contrato de la etapa 3 sin convenio | — | unresolved: completitud y convenio ambiguo (git 132+77 = 209; wc 131+76 = 207) |
+| C14, contrato de la etapa 3 con convenio `wc` | — | unresolved (completitud: `mcp/` contiene además `index.yml`), 207 |
+
+Conclusiones:
+- **Temporal.** Con planes válidos, ambos verificadores aciertan T2, T4 y T5. El fallo de M4 fue construir la premisa, no verificarla.
+- **C07 y C13.** La regla nueva cuesta una derivación y una refutación que antes se aceptaban con filtros elegidos a mano. Recuperarlas exige definiciones de recuento declaradas, que no existen en la configuración pública por defecto.
+
+## Configuración congelada para M5
+
+- claim-layer `21e443d`. El verificador no cambia desde `9836ed1`.
+- Prompt `v4-derivation-planner-5`, escrito después de congelar la reserva.
+- Sin definiciones de recuento declaradas y `pass_min_grade` B.
+
+Muestras:
+- **Regresión** (ya inspeccionadas): los 20 PRs, los 14 casos temporales y los 10 de la primera transferencia.
+- **Transferencia 2** (nueva): `../pr_mci_transfer_sample_2/`, 10 PRs de la fase 2 sin los de la primera muestra. Etiquetada y congelada en `1abc4a3`, antes del prompt v5 y sin ninguna llamada al motor. Hashes: inputs `3ed8dd78…`, expected `810e5be8…`.

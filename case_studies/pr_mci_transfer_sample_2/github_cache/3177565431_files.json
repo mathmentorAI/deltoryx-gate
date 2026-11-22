@@ -1,0 +1,98 @@
+[
+ {
+  "sha": "a735dc4d637dec83581d6201a0443d810fcb1af6",
+  "filename": "apps/shinkai-desktop/src/components/agent/publish-agent-dialog.tsx",
+  "status": "modified",
+  "additions": 60,
+  "deletions": 25,
+  "changes": 85,
+  "blob_url": "https://github.com/dcSpark/shinkai-local-ai-agents/blob/3b257bde67434f841cb5d1fe094ea6164d24e2b3/apps%2Fshinkai-desktop%2Fsrc%2Fcomponents%2Fagent%2Fpublish-agent-dialog.tsx",
+  "raw_url": "https://github.com/dcSpark/shinkai-local-ai-agents/raw/3b257bde67434f841cb5d1fe094ea6164d24e2b3/apps%2Fshinkai-desktop%2Fsrc%2Fcomponents%2Fagent%2Fpublish-agent-dialog.tsx",
+  "contents_url": "https://api.github.com/repos/dcSpark/shinkai-local-ai-agents/contents/apps%2Fshinkai-desktop%2Fsrc%2Fcomponents%2Fagent%2Fpublish-agent-dialog.tsx?ref=3b257bde67434f841cb5d1fe094ea6164d24e2b3",
+  "patch": "@@ -7,6 +7,7 @@ import {\n import { useSetToolOffering } from '@shinkai_network/shinkai-node-state/v2/mutations/setToolOffering/useSetToolOffering';\n import { useGetAgents } from '@shinkai_network/shinkai-node-state/v2/queries/getAgents/useGetAgents';\n import { useGetToolsWithOfferings } from '@shinkai_network/shinkai-node-state/v2/queries/getToolsWithOfferings/useGetToolsWithOfferings';\n+import { useGetWalletList } from '@shinkai_network/shinkai-node-state/v2/queries/getWalletList/useGetWalletList';\n import {\n   Dialog,\n   DialogTrigger,\n@@ -17,21 +18,27 @@ import {\n   Button,\n   SearchInput,\n   Input,\n+  Textarea,\n } from '@shinkai_network/shinkai-ui';\n-import { useState, useMemo } from 'react';\n+import { useState, useMemo, useEffect } from 'react';\n import { useAuth } from '../../store/auth';\n \n export default function PublishAgentDialog() {\n   const [open, setOpen] = useState(false);\n   const [search, setSearch] = useState('');\n   const [selected, setSelected] = useState<Agent | null>(null);\n   const [payTo, setPayTo] = useState('');\n-  const [asset, setAsset] = useState('');\n   const [amount, setAmount] = useState('');\n   const [description, setDescription] = useState('');\n \n   const auth = useAuth((s) => s.auth);\n   const { t } = useTranslation();\n+\n+  const { data: walletInfo } = useGetWalletList({\n+    nodeAddress: auth?.node_address ?? '',\n+    token: auth?.api_v2_key ?? '',\n+  });\n+\n   const { data: agents } = useGetAgents({\n     nodeAddress: auth?.node_address ?? '',\n     token: auth?.api_v2_key ?? '',\n@@ -55,17 +62,30 @@ export default function PublishAgentDialog() {\n     [agents, search],\n   );\n \n+  const asset = 'USDC';\n+\n   const { mutateAsync: publish, isPending } = useSetToolOffering({\n     onSuccess: () => {\n-      setOpen(false);\n       setSelected(null);\n       setPayTo('');\n-      setAsset('');\n       setAmount('');\n       setDescription('');\n+      setOpen(false);\n     },\n   });\n \n+  const formatUSDCAmount = (rawAmount: string): string => {\n+    if (!rawAmount || isNaN(Number(rawAmount))) return '0.000000';\n+    const usdcAmount = Number(rawAmount) / 1000000;\n+    return usdcAmount.toFixed(6);\n+  };\n+\n+  useEffect(() => {\n+    if (selected && walletInfo?.payment_wallet?.data?.address?.address_id) {\n+      setPayTo(walletInfo.payment_wallet.data.address.address_id);\n+    }\n+  }, [selected, walletInfo]);\n+\n   const handlePublish = async () => {\n     if (!selected) return;\n     const usage: ToolUsageType = {\n@@ -86,7 +106,6 @@ export default function PublishAgentDialog() {\n           },\n         ],\n       },\n-      Downloadable: { Payment: [] },\n     };\n \n     if (!selected.tools.length) return;\n@@ -119,26 +138,42 @@ export default function PublishAgentDialog() {\n               </DialogTitle>\n             </DialogHeader>\n             <div className=\"mt-4 space-y-2\">\n-              <Input\n-                placeholder={t('agents.publishDialog.paymentAddress')}\n-                value={payTo}\n-                onChange={(e) => setPayTo(e.target.value)}\n-              />\n-              <Input\n-                placeholder={t('agents.publishDialog.asset')}\n-                value={asset}\n-                onChange={(e) => setAsset(e.target.value)}\n-              />\n-              <Input\n-                placeholder={t('agents.publishDialog.amount')}\n-                value={amount}\n-                onChange={(e) => setAmount(e.target.value)}\n-              />\n-              <Input\n-                placeholder={t('agents.publishDialog.description')}\n-                value={description}\n-                onChange={(e) => setDescription(e.target.value)}\n-              />\n+              <div>\n+                <label className=\"text-sm font-medium text-white mb-1 block\">\n+                  Payment Address\n+                </label>\n+                <Input\n+                  placeholder={t('agents.publishDialog.paymentAddress')}\n+                  value={payTo}\n+                  disabled\n+                  readOnly\n+                />\n+              </div>\n+              <div>\n+                <label className=\"text-sm font-medium text-white mb-1 block\">\n+                  Amount (USDC units per use)\n+                </label>\n+                <Input\n+                  placeholder={t('agents.publishDialog.amount')}\n+                  value={amount}\n+                  onChange={(e) => setAmount(e.target.value)}\n+                />\n+                <p className=\"text-xs text-gray-100 mt-1\">\n+                  = {formatUSDCAmount(amount)} USDC\n+                </p>\n+              </div>\n+              <div>\n+                <label className=\"text-sm font-medium text-white mb-1 block\">\n+                  Agent description that will be shown to users\n+                </label>\n+                <Textarea\n+                  placeholder={t('agents.publishDialog.description')}\n+                  value={description}\n+                  onChange={(e) => setDescription(e.target.value)}\n+                  resize=\"vertical\"\n+                  className=\"!min-h-[100px]\"\n+                />\n+              </div>\n             </div>\n             <DialogFooter className=\"mt-4 flex justify-end gap-2\">\n               <Button variant=\"secondary\" onClick={() => setSelected(null)}>"
+ },
+ {
+  "sha": "a0c2f25e8d63231b70c3fde38be0850e3b2772c6",
+  "filename": "libs/shinkai-i18n/locales/en-US.json",
+  "status": "modified",
+  "additions": 2,
+  "deletions": 0,
+  "changes": 2,
+  "blob_url": "https://github.com/dcSpark/shinkai-local-ai-agents/blob/3b257bde67434f841cb5d1fe094ea6164d24e2b3/libs%2Fshinkai-i18n%2Flocales%2Fen-US.json",
+  "raw_url": "https://github.com/dcSpark/shinkai-local-ai-agents/raw/3b257bde67434f841cb5d1fe094ea6164d24e2b3/libs%2Fshinkai-i18n%2Flocales%2Fen-US.json",
+  "contents_url": "https://api.github.com/repos/dcSpark/shinkai-local-ai-agents/contents/libs%2Fshinkai-i18n%2Flocales%2Fen-US.json?ref=3b257bde67434f841cb5d1fe094ea6164d24e2b3",
+  "patch": "@@ -970,6 +970,8 @@\n       \"asset\": \"Asset\",\n       \"amount\": \"Amount\",\n       \"description\": \"Description\",\n+      \"amountHelper\": \"Value in USDC\",\n+      \"descriptionHelper\": \"Shown to other users when searching for this agent.\",\n       \"selectAgent\": \"Select Agent\",\n       \"searchAgents\": \"Search agents\",\n       \"publish\": \"Publish\","
+ },
+ {
+  "sha": "cea1567bc3685ae25c4836fac67e460e72d0f987",
+  "filename": "libs/shinkai-i18n/locales/es-ES.json",
+  "status": "modified",
+  "additions": 2,
+  "deletions": 0,
+  "changes": 2,
+  "blob_url": "https://github.com/dcSpark/shinkai-local-ai-agents/blob/3b257bde67434f841cb5d1fe094ea6164d24e2b3/libs%2Fshinkai-i18n%2Flocales%2Fes-ES.json",
+  "raw_url": "https://github.com/dcSpark/shinkai-local-ai-agents/raw/3b257bde67434f841cb5d1fe094ea6164d24e2b3/libs%2Fshinkai-i18n%2Flocales%2Fes-ES.json",
+  "contents_url": "https://api.github.com/repos/dcSpark/shinkai-local-ai-agents/contents/libs%2Fshinkai-i18n%2Flocales%2Fes-ES.json?ref=3b257bde67434f841cb5d1fe094ea6164d24e2b3",
+  "patch": "@@ -80,6 +80,8 @@\n       \"amount\": \"Cantidad\",\n       \"asset\": \"Activo\",\n       \"description\": \"Descripción\",\n+      \"amountHelper\": \"Valor en USDC\",\n+      \"descriptionHelper\": \"Este texto se mostrará a otros usuarios cuando busquen este agente.\",\n       \"open\": \"Publicar Agente\",\n       \"paymentAddress\": \"Dirección de Pago\",\n       \"publish\": \"Publicar\","
+ },
+ {
+  "sha": "1b958ad09bc560d4e3c44e4c79888805571b9f74",
+  "filename": "libs/shinkai-i18n/locales/id-ID.json",
+  "status": "modified",
+  "additions": 2,
+  "deletions": 0,
+  "changes": 2,
+  "blob_url": "https://github.com/dcSpark/shinkai-local-ai-agents/blob/3b257bde67434f841cb5d1fe094ea6164d24e2b3/libs%2Fshinkai-i18n%2Flocales%2Fid-ID.json",
+  "raw_url": "https://github.com/dcSpark/shinkai-local-ai-agents/raw/3b257bde67434f841cb5d1fe094ea6164d24e2b3/libs%2Fshinkai-i18n%2Flocales%2Fid-ID.json",
+  "contents_url": "https://api.github.com/repos/dcSpark/shinkai-local-ai-agents/contents/libs%2Fshinkai-i18n%2Flocales%2Fid-ID.json?ref=3b257bde67434f841cb5d1fe094ea6164d24e2b3",
+  "patch": "@@ -80,6 +80,8 @@\n       \"amount\": \"Jumlah\",\n       \"asset\": \"Aset\",\n       \"description\": \"Deskripsi\",\n+      \"amountHelper\": \"Nilai dalam USDC\",\n+      \"descriptionHelper\": \"Teks ini akan ditampilkan kepada pengguna lain saat mereka mencari agen ini.\",\n       \"open\": \"Terbitkan Agen\",\n       \"paymentAddress\": \"Alamat Pembayaran\",\n       \"publish\": \"Terbitkan\","
+ },
+ {
+  "sha": "4625eeb23f42f238dae73267708a13ed4e380318",
+  "filename": "libs/shinkai-i18n/locales/ja-JP.json",
+  "status": "modified",
+  "additions": 2,
+  "deletions": 0,
+  "changes": 2,
+  "blob_url": "https://github.com/dcSpark/shinkai-local-ai-agents/blob/3b257bde67434f841cb5d1fe094ea6164d24e2b3/libs%2Fshinkai-i18n%2Flocales%2Fja-JP.json",
+  "raw_url": "https://github.com/dcSpark/shinkai-local-ai-agents/raw/3b257bde67434f841cb5d1fe094ea6164d24e2b3/libs%2Fshinkai-i18n%2Flocales%2Fja-JP.json",
+  "contents_url": "https://api.github.com/repos/dcSpark/shinkai-local-ai-agents/contents/libs%2Fshinkai-i18n%2Flocales%2Fja-JP.json?ref=3b257bde67434f841cb5d1fe094ea6164d24e2b3",
+  "patch": "@@ -80,6 +80,8 @@\n       \"amount\": \"金額\",\n       \"asset\": \"資産\",\n       \"description\": \"説明\",\n+      \"amountHelper\": \"金額はUSDCです\",\n+      \"descriptionHelper\": \"この説明は他のユーザーがこのエージェントを探す際に表示されます。\",\n       \"open\": \"エージェントを公開\",\n       \"paymentAddress\": \"支払いアドレス\",\n       \"publish\": \"公開\","
+ },
+ {
+  "sha": "6d8959a7f231c6d8fdb598475e3d4e90466dcd44",
+  "filename": "libs/shinkai-i18n/locales/tr-TR.json",
+  "status": "modified",
+  "additions": 2,
+  "deletions": 0,
+  "changes": 2,
+  "blob_url": "https://github.com/dcSpark/shinkai-local-ai-agents/blob/3b257bde67434f841cb5d1fe094ea6164d24e2b3/libs%2Fshinkai-i18n%2Flocales%2Ftr-TR.json",
+  "raw_url": "https://github.com/dcSpark/shinkai-local-ai-agents/raw/3b257bde67434f841cb5d1fe094ea6164d24e2b3/libs%2Fshinkai-i18n%2Flocales%2Ftr-TR.json",
+  "contents_url": "https://api.github.com/repos/dcSpark/shinkai-local-ai-agents/contents/libs%2Fshinkai-i18n%2Flocales%2Ftr-TR.json?ref=3b257bde67434f841cb5d1fe094ea6164d24e2b3",
+  "patch": "@@ -80,6 +80,8 @@\n       \"amount\": \"Miktar\",\n       \"asset\": \"Varlık\",\n       \"description\": \"Açıklama\",\n+      \"amountHelper\": \"Değer USDC cinsindendir\",\n+      \"descriptionHelper\": \"Diğer kullanıcılar bu ajanı aradığında bu açıklama gösterilecektir.\",\n       \"open\": \"Ajanı Yayınla\",\n       \"paymentAddress\": \"Ödeme Adresi\",\n       \"publish\": \"Yayınla\","
+ },
+ {
+  "sha": "a7fd906129005f0721c797727911bd61fdb65dd3",
+  "filename": "libs/shinkai-i18n/locales/zh-CN.json",
+  "status": "modified",
+  "additions": 2,
+  "deletions": 0,
+  "changes": 2,
+  "blob_url": "https://github.com/dcSpark/shinkai-local-ai-agents/blob/3b257bde67434f841cb5d1fe094ea6164d24e2b3/libs%2Fshinkai-i18n%2Flocales%2Fzh-CN.json",
+  "raw_url": "https://github.com/dcSpark/shinkai-local-ai-agents/raw/3b257bde67434f841cb5d1fe094ea6164d24e2b3/libs%2Fshinkai-i18n%2Flocales%2Fzh-CN.json",
+  "contents_url": "https://api.github.com/repos/dcSpark/shinkai-local-ai-agents/contents/libs%2Fshinkai-i18n%2Flocales%2Fzh-CN.json?ref=3b257bde67434f841cb5d1fe094ea6164d24e2b3",
+  "patch": "@@ -80,6 +80,8 @@\n       \"amount\": \"金额\",\n       \"asset\": \"资产\",\n       \"description\": \"描述\",\n+      \"amountHelper\": \"金额以 USDC 为单位\",\n+      \"descriptionHelper\": \"当其他用户搜索该代理时会显示此说明。\",\n       \"open\": \"发布代理\",\n       \"paymentAddress\": \"支付地址\",\n       \"publish\": \"发布\","
+ },
+ {
+  "sha": "7477f857f40b5cc31df02f429bb8a2e78a675053",
+  "filename": "libs/shinkai-message-ts/src/api/tools/types.ts",
+  "status": "modified",
+  "additions": 1,
+  "deletions": 1,
+  "changes": 2,
+  "blob_url": "https://github.com/dcSpark/shinkai-local-ai-agents/blob/3b257bde67434f841cb5d1fe094ea6164d24e2b3/libs%2Fshinkai-message-ts%2Fsrc%2Fapi%2Ftools%2Ftypes.ts",
+  "raw_url": "https://github.com/dcSpark/shinkai-local-ai-agents/raw/3b257bde67434f841cb5d1fe094ea6164d24e2b3/libs%2Fshinkai-message-ts%2Fsrc%2Fapi%2Ftools%2Ftypes.ts",
+  "contents_url": "https://api.github.com/repos/dcSpark/shinkai-local-ai-agents/contents/libs%2Fshinkai-message-ts%2Fsrc%2Fapi%2Ftools%2Ftypes.ts?ref=3b257bde67434f841cb5d1fe094ea6164d24e2b3",
+  "patch": "@@ -277,7 +277,7 @@ export type ToolPrice =\n \n export type ToolUsageType = {\n   PerUse: ToolPrice;\n-  Downloadable: ToolPrice;\n+  // Downloadable: ToolPrice; // TODO: add this back in when backend is ready\n };\n export type PaymentTool = {\n   toolKey: string;"
+ }
+]

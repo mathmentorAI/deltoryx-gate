@@ -1,0 +1,14 @@
+[
+ {
+  "sha": "cb91f65c429e3c684373d592f8b46b8a1cb76f59",
+  "filename": "architecture/evm/evm_state_poller.go",
+  "status": "modified",
+  "additions": 7,
+  "deletions": 2,
+  "changes": 9,
+  "blob_url": "https://github.com/erpc/erpc/blob/66ef214e08249ec599468dd4b88793472e482afb/architecture%2Fevm%2Fevm_state_poller.go",
+  "raw_url": "https://github.com/erpc/erpc/raw/66ef214e08249ec599468dd4b88793472e482afb/architecture%2Fevm%2Fevm_state_poller.go",
+  "contents_url": "https://api.github.com/repos/erpc/erpc/contents/architecture%2Fevm%2Fevm_state_poller.go?ref=66ef214e08249ec599468dd4b88793472e482afb",
+  "patch": "@@ -151,13 +151,18 @@ func (e *EvmStatePoller) Bootstrap(ctx context.Context) error {\n \t\t\t\tcancel()\n \t\t\t\tif err != nil {\n \t\t\t\t\tif errors.Is(subCtxErr, context.DeadlineExceeded) {\n-\t\t\t\t\t\te.logger.Error().Err(err).\n+\t\t\t\t\t\te.logger.Warn().Err(err).\n \t\t\t\t\t\t\tMsgf(\"failed to poll evm state due to sub-context timeout after %f seconds\", timeout.Seconds())\n \t\t\t\t\t} else if errors.Is(subCtxErr, context.Canceled) {\n \t\t\t\t\t\te.logger.Info().Err(err).\n \t\t\t\t\t\t\tMsgf(\"shutting down evm state poller due to context cancellation (e.g. app exiting)\")\n \t\t\t\t\t} else {\n-\t\t\t\t\t\te.logger.Error().Err(err).Msgf(\"failed to poll evm state\")\n+\t\t\t\t\t\tseverity := common.ClassifySeverity(err)\n+\t\t\t\t\t\tif severity == common.SeverityCritical {\n+\t\t\t\t\t\t\te.logger.Error().Err(err).Msgf(\"failed to poll evm state\")\n+\t\t\t\t\t\t} else {\n+\t\t\t\t\t\t\te.logger.Warn().Err(err).Msgf(\"failed to poll evm state\")\n+\t\t\t\t\t\t}\n \t\t\t\t\t}\n \t\t\t\t}\n \t\t\t}"
+ }
+]

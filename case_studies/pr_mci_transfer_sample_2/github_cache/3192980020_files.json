@@ -1,0 +1,38 @@
+[
+ {
+  "sha": "d21710053dfbf00e0ef5bbf1d598569f6118b6be",
+  "filename": "index.ts",
+  "status": "modified",
+  "additions": 55,
+  "deletions": 1,
+  "changes": 56,
+  "blob_url": "https://github.com/ref-tools/ref-tools-mcp/blob/ecd3eac70491f744ad82a13be77c7d2b15adc005/index.ts",
+  "raw_url": "https://github.com/ref-tools/ref-tools-mcp/raw/ecd3eac70491f744ad82a13be77c7d2b15adc005/index.ts",
+  "contents_url": "https://api.github.com/repos/ref-tools/ref-tools-mcp/contents/index.ts?ref=ecd3eac70491f744ad82a13be77c7d2b15adc005",
+  "patch": "@@ -162,6 +162,60 @@ const getRefUrl = () => {\n \n let moduleNames: string[] | undefined = undefined\n \n+function formatSearchResult(result: any): string {\n+  // Check if this is a private repo result that needs formatting\n+  if (result.content && typeof result.content === 'string') {\n+    const content = result.content\n+    const lines = content.split('\\n')\n+    \n+    // Check if it's in the private repo format (starts with repo: and filepath:)\n+    if (lines.length >= 2 && lines[0].startsWith('repo:') && lines[1].startsWith('filepath:')) {\n+      const repoLine = lines[0]\n+      const filepathLine = lines[1]\n+      let contentStartIndex = 2\n+      \n+      // Find where the content starts (after separator)\n+      for (let i = 2; i < lines.length; i++) {\n+        if (lines[i] === '----') {\n+          contentStartIndex = i + 1\n+          // Skip any empty lines after the separator\n+          while (contentStartIndex < lines.length && lines[contentStartIndex].trim() === '') {\n+            contentStartIndex++\n+          }\n+          break\n+        }\n+      }\n+      \n+      // Extract the actual content\n+      const actualContent = lines.slice(contentStartIndex).join('\\n')\n+      const contentLines = actualContent.split('\\n')\n+      \n+      // Check if content starts with overview line\n+      if (contentLines.length > 0 && contentLines[0].trim().startsWith('overview:')) {\n+        const overviewLine = contentLines[0].trim()\n+        const cleanedContent = contentLines.slice(1).join('\\n').trimStart()\n+        \n+        // Return the properly formatted result with overview in metadata\n+        const formattedResult = {\n+          ...result,\n+          content: `${repoLine}\\n${filepathLine}\\n${overviewLine}\\n\\n----\\n\\n${cleanedContent}`\n+        }\n+        return JSON.stringify(formattedResult)\n+      } else {\n+        // No overview line in content, add empty overview to metadata\n+        const formattedResult = {\n+          ...result,\n+          content: `${repoLine}\\n${filepathLine}\\noverview: \\n\\n----\\n\\n${actualContent}`\n+        }\n+        return JSON.stringify(formattedResult)\n+      }\n+    }\n+  }\n+  \n+  // For non-private repo results or results that don't need formatting, return as-is\n+  return JSON.stringify(result)\n+}\n+\n async function doSearch(query: string, keyWords?: string[], source?: string) {\n   // Handle web search through Tavily when source is 'web'\n   if (source === 'web') {\n@@ -211,7 +265,7 @@ async function doSearch(query: string, keyWords?: string[], source?: string) {\n         },\n         ...data.docs.map((result: any) => ({\n           type: 'text',\n-          text: JSON.stringify(result),\n+          text: formatSearchResult(result),\n         })),\n       ],\n     }"
+ },
+ {
+  "sha": "40cd81395043901d886a37f9738df8639bc6456e",
+  "filename": "package-lock.json",
+  "status": "modified",
+  "additions": 3,
+  "deletions": 3,
+  "changes": 6,
+  "blob_url": "https://github.com/ref-tools/ref-tools-mcp/blob/ecd3eac70491f744ad82a13be77c7d2b15adc005/package-lock.json",
+  "raw_url": "https://github.com/ref-tools/ref-tools-mcp/raw/ecd3eac70491f744ad82a13be77c7d2b15adc005/package-lock.json",
+  "contents_url": "https://api.github.com/repos/ref-tools/ref-tools-mcp/contents/package-lock.json?ref=ecd3eac70491f744ad82a13be77c7d2b15adc005",
+  "patch": "@@ -1,12 +1,12 @@\n {\n   \"name\": \"ref-tools-mcp\",\n-  \"version\": \"0.16.0\",\n+  \"version\": \"2.0.0\",\n   \"lockfileVersion\": 3,\n   \"requires\": true,\n   \"packages\": {\n     \"\": {\n       \"name\": \"ref-tools-mcp\",\n-      \"version\": \"0.16.0\",\n+      \"version\": \"2.0.0\",\n       \"dependencies\": {\n         \"@modelcontextprotocol/inspector\": \"^0.10.2\",\n         \"@modelcontextprotocol/sdk\": \"^1.0.3\",\n@@ -21,7 +21,7 @@\n         \"esbuild\": \"^0.24.0\",\n         \"prettier\": \"^3.4.2\",\n         \"tsx\": \"^4.19.4\",\n-        \"typescript\": \"^5.3.3\"\n+        \"typescript\": \"^5.8.3\"\n       }\n     },\n     \"node_modules/@babel/runtime\": {"
+ },
+ {
+  "sha": "a9cb22be869308c04ef9b3a7b5fcdbaddbe82f6a",
+  "filename": "package.json",
+  "status": "modified",
+  "additions": 1,
+  "deletions": 1,
+  "changes": 2,
+  "blob_url": "https://github.com/ref-tools/ref-tools-mcp/blob/ecd3eac70491f744ad82a13be77c7d2b15adc005/package.json",
+  "raw_url": "https://github.com/ref-tools/ref-tools-mcp/raw/ecd3eac70491f744ad82a13be77c7d2b15adc005/package.json",
+  "contents_url": "https://api.github.com/repos/ref-tools/ref-tools-mcp/contents/package.json?ref=ecd3eac70491f744ad82a13be77c7d2b15adc005",
+  "patch": "@@ -31,6 +31,6 @@\n     \"esbuild\": \"^0.24.0\",\n     \"prettier\": \"^3.4.2\",\n     \"tsx\": \"^4.19.4\",\n-    \"typescript\": \"^5.3.3\"\n+    \"typescript\": \"^5.8.3\"\n   }\n }"
+ }
+]

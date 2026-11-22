@@ -1,0 +1,14 @@
+[
+ {
+  "sha": "3936294174233f89e5b3f3c5f9de3dff888a61ba",
+  "filename": "snippet_manager/snippetmanager.py",
+  "status": "modified",
+  "additions": 8,
+  "deletions": 8,
+  "changes": 16,
+  "blob_url": "https://github.com/allthingsida/qscripts/blob/17e3ec57d0ab4483ef75d7f14f23f281d001c0d0/snippet_manager%2Fsnippetmanager.py",
+  "raw_url": "https://github.com/allthingsida/qscripts/raw/17e3ec57d0ab4483ef75d7f14f23f281d001c0d0/snippet_manager%2Fsnippetmanager.py",
+  "contents_url": "https://api.github.com/repos/allthingsida/qscripts/contents/snippet_manager%2Fsnippetmanager.py?ref=17e3ec57d0ab4483ef75d7f14f23f281d001c0d0",
+  "patch": "@@ -91,14 +91,14 @@ def __init__(self):\n         self.index = idaapi.netnode()\r\n         self.index.create(\"$ scriptsnippets\")\r\n \r\n-    def delete(self, snippet: snippet_t) -> bool:\r\n-        if snippet.netnode_idx == idaapi.BADNODE:\r\n-            return False\r\n-\r\n-        self.index.altdel(snippet.index)\r\n-        snippet.netnode_idx = idaapi.BADNODE\r\n-        idaapi.netnode(snippet.netnode_idx).kill()\r\n-        return True\r\n+    def delete(self, snippet: snippet_t) -> bool:\n+        if snippet.netnode_idx == idaapi.BADNODE:\n+            return False\n+\n+        self.index.altdel(snippet.index)\n+        idaapi.netnode(snippet.netnode_idx).kill()\n+        snippet.netnode_idx = idaapi.BADNODE\n+        return True\n \r\n     def delete_all(self) -> None:\r\n         snippets = self.retrieve_snippets(fast=True)\r"
+ }
+]

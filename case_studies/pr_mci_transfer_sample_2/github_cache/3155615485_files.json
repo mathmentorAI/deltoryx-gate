@@ -1,0 +1,14 @@
+[
+ {
+  "sha": "c91b1cfd56c8a837a70361d7df079688f1b6bfac",
+  "filename": ".github/workflows/claude.yml",
+  "status": "added",
+  "additions": 46,
+  "deletions": 0,
+  "changes": 46,
+  "blob_url": "https://github.com/liam-hq/liam/blob/ccfebed3685a077dc3ad6b3a0ad98531a3e3f6fd/.github%2Fworkflows%2Fclaude.yml",
+  "raw_url": "https://github.com/liam-hq/liam/raw/ccfebed3685a077dc3ad6b3a0ad98531a3e3f6fd/.github%2Fworkflows%2Fclaude.yml",
+  "contents_url": "https://api.github.com/repos/liam-hq/liam/contents/.github%2Fworkflows%2Fclaude.yml?ref=ccfebed3685a077dc3ad6b3a0ad98531a3e3f6fd",
+  "patch": "@@ -0,0 +1,46 @@\n+# Based on https://github.com/anthropics/claude-code-action/blob/main/examples/claude.yml\n+name: Claude PR Assistant\n+\n+on:\n+  issue_comment:\n+    types: [created]\n+  pull_request_review_comment:\n+    types: [created]\n+  issues:\n+    types: [opened, assigned]\n+  pull_request_review:\n+    types: [submitted]\n+\n+jobs:\n+  claude-code-action:\n+    if: |\n+      (\n+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||\n+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||\n+        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||\n+        (github.event_name == 'issues' && contains(github.event.issue.body, '@claude'))\n+      ) && (\n+        github.event.comment.author_association == 'OWNER' ||\n+        github.event.comment.author_association == 'MEMBER' ||\n+        github.event.review.author_association == 'OWNER' ||\n+        github.event.review.author_association == 'MEMBER' ||\n+        github.event.issue.author_association == 'OWNER' ||\n+        github.event.issue.author_association == 'MEMBER'\n+      )\n+    runs-on: ubuntu-latest\n+    permissions:\n+      contents: write\n+      pull-requests: write\n+      issues: write\n+      id-token: write\n+    steps:\n+      - name: Checkout repository\n+        uses: actions/checkout@v4\n+        with:\n+          fetch-depth: 1\n+\n+      - name: Run Claude PR Action\n+        uses: anthropics/claude-code-action@beta\n+        with:\n+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}\n+          timeout_minutes: \"60\""
+ }
+]

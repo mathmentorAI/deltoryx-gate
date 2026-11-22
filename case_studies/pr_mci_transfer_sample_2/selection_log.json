@@ -1,0 +1,228 @@
+{
+ "seed": 20261123,
+ "quota": {
+  "partial": 2,
+  "misaligned": 2,
+  "aligned": 6
+ },
+ "excluded_first_transfer_sample": [
+  "2855386414",
+  "3119422525",
+  "3148951832",
+  "3189027271",
+  "3222703182",
+  "3222826115",
+  "3242736120",
+  "3242794608",
+  "3243568724",
+  "3248046560"
+ ],
+ "selected": [
+  {
+   "pr_id": "3159544492",
+   "agent": "OpenAI_Codex",
+   "gold": "partial",
+   "url": "https://github.com/mochilang/mochi/pull/2102",
+   "base_sha": "8576b81a5452b7fafc2896fa218d124d47bebd58",
+   "head_sha": "5dccd9e6e6406893d03f7166dcdc35c9d9e91a81"
+  },
+  {
+   "pr_id": "3077280318",
+   "agent": "OpenAI_Codex",
+   "gold": "partial",
+   "url": "https://github.com/allthingsida/qscripts/pull/13",
+   "base_sha": "50850df1dfaabd5e88201bd51c6f7c2c5eef57ad",
+   "head_sha": "17e3ec57d0ab4483ef75d7f14f23f281d001c0d0"
+  },
+  {
+   "pr_id": "3206231303",
+   "agent": "Copilot",
+   "gold": "misaligned",
+   "url": "https://github.com/github/gh-gei/pull/1379",
+   "base_sha": "92e2f5c5e2c2b694cb7a15e06c3313cc9b1c6abb",
+   "head_sha": "29f17c7aff0957ae6bb93490355d808bbe8ad344"
+  },
+  {
+   "pr_id": "3104613438",
+   "agent": "Copilot",
+   "gold": "misaligned",
+   "url": "https://github.com/wvlet/airframe/pull/3931",
+   "base_sha": "ab3f07e514a1c8efb16b4190a4b41c07360072a3",
+   "head_sha": "b37b1fc9b60113ff1f96997bd8d63ee5201dcdc8"
+  },
+  {
+   "pr_id": "3147343923",
+   "agent": "OpenAI_Codex",
+   "gold": "aligned",
+   "url": "https://github.com/mochilang/mochi/pull/807",
+   "base_sha": "2fe670c014742ea37ba73d4183f689851d114164",
+   "head_sha": "e1130b7da6153e42f73979a0ead09ff7a48c3720"
+  },
+  {
+   "pr_id": "3104056039",
+   "agent": "Copilot",
+   "gold": "aligned",
+   "url": "https://github.com/microsoft/perfview/pull/2218",
+   "base_sha": "ab1f020a96c43c94ef700edc1b4573042bfa2b2e",
+   "head_sha": "d2541887a05d50a208b0fee6087acdf75b0e222d"
+  },
+  {
+   "pr_id": "3244968620",
+   "agent": "OpenAI_Codex",
+   "gold": "aligned",
+   "url": "https://github.com/mochilang/mochi/pull/10023",
+   "base_sha": "83225a1d919d8dac9c80fad91b75f8d20a08e1e6",
+   "head_sha": "95d6ad5da98d9fc4a5674ed1575747ddce3d9638"
+  },
+  {
+   "pr_id": "3250736652",
+   "agent": "OpenAI_Codex",
+   "gold": "aligned",
+   "url": "https://github.com/MontrealAI/AGI-Alpha-Agent-v0/pull/3645",
+   "base_sha": "1cad74da0760b883218f1e023b362ebefe094fbf",
+   "head_sha": "5a4ed5d6d299c5f45abda1e48ca6fb8648f25f9a"
+  },
+  {
+   "pr_id": "3245817025",
+   "agent": "OpenAI_Codex",
+   "gold": "aligned",
+   "url": "https://github.com/maxbbraun/accent/pull/44",
+   "base_sha": "e0f826d6d5da3f34bb88b32424b8979be03863f8",
+   "head_sha": "8c6a880d1816973a4b030fbb4389d3a7f8cc0627"
+  },
+  {
+   "pr_id": "3088525099",
+   "agent": "OpenAI_Codex",
+   "gold": "aligned",
+   "url": "https://github.com/MontrealAI/AGI-Alpha-Agent-v0/pull/707",
+   "base_sha": "9f9e1bf3048bb17cbee8811f2c30934970283c7e",
+   "head_sha": "3ea93219be21203b8849765603646d378ca2dec2"
+  }
+ ],
+ "skipped": [
+  {
+   "pr_id": "3166296043",
+   "agent": "Cursor",
+   "gold": "partial",
+   "url": "https://github.com/WorkflowAI/WorkflowAI/pull/541",
+   "base_sha": "af1ac6388a97ca001b2f0a9f91f3c71fb67efe9b",
+   "head_sha": "90b3249b71b735d88030a9e8835266f9e9e67890",
+   "issues": [
+    "files",
+    "lines"
+   ]
+  },
+  {
+   "pr_id": "3177565431",
+   "agent": "OpenAI_Codex",
+   "gold": "partial",
+   "url": "https://github.com/dcSpark/shinkai-local-ai-agents/pull/1050",
+   "base_sha": "6b097ba6b8feb6b652a1766505d78968ac9ececd",
+   "head_sha": "3b257bde67434f841cb5d1fe094ea6164d24e2b3",
+   "issues": [
+    "files",
+    "lines"
+   ]
+  },
+  {
+   "pr_id": "3192980020",
+   "agent": "Cursor",
+   "gold": "partial",
+   "url": "https://github.com/ref-tools/ref-tools-mcp/pull/3",
+   "base_sha": "bc366d37da7d8953addf2bf75ea540fcf4018e1c",
+   "head_sha": "ecd3eac70491f744ad82a13be77c7d2b15adc005",
+   "issues": [
+    "lines"
+   ]
+  },
+  {
+   "pr_id": "3046541869",
+   "agent": "Devin",
+   "gold": "partial",
+   "url": "https://github.com/antiwork/flexile/pull/274",
+   "issues": [
+    "github_unavailable"
+   ]
+  },
+  {
+   "pr_id": "3209551629",
+   "agent": "Cursor",
+   "gold": "partial",
+   "url": "https://github.com/jabrena/cursor-rules-java/pull/143",
+   "base_sha": "244e97c3bf4bd8630d03032013162a63f5830cba",
+   "head_sha": "d20a297ca521e4c0f4c32e6b018fa9958347efd2",
+   "issues": [
+    "files",
+    "lines",
+    "size"
+   ]
+  },
+  {
+   "pr_id": "3023246654",
+   "agent": "Devin",
+   "gold": "partial",
+   "url": "https://github.com/erpc/erpc/pull/245",
+   "base_sha": "2779b9362ee2c4c6e321b0693cded6e1f8a7dd4d",
+   "head_sha": "66ef214e08249ec599468dd4b88793472e482afb",
+   "issues": [
+    "lines"
+   ]
+  },
+  {
+   "pr_id": "3259184030",
+   "agent": "Devin",
+   "gold": "partial",
+   "url": "https://github.com/lingodotdev/lingo.dev/pull/1061",
+   "base_sha": "2d673697b9cf4d91de2f48444581f8b3fd894cd6",
+   "head_sha": "e2bfc72ed47959d9b44877763e552fe41b4d4579",
+   "issues": [
+    "files",
+    "lines"
+   ]
+  },
+  {
+   "pr_id": "3230611789",
+   "agent": "Copilot",
+   "gold": "misaligned",
+   "url": "https://github.com/jeroenterheerdt/HAsmartirrigation/pull/598",
+   "base_sha": "8208b1fcb23ea881d32c8ee4a362cbdbb0c1842a",
+   "head_sha": "0cecf5baf8713d5237db3fbbe935bfc2940d2c87",
+   "issues": [
+    "size"
+   ]
+  },
+  {
+   "pr_id": "3155615485",
+   "agent": "Devin",
+   "gold": "misaligned",
+   "url": "https://github.com/liam-hq/liam/pull/2063",
+   "base_sha": "5d53e637eb4b7daf24a0549cd20edf7e25bfa709",
+   "head_sha": "ccfebed3685a077dc3ad6b3a0ad98531a3e3f6fd",
+   "issues": [
+    "lines"
+   ]
+  },
+  {
+   "pr_id": "3227381137",
+   "agent": "Devin",
+   "gold": "aligned",
+   "url": "https://github.com/crewAIInc/crewAI/pull/3153",
+   "base_sha": "e7a5747c6b8ce4ddad5a43aaf6b56f8997916459",
+   "head_sha": "bbf012e80038a20e1606094838a7839584fe34da",
+   "issues": [
+    "lines"
+   ]
+  },
+  {
+   "pr_id": "2962004817",
+   "agent": "Devin",
+   "gold": "aligned",
+   "url": "https://github.com/GlareDB/glaredb/pull/3558",
+   "base_sha": "a692d16ed1c7233b345e1d4314d87280225578e1",
+   "head_sha": "7c2e7dbc3284e0a50519ef80c4538db189bc1305",
+   "issues": [
+    "lines"
+   ]
+  }
+ ]
+}

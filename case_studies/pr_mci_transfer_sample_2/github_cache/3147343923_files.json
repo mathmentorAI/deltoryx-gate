@@ -1,0 +1,14 @@
+[
+ {
+  "sha": "3ff92c578997aa9181223f3f2ec8623709e4fcba",
+  "filename": "examples/leetcode/190/reverse-bits.mochi",
+  "status": "added",
+  "additions": 32,
+  "deletions": 0,
+  "changes": 32,
+  "blob_url": "https://github.com/mochilang/mochi/blob/e1130b7da6153e42f73979a0ead09ff7a48c3720/examples%2Fleetcode%2F190%2Freverse-bits.mochi",
+  "raw_url": "https://github.com/mochilang/mochi/raw/e1130b7da6153e42f73979a0ead09ff7a48c3720/examples%2Fleetcode%2F190%2Freverse-bits.mochi",
+  "contents_url": "https://api.github.com/repos/mochilang/mochi/contents/examples%2Fleetcode%2F190%2Freverse-bits.mochi?ref=e1130b7da6153e42f73979a0ead09ff7a48c3720",
+  "patch": "@@ -0,0 +1,32 @@\n+// Solution for LeetCode problem 190 - Reverse Bits\n+\n+fun reverseBits(n: int): int {\n+  var result = 0\n+  var x = n\n+  var count = 0\n+  while count < 32 {\n+    let bit = x % 2\n+    result = result * 2 + bit\n+    x = x / 2\n+    count = count + 1\n+  }\n+  return result\n+}\n+\n+// Test cases from LeetCode\n+\n+test \"example 1\" {\n+  expect reverseBits(43261596) == 964176192\n+}\n+\n+test \"example 2\" {\n+  expect reverseBits(4294967293) == 3221225471\n+}\n+\n+/*\n+Common Mochi language errors and how to fix them:\n+1. Using '==' when assignment is intended, or vice versa. In conditions use '=='.\n+2. Forgetting to declare mutable variables with 'var', leading to \"cannot assign\" errors.\n+3. Trying to use Python-style bit shifts (like n >> 1) before they are implemented.\n+   Instead divide by 2 to shift right when working with positive numbers.\n+*/"
+ }
+]

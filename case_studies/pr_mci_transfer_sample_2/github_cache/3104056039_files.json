@@ -1,0 +1,14 @@
+[
+ {
+  "sha": "c6b9d3d4d3a642a8475c51a216f969ea1001c5b3",
+  "filename": "src/PerfView/MainWindow.xaml",
+  "status": "modified",
+  "additions": 1,
+  "deletions": 0,
+  "changes": 1,
+  "blob_url": "https://github.com/microsoft/perfview/blob/d2541887a05d50a208b0fee6087acdf75b0e222d/src%2FPerfView%2FMainWindow.xaml",
+  "raw_url": "https://github.com/microsoft/perfview/raw/d2541887a05d50a208b0fee6087acdf75b0e222d/src%2FPerfView%2FMainWindow.xaml",
+  "contents_url": "https://api.github.com/repos/microsoft/perfview/contents/src%2FPerfView%2FMainWindow.xaml?ref=d2541887a05d50a208b0fee6087acdf75b0e222d",
+  "patch": "@@ -198,6 +198,7 @@\n                     <TreeView.ItemContainerStyle>\n                         <Style TargetType=\"TreeViewItem\">\n                             <Setter Property=\"AutomationProperties.Name\" Value=\"{Binding Name}\" />\n+                            <Setter Property=\"IsExpanded\" Value=\"{Binding IsExpanded}\" />\n                         </Style>\n                     </TreeView.ItemContainerStyle>\n                     <TreeView.ItemTemplate>"
+ }
+]

@@ -37,6 +37,8 @@ from claimlayer.v4 import (  # noqa: E402
     DERIVATION_PLANNER_PROMPT_VERSION_V2,
     DERIVATION_PLANNER_PROMPT_V3,
     DERIVATION_PLANNER_PROMPT_VERSION_V3,
+    DERIVATION_PLANNER_PROMPT_V4,
+    DERIVATION_PLANNER_PROMPT_VERSION_V4,
     ClaimDerivationPlanner,
     verify_claim,
 )
@@ -359,16 +361,18 @@ def main() -> None:
     ap.add_argument("--max-retries", type=int, default=1)
     ap.add_argument("--interval-sec", type=float, default=0.4)
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT_PATH)
-    ap.add_argument("--prompt", choices=("v2", "v3", "v4"), default="v4",
+    ap.add_argument("--prompt", choices=("v2", "v3", "v4", "v5"), default="v5",
                     help="v2 reproduces the recorded 14/14 evidence; v3 allows planner-proposed operations; "
-                         "v4 adds line-range citations, diff sides and count_lines conventions")
+                         "v4 adds line-range citations, diff sides and count_lines conventions; "
+                         "v5 adds typed diff-presence premises, count scope/definitions and evidence scope")
     ap.add_argument("--max-tokens", type=int, default=2048)
     args = ap.parse_args()
     global PROMPT, PROMPT_VERSION
     PROMPT, PROMPT_VERSION = {
         "v2": (DERIVATION_PLANNER_PROMPT_V2, DERIVATION_PLANNER_PROMPT_VERSION_V2),
         "v3": (DERIVATION_PLANNER_PROMPT_V3, DERIVATION_PLANNER_PROMPT_VERSION_V3),
-        "v4": (DERIVATION_PLANNER_PROMPT, DERIVATION_PLANNER_PROMPT_VERSION),
+        "v4": (DERIVATION_PLANNER_PROMPT_V4, DERIVATION_PLANNER_PROMPT_VERSION_V4),
+        "v5": (DERIVATION_PLANNER_PROMPT, DERIVATION_PLANNER_PROMPT_VERSION),
     }[args.prompt]
 
     if args.phase == "all" and args.out.exists():

@@ -218,9 +218,9 @@ Devuelve ÚNICAMENTE un objeto JSON válido con este esquema exacto:
 }"""
 
 # v4: line-range citations, revision/file binding for diffs, reproducible counts, a generic example.
-DERIVATION_PLANNER_PROMPT_VERSION = "v4-derivation-planner-4"
+DERIVATION_PLANNER_PROMPT_VERSION_V4 = "v4-derivation-planner-4"
 
-DERIVATION_PLANNER_PROMPT = """Eres el planificador estructurado de derivaciones de Deltoryx Gate.
+DERIVATION_PLANNER_PROMPT_V4 = """Eres el planificador estructurado de derivaciones de Deltoryx Gate.
 Recibes `sources` (documentos con `document_id`, `revision` y `text`), una `claim` (afirmación a contrastar), un catálogo explícito `operations_catalog`, opcionalmente `declared_rules` y `units`, y opcionalmente `repair_feedback` de un intento previo fallido.
 
 Tu tarea es proponer premisas verificables extraídas SOLO de `sources` y un plan acíclico de pasos sobre `operations_catalog` para recalcular el hecho relevante y compararlo con `claim`. Un motor determinista comprobará todas las citas, ejecutará las operaciones y decidirá si `claim` se sostiene, queda refutada o carece de evidencia.
@@ -258,6 +258,95 @@ Devuelve ÚNICAMENTE un objeto JSON válido con este esquema exacto:
   "premises": [
     {
       "claim_id": "p1",
+      "document_id": "string",
+      "revision": "string",
+      "quote": "subcadena literal exacta de sources (o vacía si usas line_start/line_end)",
+      "line_start": "int|null",
+      "line_end": "int|null",
+      "entity": "string",
+      "event": "string",
+      "predicate": "string",
+      "value": "JSON",
+      "unit": "string|null",
+      "direction": "before|after|neutral|null",
+      "anchor_reference": "string|null",
+      "polarity": 1
+    }
+  ],
+  "steps": [
+    {
+      "step_id": "s1",
+      "operation": "nombre_operacion_catalogo",
+      "premises": ["p1", "p2"],
+      "conclusion_id": "c1",
+      "rule_id": "string|null",
+      "rule_version": "string|null",
+      "parameters": {},
+      "assumptions": [],
+      "proposed_value": "JSON|null",
+      "proposed_unit": "string|null"
+    }
+  ],
+  "derived_conclusion_id": "c1|null",
+  "missing_premises": [
+    {"role": "string", "description": "string"}
+  ],
+  "assumptions": ["string"],
+  "suggested_rules": [
+    {"rule_id": "string", "description": "string", "premises": ["string"], "conclusion": "string"}
+  ],
+  "proposed_operations": [
+    {"name": "identificador", "description": "string", "inputs": ["a", "b"], "expression": "árbol JSON o null", "output_type": "string", "output_unit": "string|inherit|null"}
+  ]
+}"""
+
+
+# v5 (stage 3): typed diff-presence premises, structural counts with scope, count definitions, scope of textual evidence.
+DERIVATION_PLANNER_PROMPT_VERSION = "v4-derivation-planner-5"
+
+DERIVATION_PLANNER_PROMPT = """Eres el planificador estructurado de derivaciones de Deltoryx Gate.
+Recibes `sources` (documentos con `document_id`, `revision` y `text`), una `claim` (afirmación a contrastar), un catálogo explícito `operations_catalog`, opcionalmente `declared_rules` y `units`, y opcionalmente `repair_feedback` de un intento previo fallido.
+
+Tu tarea es proponer premisas verificables extraídas SOLO de `sources` y un plan acíclico de pasos sobre `operations_catalog` para recalcular el hecho relevante y compararlo con `claim`. Un motor determinista comprobará todas las citas, ejecutará las operaciones y decidirá si `claim` se sostiene, queda refutada o carece de evidencia.
+
+Reglas estrictas:
+1. `claim` es EXCLUSIVAMENTE el objeto a contrastar. NUNCA uses `claim` como premisa, cita o evidencia, ni tomes datos del reloj del sistema. Extrae en `claim_target` lo que afirma literalmente `claim` sin cambiar su valor, unidad ni polaridad.
+2. Cada premisa en `premises` debe citar un `document_id` y `revision` existentes en `sources` y copiar en `quote` un fragmento LITERAL exacto (subcadena continua) del `text` de ese documento.
+3. Mantén la correspondencia por cláusula elemental: la `quote` debe respaldar exactamente `entity`, `event`, `value`, `unit`, `direction` y `anchor_reference`. No mezcles valores de una cláusula con entidades o eventos de otra cláusula. Cuando la cláusula nombre un sujeto o evento, usa esas mismas palabras literales en `entity`/`event` (no etiquetas abstractas). Para días de la semana usa `unit: null`. El `event` debe ser una palabra o frase que aparezca literalmente dentro de la `quote` (normalmente el verbo de la cláusula), nunca el nombre del atributo (`predicate`); amplía la `quote` a la cláusula completa si hace falta.
+4. En desplazamientos relativos: expresiones hacia atrás ("antes", "atrás", "previo", "hace", "disminuye", "before", "earlier", "ago", "minus") requieren signo NEGATIVO en `value` (ej. -2) y `direction="before"`; expresiones hacia adelante ("después", "posterior", "luego", "aumenta", "after", "later", "plus") requieren signo POSITIVO y `direction="after"`. Si el texto indica respecto a qué evento/fecha es el desplazamiento, ponlo en `anchor_reference`.
+5. Usa SOLO operaciones declaradas en `operations_catalog` (y `rule_id` declarados en `declared_rules` cuando uses `rule_application`). Respeta estrictamente el orden de operandos del catálogo:
+   - `weekday_shift`: `premises` = `[id_ancla_dia_semana, id_desplazamiento]`
+   - `date_offset`: `premises` = `[id_ancla_fecha_iso, id_desplazamiento]`
+   - `sub`: `premises` = `[id_minuendo, id_sustraendo]`
+   - `div`: `premises` = `[id_numerador, id_denominador]`
+6. Si falta un dato indispensable en `sources` (por ejemplo, falta el ancla temporal o falta un operando necesario), NO lo inventes ni uses el reloj del sistema: deja `steps` vacío, `derived_conclusion_id` en `null` y detalla la carencia en `missing_premises`.
+7. Si necesitas una operación ausente de `operations_catalog` y `declared_rules`, PROPÓNLA en `proposed_operations` y úsala en `steps` con su `name`. Siempre que puedas, defínela con `expression`, un árbol JSON sobre las primitivas de `expression_primitives`: nodos `{"input": "<nombre de entrada>"}`, `{"const": <escalar>}` u `{"op": "<primitiva>", "args": [...]}`. Las entradas se asignan en orden a los `premises` del paso. Deltoryx interpretará y re-ejecutará la expresión (fiabilidad C). Si no puede expresarse así, deja `expression` en `null` y pon el resultado en `proposed_value` del paso: quedará registrado como afirmación tuya, de fiabilidad baja (D). Nunca escribas código de programación.
+9. Cada documento de `sources` trae `numbered_text` (sus líneas numeradas desde 1). Para citar varias líneas indica `line_start` y `line_end` (inclusive) del documento en lugar de copiar el texto: Deltoryx extraerá la cita literal. Si usas `quote`, debe ser una subcadena exacta.
+10. Evidencia de diffs unificados: `+` = línea solo en head, `-` = solo en base, ` ` = presente en ambos. Para afirmar que unas líneas están en el diff usa una premisa de PRESENCIA: `{"claim_id", "kind": "diff_presence", "document_id", "file": ruta del archivo, "side": "added"|"removed"|"context", "line_start", "line_end", "text": contenido de esas líneas sin el prefijo (opcional)}`. No lleva `event`, `value` ni `unit`. Deltoryx comprueba ruta, lado y líneas contra el parche. Indica en `claim_target.revision` de qué habla la afirmación: `change` (por defecto), `head`, `base`, `added` o `removed`. Para afirmar «se añadió/eliminó X» usa `identity` sobre la premisa de presencia y `claim_target.value` = true. Una línea solo de base no sostiene una conclusión sobre head; el contexto sin cambios no demuestra un cambio.
+11. Una premisa de presencia acredita una modificación TEXTUAL. Afirmaciones sobre ejecución, comportamiento o resultados («arregla», «funciona», «se ejecuta», «el test pasa», «mejora») no se demuestran con el diff: indícalo en `missing_premises` (qué evidencia adicional haría falta) en lugar de forzar una derivación. Si el arreglo es textual (por ejemplo, documentación), sí basta el diff.
+12. Recuentos: usa `count_lines` sobre una premisa de presencia con `parameters` {"line_prefix": "+"|"-"|" ", "scope": "file"} para contar todas las líneas de ese lado del archivo en el parche, o "scope": "range" si el sujeto es exactamente el rango citado. Un filtro `contains` que elijas tú reproduce el número pero NO acredita qué se cuenta (tests, casos, funciones): el verificador se abstendrá salvo que uses una definición de `count_definitions` con {"definition": "<id>"}. Contar líneas sin filtro solo mide «líneas». Si el archivo contado termina en «\ No newline at end of file», fija `line_convention` ("git" cuenta esa última línea, "wc" no) solo si la afirmación lo indica. Citar un número escrito en una fuente no demuestra un recuento; las fuentes escritas por el autor que repiten la afirmación no son evidencia independiente.
+
+Ejemplo de forma (ajeno a cualquier caso real): fuente `d1` con el diff de `config/limits.yaml`, cuyas líneas 5-7 del documento son tres líneas añadidas `max_*`; afirmación «El cambio añade tres líneas a config/limits.yaml». Plan: `claim_target` = {"subject": "config/limits.yaml", "predicate": "líneas añadidas", "value": 3, "unit": "count", "revision": "added"}; premisa `p1` = {"kind": "diff_presence", "document_id": "d1", "file": "config/limits.yaml", "side": "added", "line_start": 5, "line_end": 7}; paso `count_lines` sobre `p1` con {"line_prefix": "+", "scope": "file"} → 3. Para «añade la clave max_rate», usa una premisa de presencia de esa línea e `identity` con `value` true. Si la afirmación fuera «al menos tres líneas», añade una operación propuesta `al_menos` con `expression` {"op": "ge", "args": [{"input": "n"}, {"const": 3}]} sobre el recuento.
+8b. Prefiere premisas cuyo `value` aparezca literalmente en la `quote` (números, nombres, rutas, identificadores). Un valor que no esté en la cita (por ejemplo `true` como interpretación de una línea) se registra como interpretación tuya y rebaja la fiabilidad al grado más bajo (E).
+8. NUNCA emitas puntuaciones de confianza, probabilidades, dictámenes (`supported`/`refuted`) ni código ejecutable.
+
+Devuelve ÚNICAMENTE un objeto JSON válido con este esquema exacto:
+{
+  "claim_target": {
+    "subject": "string",
+    "predicate": "string",
+    "value": "JSON",
+    "unit": "string|null",
+    "polarity": 1,
+    "revision": "change|head|base|added|removed|null"
+  },
+  "premises": [
+    {
+      "claim_id": "p1",
+      "kind": "diff_presence|null",
+      "file": "string|null (solo diff_presence)",
+      "side": "added|removed|context|null (solo diff_presence)",
+      "text": "string|null (solo diff_presence)",
       "document_id": "string",
       "revision": "string",
       "quote": "subcadena literal exacta de sources (o vacía si usas line_start/line_end)",
@@ -350,6 +439,7 @@ class ClaimDerivationPlanner:
     model: OpenAICompatibleModel
     prompt: str = DERIVATION_PLANNER_PROMPT
     prompt_version: str = DERIVATION_PLANNER_PROMPT_VERSION
+    count_definitions: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def identity(self) -> Mapping[str, Any]:
@@ -387,6 +477,8 @@ class ClaimDerivationPlanner:
             ],
             "units": [u.name for u in sorted(registry._units.values(), key=lambda x: x.name)],
         }
+        if "count_definitions" in self.prompt:
+            payload["count_definitions"] = [d.to_dict() for d in (getattr(self, "count_definitions", None) or {}).values()]
         if "proposed_operations" in self.prompt:
             payload["expression_primitives"] = {k: v["doc"] for k, v in EXPRESSION_PRIMITIVES.items()}
         if repair_feedback:
@@ -2437,6 +2529,9 @@ class ClaimVerifier:
             self.planner = ClaimDerivationPlanner(model=model)
         else:
             raise ValueError("Provide either 'model' (OpenAICompatibleModel) or 'planner' (DerivationPlanner).")
+        if self.count_definitions and isinstance(self.planner, ClaimDerivationPlanner):
+            import dataclasses as _dc
+            self.planner = _dc.replace(self.planner, count_definitions=self.count_definitions)
         if max_retries < 0 or max_retries > 5:
             raise ValueError("max_retries must be in [0, 5].")
         self.catalog = catalog

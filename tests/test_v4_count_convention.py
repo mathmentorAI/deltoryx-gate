@@ -52,6 +52,6 @@ def test_fixed_convention_resolves() -> None:
 
 
 def test_terminated_block_is_not_convention_sensitive() -> None:
-    src = {"d1": DIFF.rsplit("\n", 1)[0] + "\n+delta"}
+    src = {"d1": DIFF.rsplit("\n", 1)[0].replace("+1,3", "+1,4") + "\n+delta"}
     r = verify_plan(src, "El archivo etc/hosts.allow añade 4 líneas", _plan(4, {"line_prefix": "+"}))
     assert r.epistemic_verdict == "derived", (r.outcome_category, r.defects)

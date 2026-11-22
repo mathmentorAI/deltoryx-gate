@@ -195,7 +195,10 @@ from .triage import LANES, draft_vocabulary, segment_text, triage, verify_draft
 from ..semantic.models import EvidenceRef, SourceDocument, StructuredQuery
 from ..semantic.adapters import OpenAICompatibleModel
 
-__all__ = ['ENGINE_VERSION', 'EvidenceLayer', 'UnitEvaluation', 'evaluate_unit_admissibility',
+from .count_definitions import CountDefinition, LINE_ATTRIBUTE_TERMS
+from .diff_evidence import count_diff_lines, parse_unified_diff, verify_diff_presence
+
+__all__ = ['CountDefinition', 'LINE_ATTRIBUTE_TERMS', 'count_diff_lines', 'parse_unified_diff', 'verify_diff_presence', 'ENGINE_VERSION', 'EvidenceLayer', 'UnitEvaluation', 'evaluate_unit_admissibility',
            'Vocabulary', 'PredicateSpec', 'FieldSpec', 'Unit', 'UnitRegistry',
            'STANDARD_UNITS', 'SPANISH_UNITS', 'SPANISH_UNIT_ALIASES', 'UNIT_PROFILES', 'CONDITION_STATUSES', 'UnmappedProposal', 'EpistemicProfile', 'DEFAULT_PROFILE', 'EXPLICIT',
            'AcceptancePolicy', 'EvidenceUnit', 'TransitiveRule', 'LLMProposalReader', 'ProposalReader', 'RecordedProposalReader',

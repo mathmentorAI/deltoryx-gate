@@ -10,7 +10,7 @@ from claimlayer.v4.diff_evidence import numbered_text, parse_unified_diff, resol
 DIFF = "\n".join([
     "File: lib/shapes.py (status: modified)",                  # 1
     "Unified diff from base to head:",                         # 2
-    "@@ -10,6 +10,8 @@ class Shape:",                          # 3
+    "@@ -10,5 +10,7 @@ class Shape:",                          # 3
     "     def area(self):",                                    # 4  context
     "         return 0",                                       # 5  context
     "-    def legacy_perimeter(self):",                        # 6  removed
@@ -40,16 +40,18 @@ def test_diff_map_sides_files_and_line_numbers() -> None:
     assert numbered_text("a\nb").splitlines() == ["1| a", "2| b"]
 
 
-def test_positive_control_count_over_line_range_with_file_bound_entity() -> None:
+def test_count_over_line_range_planner_filter_is_interpretation_but_binding_holds() -> None:
+    """Stage 3: a planner-chosen filter ('def ') reproduces the count (2) but does not establish
+    that it counts 'methods'; the verifier abstains and shows what was checked."""
     plan = _plan({"subject": "lib/shapes.py", "predicate": "métodos añadidos", "value": 2, "unit": "count", "polarity": 1, "revision": "added"},
                  {"claim_id": "p1", "document_id": "d1", "line_start": 8, "line_end": 11, "entity": "lib/shapes.py",
                   "event": "def", "predicate": "bloque añadido", "value": None, "unit": None, "direction": "neutral", "polarity": 1},
                  {"step_id": "s1", "operation": "count_lines", "premises": ["p1"], "conclusion_id": "c1",
                   "parameters": {"line_prefix": "+", "contains": "def "}})
     r = verify_plan(SRC, "El cambio añade 2 métodos a lib/shapes.py", plan)
-    assert r.epistemic_verdict == "derived", (r.outcome_category, r.defects)
-    assert r.computed_conclusion["value"] == 2 and r.reliability["grade"] == "A"
-    assert r.operational_routing.status == "PASS"
+    assert r.epistemic_verdict == "insufficient_evidence", (r.outcome_category, r.defects)
+    assert r.outcome_category == "count_criterion_interpreted"
+    assert r.computed_conclusion["value"] == 2 and "2 líneas" in r.explanation and "'def '" in r.explanation
     prem = r.premises[0]
     assert prem["quote_source"] == "line_range"
     assert prem["diff_binding"]["files"] == ["lib/shapes.py"] and prem["diff_binding"]["sides"] == ["+"]

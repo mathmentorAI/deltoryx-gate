@@ -463,9 +463,13 @@ def compute_reliability(
         seen.add(node_id)
         if node_id in premises:
             consumers = {str(s["operation"]) for s in steps if node_id in (s.get("premises") or ())}
-            fid = ("literal_quote" if consumers and consumers <= QUOTE_CONSUMING_OPS
-                   else premise_fidelity(premises[node_id].get("value")))
-            elements.append({"kind": "premise", "id": node_id, "fidelity": fid, "grade": "A" if fid in ("literal", "literal_quote") else "E",
+            if premises[node_id].get("kind") == "diff_presence":
+                fid = "diff_presence_verified"
+            else:
+                fid = ("literal_quote" if consumers and consumers <= QUOTE_CONSUMING_OPS
+                       else premise_fidelity(premises[node_id].get("value")))
+            elements.append({"kind": "premise", "id": node_id, "fidelity": fid,
+                             "grade": "A" if fid in ("literal", "literal_quote", "diff_presence_verified") else "E",
                              "value": premises[node_id].get("value"),
                              "document_id": (premises[node_id].get("evidence") or {}).get("document_id")})
             return
@@ -473,7 +477,8 @@ def compute_reliability(
         if st is None:
             return
         op = str(st["operation"])
-        elements.append({"kind": "step", "id": str(st.get("step_id")), "operation": op, "grade": step_grade(op, proposed)})
+        elements.append({"kind": "step", "id": str(st.get("step_id")), "operation": op,
+                         "grade": st.get("grade") or step_grade(op, proposed)})
         for p in st.get("premises") or ():
             visit(str(p))
 

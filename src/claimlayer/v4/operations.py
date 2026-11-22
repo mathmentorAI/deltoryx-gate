@@ -951,60 +951,101 @@ def _exec_rule_application(
     )
 
 
+def _count_lines_structural(diff: Mapping[str, Any], parameters: Mapping[str, Any], claim_id: str) -> OperationOutput:
+    """Structural count over a diff premise: rows come from the full-patch structure, so headers,
+    hunk headers and the 'No newline' marker are classified, never excluded by prefix."""
+    scope = parameters.get("scope") or "range"
+    if scope not in ("range", "file"):
+        return OperationOutput(ok=False, error_code="COUNT_LINES_INVALID_SCOPE", error_kind="formal_error")
+    contains = parameters.get("contains")
+    files = diff.get("files") or {}
+    path = parameters.get("file")
+    if path is None:
+        if len(diff.get("range_files") or []) != 1:
+            return OperationOutput(ok=False, error_code="COUNT_LINES_RANGE_SPANS_FILES", error_kind="formal_error")
+        path = diff["range_files"][0]
+    if path not in files:
+        return OperationOutput(ok=False, error_code="COUNT_LINES_FILE_NOT_IN_PREMISE", error_kind="formal_error")
+    fdat = files[path]
+    lo, hi = diff["range"]
+    side = parameters.get("line_prefix")
+    side_inferred = False
+    if side in (None, ""):
+        # Determined by structure only when the cited range holds a single kind of body line.
+        kinds = {r[1] for r in fdat["rows"] if lo <= r[0] <= hi}
+        if len(kinds) != 1:
+            return OperationOutput(ok=False, error_code="COUNT_LINES_DIFF_REQUIRES_SIDE", error_kind="formal_error")
+        side = {"a": "+", "r": "-", "c": " "}[kinds.pop()]
+        side_inferred = True
+    if side not in ("+", "-", " "):
+        return OperationOutput(ok=False, error_code="COUNT_LINES_INVALID_PREFIX", error_kind="formal_error")
+    kind = {"+": "a", "-": "r", " ": "c"}[side]
+    universe = [r for r in fdat["rows"] if r[1] == kind and (contains is None or contains in r[3])]
+    sel = universe if scope == "file" else [r for r in universe if lo <= r[0] <= hi]
+    unterminated = sum(1 for r in sel if r[2])
+    convention = parameters.get("line_convention") or None
+    count_git, count_wc = len(sel), len(sel) - unterminated
+    value = count_wc if convention == "wc" else count_git
+    return OperationOutput(
+        ok=True, value=value, unit="count",
+        details={"source_claim_id": claim_id, "structural": True, "document_id": diff.get("document_id"),
+                 "file": path, "line_prefix": side, "side_inferred": side_inferred, "scope": scope, "contains": contains,
+                 "definition": parameters.get("definition"),
+                 "criterion": "declared_definition" if parameters.get("definition") else ("filter" if contains is not None else "structural_lines"),
+                 "counted_lines": value, "line_convention": convention,
+                 "count_git": count_git, "count_wc": count_wc, "unterminated_lines": unterminated,
+                 "convention_sensitive": bool(unterminated) and not convention,
+                 "range_covers_file": len(sel) == len(universe), "file_total_observed": len(universe),
+                 "truncated": bool(fdat.get("truncation")), "truncation": list(fdat.get("truncation") or []),
+                 "file_status": fdat.get("status")},
+    )
+
+
 def _exec_count_lines(
     premises: Sequence[ClaimNode],
     parameters: Mapping[str, Any],
     profile: DomainProfile,
 ) -> OperationOutput:
-    """Count lines of ONE premise's verified literal quote (reproducible count by Deltoryx).
+    """Count lines of ONE premise (reproducible count by Deltoryx).
 
-    parameters: line_prefix ('+', '-', ' ' or None) restricts to unified-diff lines of that side;
-    contains (literal, case-sensitive) restricts to lines containing it. Diff file headers and the
-    '\\ No newline at end of file' marker are never counted.
+    Diff premise (metadata['diff'] present): structural count over the full-patch structure of the
+    premise's file. parameters: line_prefix ('+', '-', ' ', required) selects the side; scope
+    'range' (cited lines, default) or 'file' (every body line of that side in the file); contains
+    (literal) filters lines; line_convention None|'git'|'wc' for lines without trailing newline.
 
-    line_convention: None (unset), 'git' or 'wc'. A counted line immediately followed by the
-    '\\ No newline' marker has no terminating newline: git/diff stats count it, `wc -l` does not.
-    When such lines are counted and no convention is fixed, the count is convention-dependent and
-    details['convention_sensitive'] is True (the planner then neither derives nor refutes).
+    Plain-text premise: counts the lines of the verified literal quote, optionally filtered by
+    line_prefix / contains. No line is excluded by prefix.
     """
     if len(premises) != 1:
         return OperationOutput(ok=False, error_code="COUNT_LINES_REQUIRES_ONE_PREMISE", error_kind="missing_input")
+    convention = parameters.get("line_convention")
+    if convention not in (None, "", "git", "wc"):
+        return OperationOutput(ok=False, error_code="COUNT_LINES_INVALID_CONVENTION", error_kind="formal_error")
+    contains = parameters.get("contains")
+    if contains is not None and (not isinstance(contains, str) or not contains):
+        return OperationOutput(ok=False, error_code="COUNT_LINES_INVALID_CONTAINS", error_kind="formal_error")
+    diff = (premises[0].metadata or {}).get("diff")
+    if diff:
+        return _count_lines_structural(diff, parameters, premises[0].claim_id)
     text = premises[0].text or ""
     prefix = parameters.get("line_prefix")
     if prefix not in (None, "", "+", "-", " "):
         return OperationOutput(ok=False, error_code="COUNT_LINES_INVALID_PREFIX", error_kind="formal_error")
-    contains = parameters.get("contains")
-    if contains is not None and (not isinstance(contains, str) or not contains):
-        return OperationOutput(ok=False, error_code="COUNT_LINES_INVALID_CONTAINS", error_kind="formal_error")
-    convention = parameters.get("line_convention")
-    if convention not in (None, "", "git", "wc"):
-        return OperationOutput(ok=False, error_code="COUNT_LINES_INVALID_CONVENTION", error_kind="formal_error")
     n = 0
-    unterminated = 0
-    last_counted = False
     for line in text.splitlines():
-        if line.startswith("\\ No newline at end of file"):
-            if last_counted:
-                unterminated += 1
-            last_counted = False
-            continue
-        last_counted = False
-        if line.startswith("+++") or line.startswith("---"):
-            continue
         if prefix and not line.startswith(prefix):
             continue
         if contains is not None and contains not in line:
             continue
         n += 1
-        last_counted = True
-    count_git, count_wc = n, n - unterminated
-    value = count_wc if convention == "wc" else count_git
     return OperationOutput(
-        ok=True, value=value, unit="count",
-        details={"source_claim_id": premises[0].claim_id, "line_prefix": prefix, "contains": contains,
-                 "counted_lines": value, "line_convention": convention or None,
-                 "count_git": count_git, "count_wc": count_wc, "unterminated_lines": unterminated,
-                 "convention_sensitive": bool(unterminated) and not convention},
+        ok=True, value=n, unit="count",
+        details={"source_claim_id": premises[0].claim_id, "structural": False, "line_prefix": prefix,
+                 "contains": contains, "definition": parameters.get("definition"),
+                 "criterion": "declared_definition" if parameters.get("definition") else ("filter" if contains is not None else "structural_lines"),
+                 "counted_lines": n, "line_convention": convention or None,
+                 "count_git": n, "count_wc": n, "unterminated_lines": 0, "convention_sensitive": False,
+                 "range_covers_file": None, "truncated": False},
     )
 
 
@@ -1217,7 +1258,7 @@ def build_default_operation_catalog() -> OperationCatalog:
                 name="count_lines",
                 version="1.0.0",
                 family="arithmetic",
-                description="Count lines of one premise's verified literal quote; parameters.line_prefix ('+', '-', ' ') selects a unified-diff side and parameters.contains filters lines containing a literal. parameters.line_convention ('git' counts a final line without newline, 'wc' does not) must be set when the block contains '\\ No newline at end of file'. Use it to reproduce counts (lines, tests, entries) instead of quoting a number.",
+                description="Count lines of one premise. Over a diff premise the count is structural (full-patch hunks): parameters.line_prefix ('+', '-', ' ') selects the side (required), parameters.scope 'range' (cited lines) or 'file' (whole file in the patch), parameters.contains filters lines containing a literal, parameters.definition names a declared count definition, parameters.line_convention ('git' counts a final line without newline, 'wc' does not). A filter chosen by the planner is an interpretation: the count is reproduced but does not by itself establish what is being counted.",
                 inputs=({"role": "quoted_block"},),
                 output_type="quantity",
                 executor=_exec_count_lines,

@@ -44,7 +44,18 @@ from .premise_grounding import (
     verify_step_anchor_correspondence,
 )
 from .verifiers import DEFAULT_VERIFIER_REGISTRY, VerifierContext, VerifierRegistry, VerifierResult
-from .diff_evidence import numbered_text, parse_unified_diff, path_matches, resolve_line_range
+from .diff_evidence import (
+    diff_premise_metadata,
+    find_revision_pair,
+    numbered_text,
+    parse_unified_diff,
+    path_matches,
+    resolve_line_range,
+    verify_diff_presence,
+)
+from .count_definitions import CountDefinition, count_definition_registry, structural_line_count_matches
+from .premise_grounding import PremiseGroundingResult as _PGR
+from ..semantic.models import EvidenceRef as _EvidenceRef
 from .vocabulary import STANDARD_UNITS, UNIT_PROFILES, UnitRegistry, UnmappedProposal, label_key, normalize_date
 from .reconstruction import (
     DEFAULT_RELIABILITY_POLICY,
@@ -860,6 +871,73 @@ def _dependency_steps(raw_steps: Sequence[Any], conclusion_id: str) -> list[Mapp
 
 _COUNT_DIMENSIONS = {"count"}
 
+_ADD_TERMS = frozenset({"anade", "anadido", "anadida", "anadidos", "anadidas", "anadir", "agrega", "agregado", "agregada",
+                        "add", "adds", "added", "adding", "introduce", "introduces", "introduced", "new", "nuevo", "nueva",
+                        "nuevos", "nuevas", "crea", "creado", "creada", "create", "creates", "created"})
+_REMOVE_TERMS = frozenset({"elimina", "eliminado", "eliminada", "eliminados", "eliminadas", "eliminar", "borra", "borrado",
+                           "quita", "quitado", "remove", "removes", "removed", "removing", "delete", "deletes", "deleted",
+                           "drop", "drops", "dropped"})
+# Claims about behaviour, execution or results: a textual diff premise never establishes them.
+_BEHAVIOUR_TERMS = frozenset({"ejecuta", "ejecutan", "ejecutar", "ejecutado", "run", "runs", "running", "execute", "executes",
+                              "executed", "pasa", "pasan", "pasar", "pass", "passes", "passing", "passed", "funciona",
+                              "funcionan", "work", "works", "working", "fix", "fixes", "fixed", "corrige", "corregido",
+                              "arregla", "arreglado", "resuelve", "resuelto", "resolve", "resolves", "resolved", "compila",
+                              "compilan", "compile", "compiles", "comportamiento", "behavior", "behaviour", "rendimiento",
+                              "performance", "mejora", "improve", "improves", "improved", "evita", "prevent", "prevents",
+                              "garantiza", "ensure", "ensures", "succeeds", "fails", "falla", "fallan"})
+
+
+def _count_evidence_gaps(
+    steps: Sequence[Mapping[str, Any]],
+    conc_id: str,
+    target: Mapping[str, Any],
+    count_defs: Mapping[str, CountDefinition],
+) -> list[dict[str, Any]]:
+    """What a reproducible count does NOT establish, for every count the conclusion depends on.
+
+    The same rule applies whether the comparison would derive or refute: a count reproduced by
+    Deltoryx proves how many lines match a criterion, not that the criterion measures the claimed
+    attribute (unless a declared definition says so), nor the total when the patch is truncated or
+    the cited range is partial, nor a line count whose convention is ambiguous.
+    """
+    pred = target.get("predicate")
+    gaps: list[dict[str, Any]] = []
+    for st in _dependency_steps(steps, conc_id):
+        if str(st.get("operation")) != "count_lines" or not isinstance(st.get("details"), Mapping):
+            continue
+        d = st["details"]
+        where = (f"{d.get('file')} (lado {d.get('line_prefix')!r}, alcance {d.get('scope')})" if d.get("structural")
+                 else f"la cita de {d.get('source_claim_id')}")
+        checked = (f"{st.get('step_id')}: {d.get('counted_lines')} líneas en {where}"
+                   + (f" que contienen {d['contains']!r}" if d.get("contains") is not None else ""))
+
+        def add(category: str, code: str, missing: str) -> None:
+            gaps.append({"category": category, "code": code, "step_id": st.get("step_id"), "checked": checked, "missing": missing})
+
+        if d.get("truncated"):
+            add("count_scope_truncated", "COUNT_PATCH_TRUNCATED",
+                f"el parche de {d.get('file')} está truncado (bloques {d.get('truncation')}); el recuento observado no es el total")
+        if d.get("structural") and d.get("scope") == "range" and d.get("range_covers_file") is False:
+            add("count_scope_partial", "COUNT_RANGE_PARTIAL",
+                f"el rango citado no cubre todas las líneas de ese lado de {d.get('file')} ({d.get('file_total_observed')} en el parche); "
+                "hace falta alcance 'file' o acreditar que el sujeto es solo ese rango")
+        crit = d.get("criterion")
+        if crit == "declared_definition":
+            cdef = count_defs.get(str(d.get("definition")))
+            if cdef is None or not cdef.counts_attribute(pred):
+                add("count_criterion_not_pertinent", "COUNT_DEFINITION_ATTRIBUTE_MISMATCH",
+                    f"la definición declarada {d.get('definition')!r} no cuenta el atributo afirmado {pred!r}")
+        elif crit == "filter":
+            add("count_criterion_interpreted", "COUNT_CRITERION_INTERPRETED",
+                f"el criterio {d.get('contains')!r} lo eligió el planificador; no está comprobado que cuente {pred!r}")
+        elif not structural_line_count_matches(pred):
+            add("count_criterion_interpreted", "COUNT_CRITERION_INTERPRETED",
+                f"un recuento de líneas no mide {pred!r} sin una definición de recuento declarada")
+        if d.get("convention_sensitive"):
+            add("count_convention_ambiguous", "COUNT_CONVENTION_AMBIGUOUS",
+                f"incluye líneas sin salto final (git {d.get('count_git')}, wc -l {d.get('count_wc')}) y no se fijó convenio")
+    return gaps
+
 
 def _check_conclusion_binding(
     *,
@@ -916,6 +994,10 @@ def _check_conclusion_binding(
                             "message": "La afirmación trata del cambio del PR, pero la evidencia citada del diff es solo contexto sin cambios."})
         if rev_mode == "removed" and not any("-" in sd for sd in sides):
             defects.append({"code": "NO_REMOVED_LINE_EVIDENCE", "message": "La afirmación trata de algo eliminado y no se cita ninguna línea '-'."})
+    if diff_deps and (t_attr & _BEHAVIOUR_TERMS):
+        defects.append({"code": "PRESENCE_SCOPE_EXCEEDED",
+                        "message": (f"La evidencia es una modificación textual del diff; el atributo afirmado {target.get('predicate')!r} "
+                                    "(ejecución, comportamiento o resultado) requiere evidencia adicional.")})
     info: dict[str, Any] = {
         "revision_mode": rev_mode,
         "diff_premises": {str(pr.get("claim_id")): pr["diff_binding"] for pr in diff_deps},
@@ -923,7 +1005,26 @@ def _check_conclusion_binding(
         "premise_revisions": sorted({str((pr.get("evidence") or {}).get("document_id")) + "@" + str((pr.get("evidence") or {}).get("revision", ""))[:12]
                                      for pr in dep_premises}),
     }
-    if chain and node in premises:
+    if chain and node in premises and premises[node].get("kind") == "diff_presence":
+        pr = premises[node]
+        pinfo = pr.get("diff_presence") or {}
+        side = pinfo.get("side")
+        side_ok = not ((t_attr & _ADD_TERMS and side != "added") or (t_attr & _REMOVE_TERMS and side != "removed"))
+        subj_ok = path_matches(str(target.get("subject") or ""), [pinfo.get("file") or ""]) or (
+            bool(t_subj) and t_subj <= (content_tokens(pinfo.get("content")) | content_tokens(pinfo.get("file"))))
+        info.update({"path": "restatement_diff_presence", "premise_side": side, "premise_file": pinfo.get("file"),
+                     "attribute_binding": "side_matched" if side_ok else "side_mismatch",
+                     "subject_binding": "path_or_text" if subj_ok else "mismatch", "scope": "textual_modification"})
+        if not isinstance(target.get("value"), bool):
+            defects.append({"code": "PRESENCE_REQUIRES_BOOLEAN_TARGET",
+                            "message": "Una premisa de presencia acredita que unas líneas están en el diff (sí/no); una cifra requiere un recuento."})
+        if not side_ok:
+            defects.append({"code": "CONCLUSION_SIDE_MISMATCH",
+                            "message": f"La afirmación habla de {target.get('predicate')!r} pero las líneas citadas están en el lado {side!r}."})
+        if not subj_ok:
+            defects.append({"code": "CONCLUSION_SUBJECT_MISMATCH",
+                            "message": f"El sujeto afirmado {target.get('subject')!r} no es la ruta ni el texto de las líneas citadas."})
+    elif chain and node in premises:
         pr = premises[node]
         p_attr = content_tokens(pr.get("predicate")) | content_tokens(pr.get("event"))
         attr_ok = bool(t_attr) and bool(p_attr) and (t_attr <= p_attr or content_tokens(pr.get("predicate")) <= t_attr and content_tokens(pr.get("predicate")))
@@ -1226,6 +1327,7 @@ def verify_plan(
     telemetry: Mapping[str, Any] | None = None,
     unit_profile: str = "auto",
     reliability_policy: ReliabilityPolicy | None = None,
+    count_definitions: Any = None,
 ) -> ClaimVerificationResult:
     """Deterministically validate a structured proposal, ground premises, execute operations, and contrast `claim`."""
     t_ver0 = time.monotonic()
@@ -1236,6 +1338,7 @@ def verify_plan(
     registry = profile.effective_unit_registry()
     eff_verifiers = _effective_verifier_registry(verifier_registry, catalog)
     rel_policy = reliability_policy or DEFAULT_RELIABILITY_POLICY
+    count_defs = count_definition_registry(count_definitions)
     proposed_ops: dict[str, ProposedOperation] = {}
 
     def _finish(
@@ -1470,6 +1573,9 @@ def verify_plan(
     checks_applied: list[str] = ["claim_target_correspondence"]
     seen_premise_ids: set[str] = set()
     diff_maps: dict[str, Any] = {}
+    diff_meta: dict[str, dict[str, Any]] = {}
+    premise_kinds: dict[str, str] = {}
+    rev_pair = find_revision_pair(d.text for d in docs_map.values())
 
     for idx, rp in enumerate(raw_premises):
         if not isinstance(rp, Mapping):
@@ -1481,6 +1587,44 @@ def verify_plan(
             continue
         seen_premise_ids.add(pid)
         raw_premises_by_id[pid] = rp
+
+        if str(rp.get("kind") or "") == "diff_presence":
+            # Typed diff-presence premise: a textual fact checked against the patch structure
+            # (file, side, lines). No event, value or unit is required or invented.
+            premise_kinds[pid] = "diff_presence"
+            doc_obj = docs_map.get(str(rp.get("document_id") or ""))
+            dmap = diff_maps.setdefault(doc_obj.document_id, parse_unified_diff(doc_obj.text)) if doc_obj is not None else None
+            pdefs, pinfo = verify_diff_presence(rp, doc_obj.text if doc_obj is not None else None, dmap, rev_pair)
+            if pdefs:
+                d_dicts = [{"claim_id": pid, "code": d["code"], "message": d["message"], "field": "diff_presence",
+                            "detail": d.get("detail")} for d in pdefs]
+                all_defects.extend(d_dicts)
+                rejected_records.append({**dict(rp), "claim_id": pid, "defects": d_dicts})
+                continue
+            a_ln, b_ln = int(rp["line_start"]), int(rp["line_end"])
+            lines_txt = doc_obj.text.split("\n")
+            start = dmap.line_offsets[a_ln - 1]
+            end = dmap.line_offsets[b_ln - 1] + len(lines_txt[b_ln - 1])
+            ref = _EvidenceRef(document_id=doc_obj.document_id, revision=doc_obj.revision, start=start, end=end,
+                               quote=doc_obj.text[start:end])
+            checks = ("source_document_and_revision", "verbatim_span_bound", "diff_presence_verified")
+            gr = _PGR(claim_id=pid, grounded=True, evidence_ref=ref, checks_passed=checks,
+                      normalized_value=True, normalized_unit=None)
+            groundings_by_id[pid] = gr
+            raw_premises_by_id[pid] = {**dict(rp), "entity": pinfo["file"], "predicate": f"diff_presence:{pinfo['side']}"}
+            diff_meta[pid] = diff_premise_metadata(dmap, doc_obj.document_id, a_ln, b_ln)
+            checks_applied.extend(checks)
+            grounded_records.append({
+                "claim_id": pid, "kind": "diff_presence",
+                "entity": pinfo["file"], "event": "", "predicate": f"diff_presence:{pinfo['side']}",
+                "value": True, "unit": None, "direction": None, "anchor_reference": None,
+                "polarity": _coerce_polarity(rp.get("polarity", 1)),
+                "evidence": gr.to_dict()["evidence"], "matched_clauses": [], "checks_passed": list(checks),
+                "quote_source": "line_range",
+                "diff_binding": dmap.binding_for_indexes(range(a_ln - 1, b_ln)),
+                "diff_presence": pinfo,
+            })
+            continue
 
         quote_source = "quote"
         range_defect = None
@@ -1500,6 +1644,8 @@ def verify_plan(
             dmap = diff_maps.setdefault(doc_obj.document_id, parse_unified_diff(doc_obj.text))
             if dmap is not None:
                 diff_binding = dmap.binding_for_span(gr.evidence_ref.start, gr.evidence_ref.end)
+                if diff_binding.get("document_lines"):
+                    diff_meta[pid] = diff_premise_metadata(dmap, doc_obj.document_id, *diff_binding["document_lines"])
                 ent = str(rp.get("entity") or rp.get("subject") or "")
                 ent_codes = {d.code for d in gr.defects if d.code.startswith("ENTITY_")}
                 if ent_codes and path_matches(ent, diff_binding["files"]):
@@ -1726,7 +1872,9 @@ def verify_plan(
             condition_status=str(rp.get("condition_status") or "unconditional"),
             conditions=tuple(rp.get("conditions") or ()),
             scope=dict(rp.get("scope") or {}),
-            metadata={"event": str(rp.get("event") or ""), "direction": rp.get("direction"), "anchor_reference": rp.get("anchor_reference")},
+            metadata={"event": str(rp.get("event") or ""), "direction": rp.get("direction"), "anchor_reference": rp.get("anchor_reference"),
+                      **({"diff": diff_meta[pid]} if pid in diff_meta else {}),
+                      **({"premise_kind": premise_kinds[pid]} if pid in premise_kinds else {})},
         )
 
     graph_steps: list[InferenceStep] = []
@@ -1807,6 +1955,33 @@ def verify_plan(
                         "offset_grounding": groundings_by_id[o_id],
                     }
 
+        step_grade_override = None
+        if spec.name == "count_lines" and params.get("definition"):
+            cdef = count_defs.get(str(params["definition"]))
+            if cdef is None:
+                return _finish(
+                    claim_target=target_dict,
+                    computed_conclusion=None,
+                    epistemic_verdict="unresolved",
+                    outcome_category="unsupported_operation_or_rule",
+                    routing=OperationalRouting(status="ESCALATE", allowed=False, requires_human=True,
+                                               reasons=("UNDECLARED_COUNT_DEFINITION",)),
+                    premises_out=grounded_records,
+                    defects_out=[{"code": "UNDECLARED_COUNT_DEFINITION",
+                                  "message": f"El paso '{step_id}' usa la definición de recuento {params['definition']!r}, que no está declarada."}],
+                    checks_applied=checks_applied,
+                    explanation=f"Sin resolver: definición de recuento no declarada {params['definition']!r}.",
+                    raw_clean=raw_clean,
+                    graph_admitted=False,
+                    graph=None,
+                    assessment=None,
+                )
+            planner_filter = params.get("contains")
+            params = {**params, "contains": cdef.contains, "definition_version": cdef.version,
+                      **({"line_prefix": cdef.line_prefix} if cdef.line_prefix else {})}
+            if planner_filter is not None and planner_filter != cdef.contains:
+                params["planner_contains_ignored"] = planner_filter
+            step_grade_override = "B"
         op_out = catalog.execute(op_name, prem_nodes, params, profile)
         if not op_out.ok:
             if op_out.error_kind == "missing_input":
@@ -1945,7 +2120,7 @@ def verify_plan(
             "model_proposed_value": prop_val,
             "model_proposed_unit": prop_unit,
             "model_disagreed": disagreed,
-            "grade": step_grade(spec.name, proposed_ops),
+            "grade": step_grade_override or step_grade(spec.name, proposed_ops),
             "proposed_by_planner": spec.name in proposed_ops,
         })
 
@@ -1993,9 +2168,13 @@ def verify_plan(
             premises_out=grounded_records,
             steps_out=verified_steps_out,
             assumptions_out=all_assumptions,
-            defects_out=[{"code": r, "message": f"Verificador v4 marcó {assessment.assessment}: {r}"} for r in refuted_reasons],
+            defects_out=[{"code": r, "message": f"Verificador v4 marcó {assessment.assessment}: {r}"} for r in refuted_reasons]
+            + [{"code": g["code"], "message": g["missing"], "detail": {"step_id": g["step_id"], "checked": g["checked"]}}
+               for g in _count_evidence_gaps(verified_steps_out, conc_id, target_dict, count_defs)],
             checks_applied=checks_applied,
-            explanation=f"La evaluación formal del grafo arrojó '{assessment.assessment}' ({', '.join(refuted_reasons)}).",
+            explanation=(f"La evaluación formal del grafo arrojó '{assessment.assessment}' ({', '.join(refuted_reasons)})."
+                         + "".join(f" Recuento {g['checked']}; falta: {g['missing']}."
+                                   for g in _count_evidence_gaps(verified_steps_out, conc_id, target_dict, count_defs))),
             raw_clean=raw_clean,
             graph_admitted=False,
             graph=graph,
@@ -2018,6 +2197,27 @@ def verify_plan(
         steps=verified_steps_out, registry=registry,
     )
     reliability["binding"] = binding_info
+    if any(d["code"] == "PRESENCE_SCOPE_EXCEEDED" for d in binding_defects):
+        return _finish(
+            claim_target=target_dict,
+            computed_conclusion=computed_conc_dict,
+            epistemic_verdict="insufficient_evidence",
+            outcome_category="presence_scope_exceeded",
+            routing=OperationalRouting(status="ESCALATE", allowed=False, requires_human=True,
+                                       reasons=tuple(dict.fromkeys(d["code"] for d in binding_defects))),
+            premises_out=grounded_records,
+            steps_out=verified_steps_out,
+            assumptions_out=all_assumptions,
+            defects_out=binding_defects,
+            checks_applied=checks_applied + ["conclusion_binding"],
+            explanation=("Evidencia insuficiente: el diff acredita modificaciones textuales; la afirmación trata de ejecución, "
+                         "comportamiento o resultados, que requieren evidencia adicional. " + " ".join(d["message"] for d in binding_defects)),
+            raw_clean=raw_clean,
+            graph_admitted=False,
+            graph=graph,
+            assessment=assessment,
+            reliability=reliability,
+        )
     if binding_defects:
         return _finish(
             claim_target=target_dict,
@@ -2038,28 +2238,24 @@ def verify_plan(
             assessment=assessment,
             reliability=reliability,
         )
-    sensitive = [st for st in _dependency_steps(verified_steps_out, conc_id)
-                 if isinstance(st.get("details"), Mapping) and st["details"].get("convention_sensitive")]
-    if sensitive:
-        det = [{"step_id": st["step_id"], "count_git": st["details"].get("count_git"),
-                "count_wc": st["details"].get("count_wc")} for st in sensitive]
+    count_gaps = _count_evidence_gaps(verified_steps_out, conc_id, target_dict, count_defs)
+    if count_gaps:
+        checked = list(dict.fromkeys(g["checked"] for g in count_gaps))
         return _finish(
             claim_target=target_dict,
             computed_conclusion=computed_conc_dict,
             epistemic_verdict="insufficient_evidence",
-            outcome_category="count_convention_ambiguous",
+            outcome_category=count_gaps[0]["category"],
             routing=OperationalRouting(status="ESCALATE", allowed=False, requires_human=True,
-                                       reasons=("COUNT_CONVENTION_AMBIGUOUS",)),
+                                       reasons=tuple(dict.fromkeys(g["code"] for g in count_gaps))),
             premises_out=grounded_records,
             steps_out=verified_steps_out,
             assumptions_out=all_assumptions,
-            defects_out=[{"code": "COUNT_CONVENTION_AMBIGUOUS",
-                          "message": ("El recuento incluye líneas sin salto de línea final y no se fijó convenio "
-                                      "(git las cuenta, wc -l no); el resultado depende del convenio."),
-                          "detail": det}],
-            checks_applied=checks_applied + ["conclusion_binding", "count_convention"],
-            explanation=("Evidencia insuficiente: el recuento depende del convenio de líneas sin salto final "
-                         f"({det}); ni se deriva ni se refuta."),
+            defects_out=[{"code": g["code"], "message": g["missing"],
+                          "detail": {"step_id": g["step_id"], "checked": g["checked"]}} for g in count_gaps],
+            checks_applied=checks_applied + ["conclusion_binding", "count_evidence"],
+            explanation=("Evidencia insuficiente: ni se deriva ni se refuta. Comprobado: " + "; ".join(checked)
+                         + ". Falta: " + "; ".join(dict.fromkeys(g["missing"] for g in count_gaps)) + "."),
             raw_clean=raw_clean,
             graph_admitted=False,
             graph=graph,
@@ -2229,8 +2425,10 @@ class ClaimVerifier:
         max_retries: int = 1,
         unit_profile: str = "auto",
         reliability_policy: ReliabilityPolicy | None = None,
+        count_definitions: Any = None,
     ) -> None:
         self.reliability_policy = reliability_policy or DEFAULT_RELIABILITY_POLICY
+        self.count_definitions = count_definition_registry(count_definitions)
         if unit_profile not in UNIT_PROFILE_CHOICES:
             raise ValueError(f"unit_profile must be one of {UNIT_PROFILE_CHOICES}, got {unit_profile!r}")
         if planner is not None:
@@ -2383,6 +2581,7 @@ class ClaimVerifier:
                 as_of=as_of,
                 unit_profile=self.unit_profile,
                 reliability_policy=self.reliability_policy,
+                count_definitions=self.count_definitions,
             )
             verifier_ms_acc += ver_res.telemetry.verifier_latency_ms
             attempt_traces.append({
@@ -2510,6 +2709,7 @@ def verify_claim(
     max_retries: int = 1,
     unit_profile: str = "auto",
     reliability_policy: ReliabilityPolicy | None = None,
+    count_definitions: Any = None,
 ) -> ClaimVerificationResult:
     """Public single-call entrypoint verifying a natural-language claim against sources via planner + v4 core."""
     verifier = ClaimVerifier(
@@ -2521,5 +2721,6 @@ def verify_claim(
         max_retries=max_retries,
         unit_profile=unit_profile,
         reliability_policy=reliability_policy,
+        count_definitions=count_definitions,
     )
     return verifier.verify(sources, claim, as_of=as_of)

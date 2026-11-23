@@ -5,7 +5,7 @@ Faithful to the Evidence Intelligence contract:
 * every unit must conform to an application vocabulary (no free-form keys);
 * support, conflicts, authority, aggregation and derivations are computed by
   code over the ledger (dependence-aware Noisy-OR, Q = S^2/(S+O), margin rule);
-* the v2 epistemic table weighs how a unit was obtained and blocks bases such
+* the declared epistemic table weighs how a unit was obtained and blocks bases such
   as narrative or abductive assumptions;
 * no model ever issues a supported/contradicted verdict.
 
@@ -31,9 +31,9 @@ from .fidelity import FieldEvidence, FidelityFinding, verify_extraction_fidelity
 from .models import AcceptancePolicy, EvidenceUnit, context_key
 from .vocabulary import NORMALIZER_VERSION, UnmappedProposal, Vocabulary, decimal_text, label_key, value_relation
 
-ENGINE_VERSION = '4.0.0a1'
+ENGINE_VERSION = '4.0.0'
 CONTRACT = 'claimlayer-evidence-v4'
-TIER_PRIMARY, TIER_ANNEX, TIER_EXTERNAL = 100, 50, 10  # v2 tiers, now declared by the application
+TIER_PRIMARY, TIER_ANNEX, TIER_EXTERNAL = 100, 50, 10  # source tiers declared by the application
 
 
 def _identity_rule_check(conclusion, premises) -> bool:

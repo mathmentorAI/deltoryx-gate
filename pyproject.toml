@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "deltoryx-gate"
-version = "3.2.1"
+version = "4.0.0"
 description = "Deterministic verification & authorization harness for AI agents"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -16,10 +16,10 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+api = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "httpx>=0.27,<1", "python-dotenv>=1,<2"]
 
 [project.scripts]
 deltoryx-gate = "claimlayer.cli:main"
-claimlayer = "claimlayer.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

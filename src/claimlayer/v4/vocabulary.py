@@ -1,6 +1,6 @@
 """Application-declared domain vocabulary: the shared contract between reader and engine.
 
-Free-form keys and ad-hoc unit strings made v3 comparisons depend on a model
+Free-form keys and ad-hoc unit strings make comparisons depend on a model
 reproducing hidden labels verbatim. v4 requires every admitted proposition to
 conform to a versioned vocabulary declared by the application. Normalization is
 deterministic and limited to declared labels: no similarity matching, no

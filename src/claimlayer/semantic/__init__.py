@@ -1,9 +1,5 @@
-from .projection_adapter import LLMPropositionEvidenceVerifier
-from .multihop import TransitiveRelation
-from .models import CandidateClaim, EvidenceRef, SourceDocument, StructuredQuery, SemanticPolicy, SemanticReader, EvidenceVerifier
-from .adapters import OpenAICompatibleModel, LLMSemanticReader, LLMSubjectEvidenceVerifier, LLMEvidenceVerifier
-from .store import VerificationStore
+"""Internal source contracts and provider transport used by the Gate layers."""
+from .models import SourceDocument, EvidenceRef
+from .adapters import OpenAICompatibleModel
 
-__all__ = ['CandidateClaim', 'EvidenceRef', 'SourceDocument', 'StructuredQuery', 'SemanticPolicy',
-           'SemanticReader', 'EvidenceVerifier', 'OpenAICompatibleModel', 'LLMSemanticReader',
-           'LLMEvidenceVerifier', 'LLMSubjectEvidenceVerifier', 'VerificationStore', 'TransitiveRelation', 'LLMPropositionEvidenceVerifier']
+__all__ = ["SourceDocument", "EvidenceRef", "OpenAICompatibleModel"]

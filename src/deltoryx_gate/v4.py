@@ -1,4 +1,4 @@
-"""Deltoryx Gate v4 bounded-domain verification & authorization API."""
+"""The same six-layer Gate API as deltoryx_gate and claimlayer.v4."""
 from __future__ import annotations
 
 import claimlayer.v4 as _v4

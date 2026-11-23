@@ -15,10 +15,10 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
-from ..models import Source
+from ._source_models import Source
 from ..semantic.models import SourceDocument, canonical, digest
-from ..verifiers.diff import build_comparison_policy, extract_divergent_sections_with_coverage
-from ..verifiers.quote_quantity import (
+from ._source_diff import build_comparison_policy, extract_divergent_sections_with_coverage
+from ._source_quantities import (
     _SECTION_HEADER_ONLY_RE,
     _STRUCTURAL_ID_RE,
     _canonicalize_bullets,
@@ -69,7 +69,7 @@ def collect_reference_divergences(
     """Collect cross-document divergences under explicit DomainProfile comparison exclusions.
 
     Both ``evaluate_securitization_candidate`` (production) and
-    ``benchmarks/measure_reader_recall.py`` (measurement) MUST call this helper so
+    Measurement callers must use this helper so
     production and offline recall measure the exact same document comparison set.
     """
     raw_docs = list(corpus_documents.values()) if isinstance(corpus_documents, Mapping) else list(corpus_documents or ())
@@ -386,7 +386,7 @@ def _extract_sentence_quantity_tokens(
 ) -> list[dict[str, Any]]:
     """Extract normalized quantity, step/priority, and date tokens with document offsets.
 
-    Uses v3's ``extract_quantities`` and ``extract_dates_with_spans`` while masking
+    Uses ``extract_quantities`` and ``extract_dates_with_spans`` while masking
     structural identifiers (section/clause/series/tranche/deal-year references).
     """
     if not sentence:
@@ -429,7 +429,7 @@ def _extract_sentence_quantity_tokens(
                 "raw": m.group("num"),
             })
 
-    # 2. Dates via v3 extract_dates_with_spans
+    # 2. Dates via extract_dates_with_spans
     for (ds, de), iso in extract_dates_with_spans(masked, allow_slash=True):
         if _overlaps_occupied(ds, de):
             continue
@@ -440,7 +440,7 @@ def _extract_sentence_quantity_tokens(
             "raw": sentence[ds:de],
         })
 
-    # 3. Quantities via v3 extract_quantities (1-to-1 whitespace length preserved for exact spans)
+    # 3. Quantities via extract_quantities (1-to-1 whitespace length preserved for exact spans)
     len_safe_sentence = re.sub(r"\s", " ", masked)
     for pq in extract_quantities(
         len_safe_sentence,
@@ -2802,7 +2802,7 @@ def _compute_register_state(
                 seen_gap_keys.add(gkey)
                 gap_divergences.append(gap_item)
 
-        # Register every v3 section divergence as an origin='corpus' obligation (family='section_divergence')
+        # Register every section divergence as an origin='corpus' obligation (family='section_divergence')
         div_ob_id = f"corpus::section_divergence::{sec_key}::{digest([pri_id, sec_id, sec_key])[:12]}"
         if div_ob_id not in seen_ids:
             seen_ids.add(div_ob_id)

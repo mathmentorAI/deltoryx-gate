@@ -232,10 +232,3 @@ class VerificationStore:
             'document_revisions': document_revisions,
             'rejections': rejections,
         }
-
-    def legacy_present(self):
-        with self._session(mode='DEFERRED') as db:
-            tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            if not {'documents', 'claims'} <= tables:
-                return False
-            return db.execute('SELECT 1 FROM documents WHERE project_id=? LIMIT 1', (self.project_id,)).fetchone() is not None

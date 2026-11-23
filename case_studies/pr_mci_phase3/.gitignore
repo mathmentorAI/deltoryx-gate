@@ -1,6 +1,0 @@
-data/
-*.jsonl
-*.parquet
-*_local.json
-__pycache__/
-eval_b_pack_local/

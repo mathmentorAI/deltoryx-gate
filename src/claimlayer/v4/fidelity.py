@@ -14,7 +14,7 @@ import re
 from typing import Any, Mapping, Sequence
 
 from ..semantic.models import EvidenceRef
-from ..verifiers.quote_quantity import extract_dates, extract_quantities
+from ._source_quantities import extract_dates, extract_quantities
 from .models import EvidenceUnit
 from .normalizers import (
     NORMALIZER_VERSION,

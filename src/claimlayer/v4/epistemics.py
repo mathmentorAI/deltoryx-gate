@@ -1,20 +1,10 @@
-"""Deterministic epistemic weighting carried over from v2.
-
-The reader may *declare* how a proposition is obtained from the source (its
-basis): stated explicitly, or reached by a named kind of inference. The weight
-of that basis comes from this versioned table, never from the model. Blocked
-bases cannot enter the ledger. The table is the v2 registry in
-core.interfaces, so v2 and v4 share one source of truth.
-"""
+"""Deterministic basis weights for the current verification core; these are policy values, not probabilities."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import MappingProxyType
 
-try:
-    from core.interfaces import BLOCKED_INFERENCE_TYPES, INFERENCE_WEIGHTS
-except ImportError:
-    INFERENCE_WEIGHTS = {
+INFERENCE_WEIGHTS = {
         "arithmetic": 1.00,
         "logical": 1.00,
         "deductive": 1.00,
@@ -47,7 +37,7 @@ except ImportError:
         "counterfactual": 0.05,
         "narrative": 0.00,
     }
-    BLOCKED_INFERENCE_TYPES = frozenset({
+BLOCKED_INFERENCE_TYPES = frozenset({
         "heuristic",
         "abductive",
         "counterfactual",
@@ -62,7 +52,7 @@ EXPLICIT = 'explicit'
 @dataclass(frozen=True)
 class EpistemicProfile:
     """Basis weights are policy values, not calibrated probabilities."""
-    name: str = 'v2-inference-registry'
+    name: str = 'gate-inference-registry'
     version: str = '1'
     weights: MappingProxyType = field(default_factory=lambda: MappingProxyType({EXPLICIT: 1.0, **INFERENCE_WEIGHTS}))
     blocked: frozenset = BLOCKED_INFERENCE_TYPES

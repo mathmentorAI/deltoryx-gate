@@ -293,4 +293,3 @@ class Policy:
                 else self.vocabulary
             )
         return payload
-

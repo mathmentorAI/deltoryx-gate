@@ -736,4 +736,3 @@ def build_comparison_policy(
                                for d in divergences if set(d.primary_quantities) - set(d.secondary_quantities)},
     )
     return policy, divergences
-

@@ -146,4 +146,3 @@ def build_derivation_planner_model(
         retries=2,
         extra_body={"chat_template_kwargs": {"enable_thinking": bool(enable_thinking)}},
     )
-

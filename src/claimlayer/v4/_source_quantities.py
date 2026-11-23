@@ -2795,4 +2795,3 @@ def segment_sentences_with_spans(text: str, base_offset: int = 0) -> list[tuple[
         if s < e:
             sentences.append((base_offset + s, base_offset + e, text[s:e]))
     return sentences
-

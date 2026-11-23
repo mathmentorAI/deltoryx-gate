@@ -1,0 +1,518 @@
+{
+ "per_case": [
+  {
+   "case_id": "T01",
+   "pr_id": "2855386414",
+   "head_sha": "29438ee3aa68",
+   "claim": "This PR implements the merge and split functions for the PDF manipulation package.",
+   "situation": "S2",
+   "expected": "refuted",
+   "expected_routing": "RETRY",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "premise_grounding_defect",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "—",
+    "operation": "ninguna verificada",
+    "justification": "n/a",
+    "note": "premise_grounding_defect: DIFF_PRESENCE_RANGE_NOT_BODY, DIFF_PRESENCE_SIDE_MISMATCH, DIFF_PRESENCE_TEXT_MISMATCH"
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T02",
+   "pr_id": "3119422525",
+   "head_sha": "59e495da5e80",
+   "claim": "add localization tests to verify keys, structure, and placeholders across translation files",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "derived",
+   "observed_routing": "PASS",
+   "outcome_category": "verified_derivation",
+   "verdict_acceptable": true,
+   "review": {
+    "category": "label_ok_bad_justification",
+    "decisive_evidence": "presencia: messages.test.ts añadido (líneas 4-285)",
+    "operation": "identity",
+    "justification": "invalid",
+    "note": "PASS grado A con identity sobre la presencia del archivo. El predicado ('tests que verifican claves, estructura y placeholders') no se comprueba: el verificador solo vincula lado y ruta. Veredicto correcto por el contenido real del archivo, no por la justificación."
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T03",
+   "pr_id": "3148951832",
+   "head_sha": "8c7d6238bb89",
+   "claim": "include tests and notes on common Mochi errors",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "unresolved",
+   "observed_routing": "ESCALATE",
+   "outcome_category": "unsupported_operation_or_rule",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "—",
+    "operation": "ninguna verificada",
+    "justification": "n/a",
+    "note": "unsupported_operation_or_rule: "
+   },
+   "first_attempt": "unsupported_operation_or_rule",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T04",
+   "pr_id": "3189027271",
+   "head_sha": "5856dd610c14",
+   "claim": "Support legacy arg patterns in tpc‑ds queries",
+   "situation": "S2",
+   "expected": "refuted",
+   "expected_routing": "RETRY",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "premise_grounding_defect",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "—",
+    "operation": "ninguna verificada",
+    "justification": "n/a",
+    "note": "premise_grounding_defect: DIFF_PRESENCE_TEXT_MISMATCH"
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T05",
+   "pr_id": "3222703182",
+   "head_sha": "f22daa7df952",
+   "claim": "restore machine README and list remaining tasks",
+   "situation": "S3",
+   "expected": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "observed": "derived",
+   "observed_routing": "PASS",
+   "outcome_category": "verified_derivation",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "false_acceptance",
+    "decisive_evidence": "presencia: 10 tareas '- [ ]' añadidas en tests/machine/x/c/README.md",
+    "operation": "identity",
+    "justification": "invalid",
+    "note": "FALSA ACEPTACIÓN (PASS, grado A). Predicado 'restored and lists remaining tasks': 'restored' no lo acredita la evidencia (el README existía en base) y el propio planificador lo declaró en missing_premises. El verificador ignora missing_premises cuando hay derivación y no comprueba el predicado más allá de lado/ruta."
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T06",
+   "pr_id": "3222826115",
+   "head_sha": "ba7d96b4f17d",
+   "claim": "update COBOL machine translation checklist",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "conclusion_binding_defect",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "—",
+    "operation": "ninguna verificada",
+    "justification": "n/a",
+    "note": "conclusion_binding_defect: CONCLUSION_SUBJECT_MISMATCH"
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T07",
+   "pr_id": "3242736120",
+   "head_sha": "8a66016a73c6",
+   "claim": "Run elixir rosetta tests",
+   "situation": "S3",
+   "expected": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "malformed_proposal",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "—",
+    "operation": "ninguna verificada",
+    "justification": "n/a",
+    "note": "malformed_proposal: CLAIM_TARGET_MISMATCH_WITH_CLAIM_TEXT"
+   },
+   "first_attempt": "malformed_proposal",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T08",
+   "pr_id": "3242794608",
+   "head_sha": "8fcb3931d7f2",
+   "claim": "remove its error file and add blank output file",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "derived",
+   "observed_routing": "PASS",
+   "outcome_category": "verified_derivation",
+   "verdict_acceptable": true,
+   "review": {
+    "category": "label_ok_bad_justification",
+    "decisive_evidence": "presencia: call-a-function-8.error eliminado (p1); .out añadido vacío (p2, sin usar)",
+    "operation": "identity(p1)",
+    "justification": "invalid",
+    "note": "La conclusión solo usa la eliminación (p1); la segunda parte de la afirmación ('add blank output file', p2) no entra en la derivación. Afirmación compuesta verificada por una sola parte."
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T09",
+   "pr_id": "3243568724",
+   "head_sha": "78765b1bc4cd",
+   "claim": "adjust docker build context",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "premise_grounding_defect",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "—",
+    "operation": "ninguna verificada",
+    "justification": "n/a",
+    "note": "premise_grounding_defect: DIFF_PRESENCE_TEXT_MISMATCH"
+   },
+   "first_attempt": "conclusion_binding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T10",
+   "pr_id": "3248046560",
+   "head_sha": "a8ebeff1d658",
+   "claim": "refine boolean printing when generating Rust code",
+   "situation": "S3",
+   "expected": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "premise_grounding_defect",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "—",
+    "operation": "ninguna verificada",
+    "justification": "n/a",
+    "note": "premise_grounding_defect: DIFF_PRESENCE_SIDE_MISMATCH"
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  }
+ ],
+ "metrics": {
+  "confusion_expected_x_observed": {
+   "derived": {
+    "derived": 2,
+    "unresolved": 3
+   },
+   "refuted": {
+    "unresolved": 2
+   },
+   "insufficient_evidence": {
+    "derived": 1,
+    "unresolved": 2
+   }
+  },
+  "verdict_acceptable": "2/10",
+  "correctly_verified (verdict acceptable + valid justification)": "0/10",
+  "label_ok_bad_justification": "2/10",
+  "false_acceptances (PASS on refuted|insufficient reference)": "1/5",
+  "incorrect_refutations (refuted on non-refuted reference)": "0/8",
+  "justified_abstentions (abstention with acceptable verdict + valid justification)": "0/7",
+  "resolvable_cases_ending_in_abstention_or_unresolved": "5/7",
+  "operational_errors (truncated planner output, final)": "0/10",
+  "verifier_abstentions (unresolved by defect/unsupported op, final)": "7/10",
+  "provider_errors": "0/10",
+  "routing_match": "4/10",
+  "inference_cases_resolved_with_valid_derivation": "0/7",
+  "first_attempt_malformed": "2/19 attempts",
+  "admitted_premises_final": 15,
+  "admitted_premises_with_literal_quote_check": 15,
+  "admitted_premises_value_set_by_nemotron_interpretation (non-numeric)": 15,
+  "executed_operations": {
+   "identity": 4
+  },
+  "reliability_grades_final": {
+   "None": 6,
+   "A": 4
+  },
+  "cases_with_planner_proposed_operations": 0,
+  "pass_routing_count": 3
+ },
+ "telemetry": {
+  "calls_total": 19,
+  "retries_total": 9,
+  "total_tokens": {
+   "n": 10,
+   "median": 15739.0,
+   "min": 7628,
+   "max": 48795
+  },
+  "planning_latency_ms": {
+   "n": 10,
+   "median": 23648.3,
+   "min": 16171.4,
+   "max": 77990.8
+  },
+  "verifier_latency_ms": {
+   "n": 10,
+   "median": 6.4,
+   "min": 2.2,
+   "max": 23.7
+  },
+  "api_total_latency_ms": {
+   "n": 10,
+   "median": 23662.0,
+   "min": 16178.1,
+   "max": 78007.1
+  },
+  "client_end_to_end_ms": {
+   "n": 10,
+   "median": 23670.8,
+   "min": 16186.1,
+   "max": 78015.7
+  },
+  "tokens_sum": 199204
+ },
+ "old_evaluators": {
+  "note": "evaluadores anteriores no ejecutados en esta muestra"
+ },
+ "source": {
+  "frozen_dir": "../pr_mci_transfer_sample/frozen",
+  "live": "../pr_mci_transfer_sample/results/live_results_stage3.json",
+  "review": "../pr_mci_transfer_sample/results/justification_review_stage3.json",
+  "prompt_version": "v4-derivation-planner-5",
+  "claim_layer_commit": "46bf79b25e69bb3d0ef02efeca4b984a0d478387",
+  "platform_commit": "7dcb1edd5035fbc1933c24b9cfad715102a3be4c"
+ },
+ "cost": {
+  "valid_inferences": "0/7",
+  "tokens_total": 199204,
+  "planning_ms_total": 338778.1,
+  "end_to_end_ms_total": 338975.8,
+  "tokens_per_valid_inference": "indefinido (0 inferencias válidas)",
+  "end_to_end_ms_per_valid_inference": "indefinido (0 inferencias válidas)"
+ },
+ "per_attempt": {
+  "attempts_total": 19,
+  "tokens_per_attempt": {
+   "n": 19,
+   "median": 7906,
+   "min": 5844,
+   "max": 24546
+  },
+  "planner_latency_ms_per_attempt": {
+   "n": 19,
+   "median": 16339.1,
+   "min": 4971.4,
+   "max": 40502.4
+  },
+  "by_case": {
+   "T01": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 31838.495,
+     "verifier_latency_ms": 4.292,
+     "tokens": 9992
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 33507.822,
+     "verifier_latency_ms": 3.507,
+     "tokens": 10319
+    }
+   ],
+   "T02": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 17705.623,
+     "verifier_latency_ms": 6.129,
+     "tokens": 14396
+    },
+    {
+     "attempt": 2,
+     "outcome": "verified_derivation",
+     "latency_ms": 4971.403,
+     "verifier_latency_ms": 11.784,
+     "tokens": 13700
+    }
+   ],
+   "T03": [
+    {
+     "attempt": 1,
+     "outcome": "unsupported_operation_or_rule",
+     "latency_ms": 16339.066,
+     "verifier_latency_ms": 2.241,
+     "tokens": 7628
+    }
+   ],
+   "T04": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 16598.031,
+     "verifier_latency_ms": 1.479,
+     "tokens": 6249
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 8021.468,
+     "verifier_latency_ms": 1.664,
+     "tokens": 6257
+    }
+   ],
+   "T05": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 8574.584,
+     "verifier_latency_ms": 1.181,
+     "tokens": 7738
+    },
+    {
+     "attempt": 2,
+     "outcome": "verified_derivation",
+     "latency_ms": 11466.587,
+     "verifier_latency_ms": 3.738,
+     "tokens": 7906
+    }
+   ],
+   "T06": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 40502.36,
+     "verifier_latency_ms": 4.499,
+     "tokens": 11932
+    },
+    {
+     "attempt": 2,
+     "outcome": "conclusion_binding_defect",
+     "latency_ms": 37488.476,
+     "verifier_latency_ms": 7.215,
+     "tokens": 12516
+    }
+   ],
+   "T07": [
+    {
+     "attempt": 1,
+     "outcome": "malformed_proposal",
+     "latency_ms": 8748.445,
+     "verifier_latency_ms": 21.832,
+     "tokens": 5844
+    },
+    {
+     "attempt": 2,
+     "outcome": "malformed_proposal",
+     "latency_ms": 11865.883,
+     "verifier_latency_ms": 1.844,
+     "tokens": 5941
+    }
+   ],
+   "T08": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 22466.215,
+     "verifier_latency_ms": 1.005,
+     "tokens": 7833
+    },
+    {
+     "attempt": 2,
+     "outcome": "verified_derivation",
+     "latency_ms": 8498.13,
+     "verifier_latency_ms": 3.194,
+     "tokens": 8001
+    }
+   ],
+   "T09": [
+    {
+     "attempt": 1,
+     "outcome": "conclusion_binding_defect",
+     "latency_ms": 7913.153,
+     "verifier_latency_ms": 3.159,
+     "tokens": 7060
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 8258.29,
+     "verifier_latency_ms": 1.483,
+     "tokens": 7097
+    }
+   ],
+   "T10": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 18161.729,
+     "verifier_latency_ms": 4.516,
+     "tokens": 24249
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 25852.355,
+     "verifier_latency_ms": 5.935,
+     "tokens": 24546
+    }
+   ]
+  }
+ }
+}

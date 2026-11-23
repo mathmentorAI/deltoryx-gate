@@ -1,0 +1,516 @@
+{
+ "per_case": [
+  {
+   "case_id": "T01",
+   "pr_id": "3077280318",
+   "head_sha": "17e3ec57d0ab",
+   "claim": "Fix snippet deletion",
+   "situation": "S3",
+   "expected": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "premise_grounding_defect",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "—",
+    "operation": "ninguna verificada",
+    "justification": "n/a",
+    "note": "premise_grounding_defect: DIFF_PRESENCE_TEXT_MISMATCH"
+   },
+   "first_attempt": "conclusion_binding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T02",
+   "pr_id": "3088525099",
+   "head_sha": "3ea93219be21",
+   "claim": "[alpha_factory] Add quick links to AGENTS",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "derived",
+   "observed_routing": "PASS",
+   "outcome_category": "verified_derivation",
+   "verdict_acceptable": true,
+   "review": {
+    "category": "correct_verified",
+    "decisive_evidence": "presencia: bloque '**Quick links**' y 4 enlaces añadidos en AGENTS.md",
+    "operation": "identity",
+    "justification": "valid",
+    "note": "El predicado 'quick links added' coincide literalmente con el texto citado y el lado."
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T03",
+   "pr_id": "3104056039",
+   "head_sha": "d2541887a05d",
+   "claim": "Fix TreeView auto-expansion when opening trace files",
+   "situation": "S3",
+   "expected": "insufficient_evidence",
+   "expected_routing": "ESCALATE",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "premise_grounding_defect",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "—",
+    "operation": "ninguna verificada",
+    "justification": "n/a",
+    "note": "premise_grounding_defect: DIFF_PRESENCE_TEXT_MISMATCH"
+   },
+   "first_attempt": "malformed_proposal",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T04",
+   "pr_id": "3104613438",
+   "head_sha": "b37b1fc9b601",
+   "claim": "Created test case that demonstrates the problem",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "derived",
+   "observed_routing": "PASS",
+   "outcome_category": "verified_derivation",
+   "verdict_acceptable": true,
+   "review": {
+    "category": "label_ok_bad_justification",
+    "decisive_evidence": "presencia: test('reproduce the exact issue…') añadido",
+    "operation": "identity",
+    "justification": "invalid",
+    "note": "Veredicto dentro del conjunto aceptable, pero 'demonstrates the problem' es un resultado de ejecución: el planificador declaró en missing_premises que faltaba la ejecución y el verificador lo ignoró. Debió abstenerse."
+   },
+   "first_attempt": "verified_derivation",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T05",
+   "pr_id": "3147343923",
+   "head_sha": "e1130b7da615",
+   "claim": "Add LeetCode 190 solution in Mochi",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "derived",
+   "observed_routing": "PASS",
+   "outcome_category": "verified_derivation",
+   "verdict_acceptable": true,
+   "review": {
+    "category": "correct_verified",
+    "decisive_evidence": "presencia: reverse-bits.mochi añadido con '// Solution for LeetCode problem 190 - Reverse Bits'",
+    "operation": "identity",
+    "justification": "valid",
+    "note": "Archivo añadido en examples/leetcode/190 con el comentario de solución; la vinculación ruta/contenido es literal."
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T06",
+   "pr_id": "3159544492",
+   "head_sha": "5dccd9e6e640",
+   "claim": "Expand COBOL backend tests",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "conclusion_binding_defect",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "—",
+    "operation": "ninguna verificada",
+    "justification": "n/a",
+    "note": "conclusion_binding_defect: CONCLUSION_SUBJECT_MISMATCH"
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T07",
+   "pr_id": "3206231303",
+   "head_sha": "29f17c7aff09",
+   "claim": "Remove integrate-boards option from generate-script command",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "premise_grounding_defect",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "—",
+    "operation": "ninguna verificada",
+    "justification": "n/a",
+    "note": "premise_grounding_defect: DIFF_PRESENCE_SIDE_MISMATCH, DIFF_PRESENCE_TEXT_MISMATCH"
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T08",
+   "pr_id": "3244968620",
+   "head_sha": "95d6ad5da98d",
+   "claim": "Enhance Fortran transpiler golden tests",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "premise_grounding_defect",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "—",
+    "operation": "ninguna verificada",
+    "justification": "n/a",
+    "note": "premise_grounding_defect: DIFF_PRESENCE_TEXT_MISMATCH"
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T09",
+   "pr_id": "3245817025",
+   "head_sha": "8c6a880d1816",
+   "claim": "Fix README numbering and server reference",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "insufficient_evidence",
+   "observed_routing": "ESCALATE",
+   "outcome_category": "presence_scope_exceeded",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "—",
+    "operation": "ninguna verificada",
+    "justification": "n/a",
+    "note": "presence_scope_exceeded: PRESENCE_SCOPE_EXCEEDED | Sobreabstención: 'Fix' sobre un cambio textual de README; la regla de alcance por término trata 'fix' como comportamiento."
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  },
+  {
+   "case_id": "T10",
+   "pr_id": "3250736652",
+   "head_sha": "5a4ed5d6d299",
+   "claim": "[alpha_factory] add diagnostics to server tests",
+   "situation": "S1",
+   "expected": "derived",
+   "expected_routing": "PASS",
+   "observed": "unresolved",
+   "observed_routing": "RETRY",
+   "outcome_category": "premise_grounding_defect",
+   "verdict_acceptable": false,
+   "review": {
+    "category": "verifier_abstention",
+    "decisive_evidence": "—",
+    "operation": "ninguna verificada",
+    "justification": "n/a",
+    "note": "premise_grounding_defect: DIFF_PRESENCE_TEXT_MISMATCH"
+   },
+   "first_attempt": "premise_grounding_defect",
+   "old_gate_v4_vocab2": {
+    "gate": null,
+    "claim_status": null
+   }
+  }
+ ],
+ "metrics": {
+  "confusion_expected_x_observed": {
+   "derived": {
+    "derived": 3,
+    "unresolved": 4,
+    "insufficient_evidence": 1
+   },
+   "refuted": {},
+   "insufficient_evidence": {
+    "unresolved": 2
+   }
+  },
+  "verdict_acceptable": "3/10",
+  "correctly_verified (verdict acceptable + valid justification)": "2/10",
+  "label_ok_bad_justification": "1/10",
+  "false_acceptances (PASS on refuted|insufficient reference)": "0/2",
+  "incorrect_refutations (refuted on non-refuted reference)": "0/10",
+  "justified_abstentions (abstention with acceptable verdict + valid justification)": "0/7",
+  "resolvable_cases_ending_in_abstention_or_unresolved": "5/8",
+  "operational_errors (truncated planner output, final)": "0/10",
+  "verifier_abstentions (unresolved by defect/unsupported op, final)": "7/10",
+  "provider_errors": "0/10",
+  "routing_match": "3/10",
+  "inference_cases_resolved_with_valid_derivation": "1/7",
+  "first_attempt_malformed": "1/19 attempts",
+  "admitted_premises_final": 20,
+  "admitted_premises_with_literal_quote_check": 20,
+  "admitted_premises_value_set_by_nemotron_interpretation (non-numeric)": 20,
+  "executed_operations": {
+   "identity": 5
+  },
+  "reliability_grades_final": {
+   "None": 5,
+   "A": 5
+  },
+  "cases_with_planner_proposed_operations": 0,
+  "pass_routing_count": 3
+ },
+ "telemetry": {
+  "calls_total": 19,
+  "retries_total": 9,
+  "total_tokens": {
+   "n": 10,
+   "median": 13969.0,
+   "min": 7617,
+   "max": 41471
+  },
+  "planning_latency_ms": {
+   "n": 10,
+   "median": 29430.4,
+   "min": 15976.6,
+   "max": 120261.9
+  },
+  "verifier_latency_ms": {
+   "n": 10,
+   "median": 9.5,
+   "min": 4.2,
+   "max": 31.5
+  },
+  "api_total_latency_ms": {
+   "n": 10,
+   "median": 29438.8,
+   "min": 15982.8,
+   "max": 120279.8
+  },
+  "client_end_to_end_ms": {
+   "n": 10,
+   "median": 29452.8,
+   "min": 15990.2,
+   "max": 120295.0
+  },
+  "tokens_sum": 198258
+ },
+ "old_evaluators": {
+  "note": "evaluadores anteriores no ejecutados en esta muestra"
+ },
+ "source": {
+  "frozen_dir": "../pr_mci_transfer_sample_2/frozen",
+  "live": "../pr_mci_transfer_sample_2/results/live_results_stage3.json",
+  "review": "../pr_mci_transfer_sample_2/results/justification_review_stage3.json",
+  "prompt_version": "v4-derivation-planner-5",
+  "claim_layer_commit": "46bf79b25e69bb3d0ef02efeca4b984a0d478387",
+  "platform_commit": "7dcb1edd5035fbc1933c24b9cfad715102a3be4c"
+ },
+ "cost": {
+  "valid_inferences": "1/7",
+  "tokens_total": 198258,
+  "planning_ms_total": 489140.6,
+  "end_to_end_ms_total": 489457.8,
+  "tokens_per_valid_inference": 198258.0,
+  "end_to_end_ms_per_valid_inference": 489457.8
+ },
+ "per_attempt": {
+  "attempts_total": 19,
+  "tokens_per_attempt": {
+   "n": 19,
+   "median": 7617,
+   "min": 5784,
+   "max": 22395
+  },
+  "planner_latency_ms_per_attempt": {
+   "n": 19,
+   "median": 20121.3,
+   "min": 6626.6,
+   "max": 82747.6
+  },
+  "by_case": {
+   "T01": [
+    {
+     "attempt": 1,
+     "outcome": "conclusion_binding_defect",
+     "latency_ms": 13863.314,
+     "verifier_latency_ms": 4.88,
+     "tokens": 6445
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 8244.413,
+     "verifier_latency_ms": 1.736,
+     "tokens": 6496
+    }
+   ],
+   "T02": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 6626.587,
+     "verifier_latency_ms": 1.28,
+     "tokens": 5859
+    },
+    {
+     "attempt": 2,
+     "outcome": "verified_derivation",
+     "latency_ms": 9350.025,
+     "verifier_latency_ms": 2.878,
+     "tokens": 6006
+    }
+   ],
+   "T03": [
+    {
+     "attempt": 1,
+     "outcome": "malformed_proposal",
+     "latency_ms": 10302.144,
+     "verifier_latency_ms": 30.351,
+     "tokens": 5784
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 9544.979,
+     "verifier_latency_ms": 1.168,
+     "tokens": 5928
+    }
+   ],
+   "T04": [
+    {
+     "attempt": 1,
+     "outcome": "verified_derivation",
+     "latency_ms": 22041.874,
+     "verifier_latency_ms": 6.788,
+     "tokens": 7617
+    }
+   ],
+   "T05": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 10089.677,
+     "verifier_latency_ms": 1.128,
+     "tokens": 6278
+    },
+    {
+     "attempt": 2,
+     "outcome": "verified_derivation",
+     "latency_ms": 7241.877,
+     "verifier_latency_ms": 4.477,
+     "tokens": 6323
+    }
+   ],
+   "T06": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 32689.811,
+     "verifier_latency_ms": 1.287,
+     "tokens": 10298
+    },
+    {
+     "attempt": 2,
+     "outcome": "conclusion_binding_defect",
+     "latency_ms": 26364.128,
+     "verifier_latency_ms": 11.396,
+     "tokens": 10557
+    }
+   ],
+   "T07": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 26654.035,
+     "verifier_latency_ms": 3.705,
+     "tokens": 19076
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 82747.641,
+     "verifier_latency_ms": 8.6,
+     "tokens": 22395
+    }
+   ],
+   "T08": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 46220.11,
+     "verifier_latency_ms": 4.044,
+     "tokens": 17724
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 74041.802,
+     "verifier_latency_ms": 8.828,
+     "tokens": 19294
+    }
+   ],
+   "T09": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 20121.28,
+     "verifier_latency_ms": 1.739,
+     "tokens": 7332
+    },
+    {
+     "attempt": 2,
+     "outcome": "presence_scope_exceeded",
+     "latency_ms": 16631.722,
+     "verifier_latency_ms": 4.551,
+     "tokens": 7665
+    }
+   ],
+   "T10": [
+    {
+     "attempt": 1,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 40792.022,
+     "verifier_latency_ms": 6.79,
+     "tokens": 13081
+    },
+    {
+     "attempt": 2,
+     "outcome": "premise_grounding_defect",
+     "latency_ms": 25573.131,
+     "verifier_latency_ms": 7.315,
+     "tokens": 14100
+    }
+   ]
+  }
+ }
+}
